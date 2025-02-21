@@ -9,9 +9,11 @@ pub fn core_dtype_from_str(s: &str) -> PyResult<NumberType> {
     "F16" => Ok(NumberType::F16),
     "F32" => Ok(NumberType::F32),
     "F64" => Ok(NumberType::F64),
+    "I8" => Ok(NumberType::I8),
     "I16" => Ok(NumberType::I16),
     "I32" => Ok(NumberType::I32),
     "I64" => Ok(NumberType::I64),
+    "U8" => Ok(NumberType::U8),
     "U16" => Ok(NumberType::U16),
     "U32" => Ok(NumberType::U32),
     "U64" => Ok(NumberType::U64),
@@ -23,12 +25,16 @@ pub fn core_dtype_from_str(s: &str) -> PyResult<NumberType> {
 }
 
 pub fn number_type_from_numpy(py: Python, dtype: &Bound<PyArrayDescr>) -> PyResult<NumberType> {
-  let res = if dtype.is_equiv_to(&numpy::dtype_bound::<u16>(py)) {
+  let res = if dtype.is_equiv_to(&numpy::dtype_bound::<u8>(py)) {
+    NumberType::U8
+  } else if dtype.is_equiv_to(&numpy::dtype_bound::<u16>(py)) {
     NumberType::U16
   } else if dtype.is_equiv_to(&numpy::dtype_bound::<u32>(py)) {
     NumberType::U32
   } else if dtype.is_equiv_to(&numpy::dtype_bound::<u64>(py)) {
     NumberType::U64
+  } else if dtype.is_equiv_to(&numpy::dtype_bound::<i8>(py)) {
+    NumberType::I8
   } else if dtype.is_equiv_to(&numpy::dtype_bound::<i16>(py)) {
     NumberType::I16
   } else if dtype.is_equiv_to(&numpy::dtype_bound::<i32>(py)) {

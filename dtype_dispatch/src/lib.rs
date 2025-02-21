@@ -185,6 +185,7 @@ macro_rules! build_dtype_macros {
 mod tests {
   trait Constraint: 'static {}
 
+  impl Constraint for u8 {}
   impl Constraint for u16 {}
   impl Constraint for u32 {}
   impl Constraint for u64 {}
@@ -194,6 +195,7 @@ mod tests {
     match_enum,
     crate::tests::Constraint,
     {
+      U8 => u8,
       U16 => u16,
       U32 => u32,
       U64 => u64,

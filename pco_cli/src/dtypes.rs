@@ -185,6 +185,19 @@ impl Parquetable for f16 {
   }
 }
 
+impl Parquetable for i8 {
+  const PARQUET_DTYPE_STR: &'static str = "INT32";
+  const TRANSMUTABLE: bool = false;
+  type Parquet = parquet::data_type::Int32Type;
+
+  fn copy_nums_to_parquet(nums: &[Self]) -> Vec<i32> {
+    nums.iter().map(|&x| x as i32).collect()
+  }
+  fn parquet_to_nums(vec: Vec<i32>) -> Vec<Self> {
+    vec.into_iter().map(|x| x as i8).collect()
+  }
+}
+
 impl Parquetable for i16 {
   const PARQUET_DTYPE_STR: &'static str = "INT32";
   const TRANSMUTABLE: bool = false;
@@ -195,6 +208,19 @@ impl Parquetable for i16 {
   }
   fn parquet_to_nums(vec: Vec<i32>) -> Vec<Self> {
     vec.into_iter().map(|x| x as i16).collect()
+  }
+}
+
+impl Parquetable for u8 {
+  const PARQUET_DTYPE_STR: &'static str = "INT32";
+  const TRANSMUTABLE: bool = false;
+  type Parquet = parquet::data_type::Int32Type;
+
+  fn copy_nums_to_parquet(nums: &[Self]) -> Vec<i32> {
+    nums.iter().map(|&x| x as i32).collect()
+  }
+  fn parquet_to_nums(vec: Vec<i32>) -> Vec<Self> {
+    vec.into_iter().map(|x| x as u8).collect()
   }
 }
 
@@ -274,9 +300,11 @@ impl PcoNumber for f16 {
 
 trivial!(f32, F32, arrow_dtypes::Float32Type);
 trivial!(f64, F64, arrow_dtypes::Float64Type);
+trivial!(i8, I8, arrow_dtypes::Int8Type);
 trivial!(i16, I16, arrow_dtypes::Int16Type);
 trivial!(i32, I32, arrow_dtypes::Int32Type);
 trivial!(i64, I64, arrow_dtypes::Int64Type);
+trivial!(u8, U8, arrow_dtypes::UInt8Type);
 trivial!(u16, U16, arrow_dtypes::UInt16Type);
 trivial!(u32, U32, arrow_dtypes::UInt32Type);
 trivial!(u64, U64, arrow_dtypes::UInt64Type);
@@ -294,9 +322,11 @@ pub fn from_arrow(arrow_dtype: &ArrowDataType) -> Result<NumberType> {
     ArrowDataType::Float16 => NumberType::F16,
     ArrowDataType::Float32 => NumberType::F32,
     ArrowDataType::Float64 => NumberType::F64,
+    ArrowDataType::Int8 => NumberType::I8,
     ArrowDataType::Int16 => NumberType::I16,
     ArrowDataType::Int32 => NumberType::I32,
     ArrowDataType::Int64 => NumberType::I64,
+    ArrowDataType::UInt8 => NumberType::U8,
     ArrowDataType::UInt16 => NumberType::U16,
     ArrowDataType::UInt32 => NumberType::U32,
     ArrowDataType::UInt64 => NumberType::U64,
@@ -318,9 +348,11 @@ pub fn to_arrow(dtype: NumberType) -> ArrowDataType {
     NumberType::F16 => ArrowDataType::Float16,
     NumberType::F32 => ArrowDataType::Float32,
     NumberType::F64 => ArrowDataType::Float64,
+    NumberType::I8 => ArrowDataType::Int8,
     NumberType::I16 => ArrowDataType::Int16,
     NumberType::I32 => ArrowDataType::Int32,
     NumberType::I64 => ArrowDataType::Int64,
+    NumberType::U8 => ArrowDataType::UInt8,
     NumberType::U16 => ArrowDataType::UInt16,
     NumberType::U32 => ArrowDataType::UInt32,
     NumberType::U64 => ArrowDataType::UInt64,
