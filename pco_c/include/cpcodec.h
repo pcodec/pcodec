@@ -15,6 +15,8 @@ extern "C" {
 #define PCO_TYPE_U16 7
 #define PCO_TYPE_I16 8
 #define PCO_TYPE_F16 9
+#define PCO_TYPE_U8 10
+#define PCO_TYPE_I8 11
 
 #if defined (__cplusplus)
 }
