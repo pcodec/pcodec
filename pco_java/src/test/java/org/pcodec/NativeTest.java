@@ -6,7 +6,7 @@ public class NativeTest {
     @Test
     public void testNativeOps() {
         long[] src = {1, 2, 3};
-        byte[] compressed = Native.simpler_compress_i64(src);
+        byte[] compressed = Native.simpler_compress_i64(src, 8);
         System.out.println("compressed down to " + compressed.length);
     }
 }

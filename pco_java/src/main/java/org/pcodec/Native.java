@@ -7,5 +7,5 @@ public class Native {
         JarJniLoader.loadLib(Native.class, "/io/github/pcodec", "pco_java");
     }
 
-    public static native byte[] simpler_compress_i64(long[] src);
+    public static native byte[] simpler_compress_i64(long[] src, int level);
 }
