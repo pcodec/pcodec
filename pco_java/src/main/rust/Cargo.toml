@@ -1,0 +1,11 @@
+[package]
+name = "pco_java"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate_type = ["cdylib"]
+
+[dependencies]
+jni = "0.21.1"
+pco = {version = "0.4", path="../../../../pco"}
