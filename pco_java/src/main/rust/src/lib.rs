@@ -56,16 +56,19 @@ fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
     }
 }
 
-fn compress_inner<'a>(
+fn simpler_compress_inner<'a>(
     env: &JNIEnv<'a>,
-    src: jlongArray,
+    src: jobject,
     level: jint,
 ) -> Result<jbyteArray> {
     // TODO copy less
     let src = unsafe { JPrimitiveArray::from_raw(src) };
     let src_len = env.get_array_length(&src)? as usize;
-    let mut nums = vec![0; src_len];
-    env.get_long_array_region(&src, 0, &mut nums)?;
+    unsafe {
+        match
+        let mut nums = vec![0; src_len];
+        env.get_long_array_region(&src, 0, &mut nums)?;
+    }
     let compressed = pco::standalone::simpler_compress(&nums, level as usize)?;
     let compressed = env.byte_array_from_slice(&compressed)?;
     Ok(compressed.into_raw())
@@ -75,9 +78,9 @@ fn compress_inner<'a>(
 pub extern "system" fn Java_org_pcodec_Native_simpler_1compress_1i64<'a>(
     mut env: JNIEnv<'a>,
     _: JClass<'a>,
-    src: jlongArray,
+    src: jobject,
     level: jint,
 ) -> jbyteArray {
-    let result = compress_inner(&env, src, level);
+    let result = simpler_compress_inner(&env, src, level);
     handle_result(&mut env, result)
 }

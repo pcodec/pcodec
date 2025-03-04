@@ -1,0 +1,4 @@
+* basic bindings
+* error handling
+* basic tests
+* make sure it's release mode with correct build configuration
