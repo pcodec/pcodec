@@ -1,5 +1,6 @@
-package org.pcodec;
+package io.github.pcodec;
 
+import io.github.pcodec.NumArray;
 import io.questdb.jar.jni.JarJniLoader;
 
 public class Native {
@@ -7,5 +8,5 @@ public class Native {
         JarJniLoader.loadLib(Native.class, "/io/github/pcodec", "pco_java");
     }
 
-    public static native byte[] simpler_compress_i64(long[] src, int level);
+    public static native byte[] simpler_compress_i64(NumArray src, int level);
 }
