@@ -54,9 +54,9 @@ fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
         ExceptionKind::Runtime => "java/lang/RuntimeException",
       };
       match env.throw_new(descriptor, &e.msg) {
-                Ok(()) => (),
-                Err(e) => eprintln!("Error when trying to raise Java exception. This is likely a bug in the pco java bindings: {}", e),
-            };
+          Ok(()) => (),
+          Err(e) => eprintln!("Error when trying to raise Java exception. This is likely a bug in the pco java bindings: {}", e),
+      };
       *JObject::null()
     }
   }
@@ -77,18 +77,34 @@ fn simpler_compress_inner<'a>(
   let JValueOwned::Int(dtype_int) = env.get_field(&num_array, "dtype", "I")? else {
     unreachable!();
   };
-  assert_eq!(dtype_int, 4);
-  let src = JPrimitiveArray::from(src);
-  let src_len = env.get_array_length(&src)? as usize;
-  let mut nums = vec![0; src_len];
-  env.get_long_array_region(&src, 0, &mut nums)?;
-  let compressed = pco::standalone::simpler_compress(&nums, level as usize)?;
+
+
+  macro_rules! match_dtype {
+      ($($dtype_byte:literal => $get_region_fn:ident,)+) => {
+          match dtype_int {
+              $($dtype_byte => {
+                  let src = JPrimitiveArray::from(src);
+                  let src_len = env.get_array_length(&src)? as usize;
+                  let mut nums = vec![0; src_len];
+                  env.$get_region_fn(&src, 0, &mut nums)?;
+                  pco::standalone::simpler_compress(&nums, level as usize)?
+              })+
+              _ => unreachable!()
+          }
+      }
+  }
+
+  let compressed = match_dtype!(
+      3 => get_int_array_region,
+      4 => get_long_array_region,
+      8 => get_short_array_region,
+  );
   let compressed = env.byte_array_from_slice(&compressed)?;
   Ok(compressed.into_raw())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_github_pcodec_Native_simpler_1compress_1i64<'a>(
+pub extern "system" fn Java_io_github_pcodec_Standalone_simpler_1compress<'a>(
   mut env: JNIEnv<'a>,
   _: JClass<'a>,
   num_array: jobject,

@@ -9,6 +9,10 @@ public class NumArray {
         this.dtype = dtype;
     }
 
+    public static NumArray intArray(int[] nums) {
+        return new NumArray(nums, 3);
+    }
+
     public static NumArray longArray(long[] nums) {
         return new NumArray(nums, 4);
     }

@@ -38,7 +38,7 @@
                   <arg value="${project.build.directory}/native/include"/>
                   <arg value="-cp"/>
                   <arg value="${project.build.outputDirectory}"/>
-                  <arg value="io.github.pcodec.Native"/>
+                  <arg value="io.github.pcodec.Standalone"/>
                 </exec>
               </target>
             </configuration>
