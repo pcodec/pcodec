@@ -62,6 +62,7 @@
               <path>src/main/rust</path>
               <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
               <copyWithPlatformDir>true</copyWithPlatformDir>
+              <release>true</release>
             </configuration>
           </execution>
         </executions>
@@ -69,4 +70,3 @@
     </plugins>
   </build>
 </project>
-

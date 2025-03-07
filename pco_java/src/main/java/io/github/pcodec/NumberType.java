@@ -1,5 +1,10 @@
 package io.github.pcodec;
 
+/**
+ * Specifies which type of Pco-supported number is being used.
+ *
+ * Each number type has a corresponding unique byte.
+ */
 public enum NumberType {
     I16(8),
     I32(3),
@@ -11,18 +16,18 @@ public enum NumberType {
     U32(1),
     U64(2);
 
-    public final int dtypeByte;
+    public final int byte_;
 
-    NumberType(int dtypeByte) {
-        this.dtypeByte = dtypeByte;
+    NumberType(int byte_) {
+        this.byte_ = byte_;
     }
 
-    public static NumberType fromDtypeByte(int dtypeByte) {
-        for (NumberType dtype : values()) {
-            if (dtype.dtypeByte == dtypeByte) {
-                return dtype;
+    public static NumberType fromByte(int byte_) {
+        for (NumberType numberType : values()) {
+            if (numberType.byte_ == byte_) {
+                return numberType;
             }
         }
-        throw new IllegalArgumentException("Invalid dtype byte: " + dtypeByte);
+        throw new IllegalArgumentException("Invalid number type byte: " + byte_);
     }
 }

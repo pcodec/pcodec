@@ -43,12 +43,12 @@ fn simpler_compress_inner<'a>(
   let JValueOwned::Object(src) = env.get_field(&num_array, "nums", "Ljava/lang/Object;")? else {
     unreachable!();
   };
-  let JValueOwned::Int(dtype_int) = env.get_field(&num_array, "dtypeByte", "I")? else {
+  let JValueOwned::Int(number_type_int) = env.get_field(&num_array, "numberTypeByte", "I")? else {
     unreachable!();
   };
-  let dtype = NumberType::from_descriminant(dtype_int as u8).unwrap();
+  let number_type = NumberType::from_descriminant(number_type_int as u8).unwrap();
 
-  let compressed = match_number_enum!(dtype, NumberType<T> => {
+  let compressed = match_number_enum!(number_type, NumberType<T> => {
       let src = JPrimitiveArray::from(src);
       let src_len = env.get_array_length(&src)? as usize;
       let mut nums = Vec::with_capacity(src_len);
@@ -132,7 +132,10 @@ fn simple_decompress_inner<'a>(env: &mut JNIEnv<'a>, src: jbyteArray) -> Result<
     Termination => java_none(env),
     Unknown(other) => Err(Exception {
       kind: ExceptionKind::Runtime,
-      msg: format!("unrecognized pco dtype byte {:?}", other,),
+      msg: format!(
+        "unrecognized pco number type byte {:?}",
+        other,
+      ),
     }),
   }
 }

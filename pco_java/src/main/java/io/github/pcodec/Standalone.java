@@ -4,12 +4,29 @@ import java.util.Optional;
 
 import io.questdb.jar.jni.JarJniLoader;
 
+/**
+ * Contains functions and data structures for manipulating Pco standalone files.
+ *
+ * This format is easy to use and recommended for simple proofs of concept, but
+ * the wrapped format might be better for interleaving in other file formats.
+ */
 public class Standalone {
     static {
         JarJniLoader.loadLib(Standalone.class, "/io/github/pcodec", "pco_java");
     }
 
-    public static native byte[] simpler_compress(NumArray src, int level);
+    /**
+     * Compresses an array of numbers into bytes.
+     *
+     * Compression level can range from 0 to 12, inclusive.
+     */
+    public static native byte[] simpler_compress(NumArray src, int level) throws IllegalArgumentException;
 
-    public static native Optional<NumArray> simple_decompress(byte[] src);
+    /**
+     * Decompresses bytes into an array of numbers.
+     *
+     * If the numbers are empty, Pco will be unable to infer the number type, so
+     * this will return an empty optional.
+     */
+    public static native Optional<NumArray> simple_decompress(byte[] src) throws RuntimeException;
 }

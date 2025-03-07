@@ -1,21 +1,29 @@
 package io.github.pcodec;
 
+/**
+ * Represents an array of numbers and the corresponding data type.
+ *
+ * The underlying representation is e.g. a long[] for the i64 data type. For
+ * the data types where Java has no built in data type, we use integers of the
+ * corresponding precision. For instance, an f16 array is represented as a
+ * short[]. Under the hood, Pco transmutes data into the correct data type.
+ */
 public class NumArray {
-    public Object nums;
-    private int dtypeByte;
+    public final Object nums;
+    private final int numberTypeByte;
 
-    private NumArray(Object nums, int dtypeByte) {
+    private NumArray(Object nums, int numberTypeByte) {
         this.nums = nums;
-        this.dtypeByte = dtypeByte;
+        this.numberTypeByte = numberTypeByte;
     }
 
-    private NumArray(Object nums, NumberType dtype) {
+    private NumArray(Object nums, NumberType numberType) {
         this.nums = nums;
-        this.dtypeByte = dtype.dtypeByte;
+        this.numberTypeByte = numberType.byte_;
     }
 
-    public NumberType dtype() {
-        return NumberType.fromDtypeByte(dtypeByte);
+    public NumberType numberType() {
+        return NumberType.fromByte(numberTypeByte);
     }
 
     public static NumArray i16Array(short[] nums) {
@@ -54,66 +62,70 @@ public class NumArray {
         return new NumArray(nums, NumberType.F64);
     }
 
+    private IllegalStateException invalidNumberType(NumberType numberType) {
+        return new IllegalStateException("Cannot cast pco NumArray of " + this.numberType() + " to " + numberType);
+    }
+
     public short[] as_i16_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.I16.dtypeByte) {
+        if (numberTypeByte == NumberType.I16.byte_) {
             return (short[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to I16");
+        throw invalidNumberType(NumberType.I16);
     }
 
     public int[] as_i32_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.I32.dtypeByte) {
+        if (numberTypeByte == NumberType.I32.byte_) {
             return (int[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to I32");
+        throw invalidNumberType(NumberType.I32);
     }
 
     public long[] as_i64_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.I64.dtypeByte) {
+        if (numberTypeByte == NumberType.I64.byte_) {
             return (long[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to I64");
+        throw invalidNumberType(NumberType.I64);
     }
 
     public short[] as_u16_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.U16.dtypeByte) {
+        if (numberTypeByte == NumberType.U16.byte_) {
             return (short[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to U16");
+        throw invalidNumberType(NumberType.U16);
     }
 
     public int[] as_u32_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.U32.dtypeByte) {
+        if (numberTypeByte == NumberType.U32.byte_) {
             return (int[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to U32");
+        throw invalidNumberType(NumberType.U32);
     }
 
     public long[] as_u64_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.U64.dtypeByte) {
+        if (numberTypeByte == NumberType.U64.byte_) {
             return (long[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to U64");
+        throw invalidNumberType(NumberType.U64);
     }
 
     public short[] as_f16_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.F16.dtypeByte) {
+        if (numberTypeByte == NumberType.F16.byte_) {
             return (short[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to F16");
+        throw invalidNumberType(NumberType.F16);
     }
 
     public float[] as_f32_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.F32.dtypeByte) {
+        if (numberTypeByte == NumberType.F32.byte_) {
             return (float[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to F32");
+        throw invalidNumberType(NumberType.F32);
     }
 
     public double[] as_f64_array() throws IllegalStateException {
-        if (dtypeByte == NumberType.F64.dtypeByte) {
+        if (numberTypeByte == NumberType.F64.byte_) {
             return (double[]) this.nums;
         }
-        throw new IllegalStateException("Cannot cast pco NumArray of " + this.dtype() + " to F64");
+        throw invalidNumberType(NumberType.F64);
     }
 }
