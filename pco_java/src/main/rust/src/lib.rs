@@ -1,44 +1,14 @@
-use jni::errors::Error as JniError;
-use jni::objects::{JClass, JObject, JPrimitiveArray, JValueOwned};
+mod result;
+mod traits;
+
+use crate::result::{Exception, ExceptionKind, Result};
+use crate::traits::JavaConversions;
+use jni::objects::{JClass, JObject, JPrimitiveArray, JValueGen, JValueOwned};
 use jni::sys::*;
 use jni::JNIEnv;
-use pco::errors::{ErrorKind as PcoErrorKind, PcoError};
-
-#[derive(Clone, Debug)]
-enum ExceptionKind {
-  InvalidArgument,
-  Io,
-  Runtime,
-}
-
-#[derive(Clone, Debug)]
-struct Exception {
-  kind: ExceptionKind,
-  msg: String,
-}
-
-type Result<T> = std::result::Result<T, Exception>;
-
-impl From<PcoError> for Exception {
-  fn from(value: PcoError) -> Self {
-    let msg = format!("{}", value);
-    let kind = match value.kind {
-      PcoErrorKind::Io(_) => ExceptionKind::Io,
-      PcoErrorKind::InvalidArgument => ExceptionKind::InvalidArgument,
-      _ => ExceptionKind::Runtime,
-    };
-    Exception { kind, msg }
-  }
-}
-
-impl From<JniError> for Exception {
-  fn from(value: JniError) -> Self {
-    Exception {
-      kind: ExceptionKind::Runtime,
-      msg: format!("{}", value),
-    }
-  }
-}
+use pco::data_types::{Number, NumberType};
+use pco::match_number_enum;
+use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
 
 fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   // We need a function that creates a fake instance of the return type, due
@@ -69,38 +39,102 @@ fn simpler_compress_inner<'a>(
   num_array: jobject,
   level: jint,
 ) -> Result<jbyteArray> {
-  // TODO copy less
   let num_array = unsafe { JObject::from_raw(num_array) };
   let JValueOwned::Object(src) = env.get_field(&num_array, "nums", "Ljava/lang/Object;")? else {
     unreachable!();
   };
-  let JValueOwned::Int(dtype_int) = env.get_field(&num_array, "dtype", "I")? else {
+  let JValueOwned::Int(dtype_int) = env.get_field(&num_array, "dtypeByte", "I")? else {
     unreachable!();
   };
+  let dtype = NumberType::from_descriminant(dtype_int as u8).unwrap();
 
-
-  macro_rules! match_dtype {
-      ($($dtype_byte:literal => $get_region_fn:ident,)+) => {
-          match dtype_int {
-              $($dtype_byte => {
-                  let src = JPrimitiveArray::from(src);
-                  let src_len = env.get_array_length(&src)? as usize;
-                  let mut nums = vec![0; src_len];
-                  env.$get_region_fn(&src, 0, &mut nums)?;
-                  pco::standalone::simpler_compress(&nums, level as usize)?
-              })+
-              _ => unreachable!()
-          }
+  let compressed = match_number_enum!(dtype, NumberType<T> => {
+      let src = JPrimitiveArray::from(src);
+      let src_len = env.get_array_length(&src)? as usize;
+      let mut nums = Vec::with_capacity(src_len);
+      unsafe {
+          nums.set_len(src_len);
       }
-  }
+      T::get_region(env, &src, &mut nums)?;
+      // TODO is there a way to avoid copying here?
+      pco::standalone::simpler_compress(&nums, level as usize)?
+  });
 
-  let compressed = match_dtype!(
-      3 => get_int_array_region,
-      4 => get_long_array_region,
-      8 => get_short_array_region,
-  );
   let compressed = env.byte_array_from_slice(&compressed)?;
   Ok(compressed.into_raw())
+}
+
+fn decompress_chunks<'a, T: Number + JavaConversions>(
+  env: &mut JNIEnv<'a>,
+  mut src: &[u8],
+  file_decompressor: FileDecompressor,
+) -> Result<jobject> {
+  let n_hint = file_decompressor.n_hint();
+  let mut res: Vec<T> = Vec::with_capacity(n_hint);
+  while let MaybeChunkDecompressor::Some(mut chunk_decompressor) =
+    file_decompressor.chunk_decompressor::<T, &[u8]>(src)?
+  {
+    let initial_len = res.len(); // probably always zero to start, since we just created res
+    let remaining = chunk_decompressor.n();
+    unsafe {
+      res.set_len(initial_len + remaining);
+    }
+    let progress = chunk_decompressor.decompress(&mut res[initial_len..])?;
+    assert!(progress.finished);
+    src = chunk_decompressor.into_src();
+  }
+  let mut array = T::new_array(env, res.len() as i32)?;
+  T::set_region(env, &res, &mut array)?;
+  let num_array = env.new_object(
+    NUM_ARRAY,
+    "(Ljava/lang/Object;I)V",
+    &[
+      JValueGen::Object(&*array),
+      JValueGen::Int(T::NUMBER_TYPE_BYTE as i32),
+    ],
+  )?;
+  let optional = env.call_static_method(
+    "Ljava/util/Optional;",
+    "of",
+    "(Ljava/lang/Object;)Ljava/util/Optional;",
+    &[JValueGen::Object(&num_array)],
+  )?;
+  let JValueGen::Object(optional) = optional else {
+    unreachable!()
+  };
+  Ok(optional.as_raw())
+}
+
+fn java_none<'a>(env: &mut JNIEnv<'a>) -> Result<jobject> {
+  let optional = env.call_static_method("Ljava/util/Optional;", "empty", "", &[])?;
+  let JValueGen::Object(optional) = optional else {
+    unreachable!()
+  };
+  Ok(optional.as_raw())
+}
+
+fn simple_decompress_inner<'a>(env: &mut JNIEnv<'a>, src: jbyteArray) -> Result<jobject> {
+  let src = unsafe { JPrimitiveArray::from_raw(src) };
+  let src = env.convert_byte_array(src)?;
+  let (file_decompressor, rest) = FileDecompressor::new(src.as_slice())?;
+  let maybe_number_type = file_decompressor.peek_number_type_or_termination(&rest)?;
+
+  use pco::standalone::NumberTypeOrTermination::*;
+  match maybe_number_type {
+    Known(number_type) => {
+      match_number_enum!(
+          number_type,
+          NumberType<T> => {
+              decompress_chunks::<T>(env, rest, file_decompressor)
+          }
+      )
+    }
+    Termination => java_none(env),
+    Unknown(other) => Err(Exception {
+      kind: ExceptionKind::Runtime,
+      msg: format!("unrecognized pco dtype byte {:?}", other,),
+    }),
+  }
 }
 
 #[no_mangle]
@@ -111,5 +145,15 @@ pub extern "system" fn Java_io_github_pcodec_Standalone_simpler_1compress<'a>(
   level: jint,
 ) -> jbyteArray {
   let result = simpler_compress_inner(&mut env, num_array, level);
+  handle_result(&mut env, result)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_pcodec_Standalone_simple_1decompress<'a>(
+  mut env: JNIEnv<'a>,
+  _: JClass<'a>,
+  src: jbyteArray,
+) -> jobject {
+  let result = simple_decompress_inner(&mut env, src);
   handle_result(&mut env, result)
 }
