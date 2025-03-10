@@ -10,9 +10,9 @@ package io.github.pcodec;
  */
 public class NumArray {
     public final Object nums;
-    private final int numberTypeByte;
+    private final byte numberTypeByte;
 
-    private NumArray(Object nums, int numberTypeByte) {
+    private NumArray(Object nums, byte numberTypeByte) {
         this.nums = nums;
         this.numberTypeByte = numberTypeByte;
     }

@@ -6,19 +6,19 @@ package io.github.pcodec;
  * Each number type has a corresponding unique byte.
  */
 public enum NumberType {
-    I16(8),
-    I32(3),
-    I64(4),
-    F16(9),
-    F32(5),
-    F64(6),
-    U16(7),
-    U32(1),
-    U64(2);
+    I16((byte) 8),
+    I32((byte) 3),
+    I64((byte) 4),
+    F16((byte) 9),
+    F32((byte) 5),
+    F64((byte) 6),
+    U16((byte) 7),
+    U32((byte) 1),
+    U64((byte) 2);
 
-    public final int byte_;
+    public final byte byte_;
 
-    NumberType(int byte_) {
+    private NumberType(byte byte_) {
         this.byte_ = byte_;
     }
 
