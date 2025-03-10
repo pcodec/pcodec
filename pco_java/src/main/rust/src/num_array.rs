@@ -6,7 +6,7 @@ use pco::data_types::{Number, NumberType};
 
 use crate::{result::Result, traits::JavaConversions};
 
-const NUM_ARRAY: &'static str = "Lio/github/pcodec/NumArray;";
+const TYPE_SIGNATURE: &'static str = "Lio/github/pcodec/NumArray;";
 
 pub fn from_java<'a>(
   env: &mut JNIEnv<'a>,
@@ -30,7 +30,7 @@ pub fn to_java<'a, T: Number + JavaConversions>(
   let mut array = T::new_array(env, nums.len() as i32)?;
   T::set_region(env, &nums, &mut array)?;
   let num_array = env.new_object(
-    NUM_ARRAY,
+    TYPE_SIGNATURE,
     "(Ljava/lang/Object;I)V",
     &[
       JValueGen::Object(&*array),

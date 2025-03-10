@@ -63,6 +63,12 @@
               <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
               <copyWithPlatformDir>true</copyWithPlatformDir>
               <release>true</release>
+              <extra-args>
+                <extra-arg>-C</extra-arg>
+                <extra-arg>lto=true</extra-arg>
+                <extra-arg>-C</extra-arg>
+                <extra-arg>codegen-units=1</extra-arg>
+              </extra-args>
             </configuration>
           </execution>
         </executions>

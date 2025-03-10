@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate_type = ["cdylib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 half = { version = "2.0.0" }
