@@ -13,6 +13,9 @@ public class ChunkConfig {
         this.compressionLevel = 8;
     }
 
+    /**
+     * @param compressionLevel: can range from 0 to 12, inclusive.
+     */
     public ChunkConfig withCompressionLevel(int compressionLevel) {
         this.compressionLevel = compressionLevel;
         return this;

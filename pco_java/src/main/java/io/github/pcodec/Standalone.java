@@ -17,8 +17,6 @@ public class Standalone {
 
     /**
      * Compresses an array of numbers into bytes.
-     *
-     * Compression level can range from 0 to 12, inclusive.
      */
     public static native byte[] simple_compress(NumArray src, ChunkConfig config) throws IllegalArgumentException;
 

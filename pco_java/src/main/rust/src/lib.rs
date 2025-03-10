@@ -34,7 +34,7 @@ fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   }
 }
 
-fn simpler_compress_inner<'a>(
+fn simple_compress_inner<'a>(
   env: &mut JNIEnv<'a>,
   j_num_array: jobject,
   j_chunk_config: jobject,
@@ -138,7 +138,7 @@ pub extern "system" fn Java_io_github_pcodec_Standalone_simple_1compress<'a>(
   j_num_array: jobject,
   j_chunk_config: jobject,
 ) -> jbyteArray {
-  let result = simpler_compress_inner(&mut env, j_num_array, j_chunk_config);
+  let result = simple_compress_inner(&mut env, j_num_array, j_chunk_config);
   handle_result(&mut env, result)
 }
 
