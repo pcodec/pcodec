@@ -1,8 +1,8 @@
 <project>
   <modelVersion>4.0.0</modelVersion>
-  <groupId>org.foo</groupId>
-  <artifactId>bar</artifactId>
-  <version>0.1-SNAPSHOT</version>
+  <groupId>io.github.pcodec</groupId>
+  <artifactId>pco</artifactId>
+  <version>0.1.0</version>
   <properties>
     <maven.compiler.source>8</maven.compiler.source>
     <maven.compiler.target>8</maven.compiler.target>

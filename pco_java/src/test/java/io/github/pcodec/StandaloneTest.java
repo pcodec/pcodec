@@ -30,4 +30,24 @@ public class StandaloneTest {
         NumArray recovered = Standalone.simple_decompress(compressed).get();
         assertArrayEquals(src, recovered.as_f16_array());
     }
+
+    @Test
+    public void testIllegalArgument() {
+        short[] src = { 1, 2, 3 };
+        NumArray numArray = NumArray.i16Array(src);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                    Standalone.simple_compress(
+                            numArray,
+                            new ChunkConfig().withCompressionLevel(13));
+                });
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                    Standalone.simple_compress(
+                            numArray,
+                            new ChunkConfig().withCompressionLevel(-1));
+                });
+    }
 }
