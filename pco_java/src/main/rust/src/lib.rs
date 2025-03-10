@@ -1,3 +1,5 @@
+#![allow(clippy::uninit_vec)]
+
 mod config;
 mod num_array;
 mod result;
@@ -34,8 +36,8 @@ fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   }
 }
 
-fn simple_compress_inner<'a>(
-  env: &mut JNIEnv<'a>,
+fn simple_compress_inner(
+  env: &mut JNIEnv,
   j_num_array: jobject,
   j_chunk_config: jobject,
 ) -> Result<jbyteArray> {
@@ -64,8 +66,8 @@ fn simple_compress_inner<'a>(
   Ok(compressed.into_raw())
 }
 
-fn decompress_chunks<'a, T: Number + JavaConversions>(
-  env: &mut JNIEnv<'a>,
+fn decompress_chunks<T: Number + JavaConversions>(
+  env: &mut JNIEnv,
   mut src: &[u8],
   file_decompressor: FileDecompressor,
 ) -> Result<jobject> {
@@ -96,7 +98,7 @@ fn decompress_chunks<'a, T: Number + JavaConversions>(
   Ok(optional.as_raw())
 }
 
-fn java_none<'a>(env: &mut JNIEnv<'a>) -> Result<jobject> {
+fn java_none(env: &mut JNIEnv) -> Result<jobject> {
   let optional = env.call_static_method("Ljava/util/Optional;", "empty", "", &[])?;
   let JValueGen::Object(optional) = optional else {
     unreachable!()
@@ -104,11 +106,11 @@ fn java_none<'a>(env: &mut JNIEnv<'a>) -> Result<jobject> {
   Ok(optional.as_raw())
 }
 
-fn simple_decompress_inner<'a>(env: &mut JNIEnv<'a>, src: jbyteArray) -> Result<jobject> {
+fn simple_decompress_inner(env: &mut JNIEnv, src: jbyteArray) -> Result<jobject> {
   let src = unsafe { JPrimitiveArray::from_raw(src) };
   let src = env.convert_byte_array(src)?;
   let (file_decompressor, rest) = FileDecompressor::new(src.as_slice())?;
-  let maybe_number_type = file_decompressor.peek_number_type_or_termination(&rest)?;
+  let maybe_number_type = file_decompressor.peek_number_type_or_termination(rest)?;
 
   use pco::standalone::NumberTypeOrTermination::*;
   match maybe_number_type {
