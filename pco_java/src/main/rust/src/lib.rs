@@ -1,9 +1,11 @@
+mod config;
+mod num_array;
 mod result;
 mod traits;
 
 use crate::result::{Exception, ExceptionKind, Result};
 use crate::traits::JavaConversions;
-use jni::objects::{JClass, JObject, JPrimitiveArray, JValueGen, JValueOwned};
+use jni::objects::{JClass, JObject, JPrimitiveArray, JValueGen};
 use jni::sys::*;
 use jni::JNIEnv;
 use pco::data_types::{Number, NumberType};
@@ -32,32 +34,30 @@ fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   }
 }
 
-const NUM_ARRAY: &'static str = "Lio/github/pcodec/NumArray;";
-
 fn simpler_compress_inner<'a>(
   env: &mut JNIEnv<'a>,
-  num_array: jobject,
-  level: jint,
+  j_num_array: jobject,
+  j_chunk_config: jobject,
 ) -> Result<jbyteArray> {
-  let num_array = unsafe { JObject::from_raw(num_array) };
-  let JValueOwned::Object(src) = env.get_field(&num_array, "nums", "Ljava/lang/Object;")? else {
-    unreachable!();
+  let (j_num_array, j_chunk_config) = unsafe {
+    (
+      JObject::from_raw(j_num_array),
+      JObject::from_raw(j_chunk_config),
+    )
   };
-  let JValueOwned::Int(number_type_int) = env.get_field(&num_array, "numberTypeByte", "I")? else {
-    unreachable!();
-  };
-  let number_type = NumberType::from_descriminant(number_type_int as u8).unwrap();
+  let (j_src, number_type) = num_array::from_java(env, j_num_array)?;
+  let chunk_config = config::from_java(env, j_chunk_config)?;
 
   let compressed = match_number_enum!(number_type, NumberType<T> => {
-      let src = JPrimitiveArray::from(src);
-      let src_len = env.get_array_length(&src)? as usize;
-      let mut nums = Vec::with_capacity(src_len);
+      let j_src = JPrimitiveArray::from(j_src);
+      let len = env.get_array_length(&j_src)? as usize;
+      let mut nums = Vec::with_capacity(len);
       unsafe {
-          nums.set_len(src_len);
+          nums.set_len(len);
       }
-      T::get_region(env, &src, &mut nums)?;
+      T::get_region(env, &j_src, &mut nums)?;
       // TODO is there a way to avoid copying here?
-      pco::standalone::simpler_compress(&nums, level as usize)?
+      pco::standalone::simple_compress(&nums, &chunk_config)?
   });
 
   let compressed = env.byte_array_from_slice(&compressed)?;
@@ -83,16 +83,7 @@ fn decompress_chunks<'a, T: Number + JavaConversions>(
     assert!(progress.finished);
     src = chunk_decompressor.into_src();
   }
-  let mut array = T::new_array(env, res.len() as i32)?;
-  T::set_region(env, &res, &mut array)?;
-  let num_array = env.new_object(
-    NUM_ARRAY,
-    "(Ljava/lang/Object;I)V",
-    &[
-      JValueGen::Object(&*array),
-      JValueGen::Int(T::NUMBER_TYPE_BYTE as i32),
-    ],
-  )?;
+  let num_array = num_array::to_java(env, &res)?;
   let optional = env.call_static_method(
     "Ljava/util/Optional;",
     "of",
@@ -141,13 +132,13 @@ fn simple_decompress_inner<'a>(env: &mut JNIEnv<'a>, src: jbyteArray) -> Result<
 }
 
 #[no_mangle]
-pub extern "system" fn Java_io_github_pcodec_Standalone_simpler_1compress<'a>(
+pub extern "system" fn Java_io_github_pcodec_Standalone_simple_1compress<'a>(
   mut env: JNIEnv<'a>,
   _: JClass<'a>,
-  num_array: jobject,
-  level: jint,
+  j_num_array: jobject,
+  j_chunk_config: jobject,
 ) -> jbyteArray {
-  let result = simpler_compress_inner(&mut env, num_array, level);
+  let result = simpler_compress_inner(&mut env, j_num_array, j_chunk_config);
   handle_result(&mut env, result)
 }
 
@@ -155,8 +146,8 @@ pub extern "system" fn Java_io_github_pcodec_Standalone_simpler_1compress<'a>(
 pub extern "system" fn Java_io_github_pcodec_Standalone_simple_1decompress<'a>(
   mut env: JNIEnv<'a>,
   _: JClass<'a>,
-  src: jbyteArray,
+  j_src: jbyteArray,
 ) -> jobject {
-  let result = simple_decompress_inner(&mut env, src);
+  let result = simple_decompress_inner(&mut env, j_src);
   handle_result(&mut env, result)
 }

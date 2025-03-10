@@ -20,7 +20,7 @@ public class Standalone {
      *
      * Compression level can range from 0 to 12, inclusive.
      */
-    public static native byte[] simpler_compress(NumArray src, int level) throws IllegalArgumentException;
+    public static native byte[] simple_compress(NumArray src, ChunkConfig config) throws IllegalArgumentException;
 
     /**
      * Decompresses bytes into an array of numbers.

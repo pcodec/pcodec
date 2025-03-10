@@ -8,7 +8,7 @@ public class StandaloneTest {
     public void testIntRecovery() {
         int[] src = { 1, 2, 3 };
         NumArray numArray = NumArray.i32Array(src);
-        byte[] compressed = Standalone.simpler_compress(numArray, 8);
+        byte[] compressed = Standalone.simple_compress(numArray, new ChunkConfig());
         NumArray recovered = Standalone.simple_decompress(compressed).get();
         assertArrayEquals(src, recovered.as_i32_array());
     }
@@ -17,7 +17,7 @@ public class StandaloneTest {
     public void testLongRecovery() {
         long[] src = { 1, 2, 3 };
         NumArray numArray = NumArray.i64Array(src);
-        byte[] compressed = Standalone.simpler_compress(numArray, 8);
+        byte[] compressed = Standalone.simple_compress(numArray, new ChunkConfig());
         NumArray recovered = Standalone.simple_decompress(compressed).get();
         assertArrayEquals(src, recovered.as_i64_array());
     }
@@ -26,7 +26,7 @@ public class StandaloneTest {
     public void testF16Recovery() {
         short[] src = { 1, 2, 3 };
         NumArray numArray = NumArray.f16Array(src);
-        byte[] compressed = Standalone.simpler_compress(numArray, 8);
+        byte[] compressed = Standalone.simple_compress(numArray, new ChunkConfig());
         NumArray recovered = Standalone.simple_decompress(compressed).get();
         assertArrayEquals(src, recovered.as_f16_array());
     }
