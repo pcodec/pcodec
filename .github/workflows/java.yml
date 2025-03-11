@@ -18,6 +18,7 @@ jobs:
         with:
           java-version: '8'
           distribution: 'temurin'
+          cache: maven
       - name: Test
         # batch mode for non-interactive,
         run: cd pco_java && mvn --batch-mode test
