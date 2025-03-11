@@ -16,11 +16,15 @@ jobs:
   test:
     name: "Test"
     runs-on: ubuntu-latest
+    env:
+      RUST_VERSION: 1.74
     steps:
       - uses: actions/checkout@v4
       - name: Set Rust Toolchain Version
         # should probably match pco's required rust version
-        run: rustup override set 1.74
+        run: rustup install ${{ env.RUST_VERSION }}
+      - name: Set Rust Toolchain Version
+        run: rustup override set ${{ env.RUST_VERSION }}
       - uses: actions/cache@v4
         with:
           path: |
