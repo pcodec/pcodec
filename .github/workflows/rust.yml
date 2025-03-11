@@ -16,23 +16,14 @@ jobs:
   test:
     name: "Test"
     runs-on: ubuntu-latest
-    env:
-      # should probably match pco's minimum required rust version
-      RUST_VERSION: 1.74
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.rustup/${{ env.RUST_VERSION }}*/{lib,bin,libexec,etc}
             ~/.cargo
             target
-          key: ${{ runner.os }}-${{ env.RUST_VERSION }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Set Rust Toolchain Version
-        run: |
-          rustup install ${{ env.RUST_VERSION }}
-          rustup override set ${{ env.RUST_VERSION }}
-          rustup component add clippy rustfmt
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Test
         run: cargo test
       - name: Clippy
