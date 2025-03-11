@@ -17,11 +17,11 @@ jobs:
     name: "Test"
     runs-on: ubuntu-latest
     env:
+      # should probably match pco's minimum required rust version
       RUST_VERSION: 1.74
     steps:
       - uses: actions/checkout@v4
       - name: Set Rust Toolchain Version
-        # should probably match pco's required rust version
         run: |
           rustup install ${{ env.RUST_VERSION }}
           rustup override set ${{ env.RUST_VERSION }}
@@ -34,7 +34,7 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Test
-        run: cargo test --verbose
+        run: cargo test
       - name: Clippy
         run: cargo clippy --no-deps
       - name: Ensure formatted
