@@ -22,9 +22,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set Rust Toolchain Version
         # should probably match pco's required rust version
-        run: rustup install ${{ env.RUST_VERSION }}
-      - name: Set Rust Toolchain Version
-        run: rustup override set ${{ env.RUST_VERSION }}
+        run: |
+          rustup install ${{ env.RUST_VERSION }}
+          rustup override set ${{ env.RUST_VERSION }}
+          rustup component add clippy
       - uses: actions/cache@v4
         with:
           path: |
