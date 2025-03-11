@@ -25,7 +25,7 @@ jobs:
         run: |
           rustup install ${{ env.RUST_VERSION }}
           rustup override set ${{ env.RUST_VERSION }}
-          rustup component add clippy
+          rustup component add clippy rustfmt
       - uses: actions/cache@v4
         with:
           path: |
