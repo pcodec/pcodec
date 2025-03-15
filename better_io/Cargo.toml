@@ -9,6 +9,6 @@ description = "Better traits and implementations for IO and buffering"
 include = ["src/**/*.rs", "Cargo.toml", "README.md"]
 keywords = ["io", "buffering", "bufread"]
 license = "Apache-2.0"
-repository = "https://github.com/mwlon/pcodec"
+repository = "https://github.com/pcodec/pcodec"
 
 [dependencies]

@@ -1,0 +1,78 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.github.pcodec</groupId>
+  <artifactId>pco</artifactId>
+  <version>0.1.0</version>
+  <properties>
+    <maven.compiler.source>8</maven.compiler.source>
+    <maven.compiler.target>8</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.questdb</groupId>
+      <artifactId>jar-jni</artifactId>
+      <version>1.2.0</version>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13.2</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>generate-native-headers</id>
+            <phase>compile</phase>
+            <configuration>
+              <target>
+                <exec executable="javah">
+                  <arg value="-d"/>
+                  <arg value="${project.build.directory}/native/include"/>
+                  <arg value="-cp"/>
+                  <arg value="${project.build.outputDirectory}"/>
+                  <arg value="io.github.pcodec.Standalone"/>
+                </exec>
+              </target>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.questdb</groupId>
+        <artifactId>rust-maven-plugin</artifactId>
+        <version>1.2.0</version>
+        <executions>
+          <execution>
+            <id>rust-build-id</id>
+            <goals>
+              <goal>build</goal>
+            </goals>
+            <configuration>
+              <path>src/main/rust</path>
+              <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
+              <copyWithPlatformDir>true</copyWithPlatformDir>
+              <release>true</release>
+              <extra-args>
+                <extra-arg>-C</extra-arg>
+                <extra-arg>lto=true</extra-arg>
+                <extra-arg>-C</extra-arg>
+                <extra-arg>codegen-units=1</extra-arg>
+              </extra-args>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

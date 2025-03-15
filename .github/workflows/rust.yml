@@ -1,3 +1,6 @@
+# taking some ideas from
+# https://docs.github.com/en/actions/use-cases-and-examples/building-and-testing/building-and-testing-rust
+
 name: Rust
 
 on:
@@ -15,8 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Test
-        run: cargo test --verbose
+        run: cargo test
       - name: Clippy
         run: cargo clippy --no-deps
       - name: Ensure formatted

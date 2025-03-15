@@ -1,6 +1,6 @@
 [project]
 authors = [
-  {name = "mwlon", email = "m.w.loncaric@gmail.com"}
+  { name = "mwlon", email = "m.w.loncaric@gmail.com" }
 ]
 description = "Good compression for numerical sequences"
 dependencies = [
@@ -13,7 +13,7 @@ name = "pcodec"
 readme = "README.md"
 
 [project.urls]
-Repository = "https://github.com/mwlon/pcodec"
+Repository = "https://github.com/pcodec/pcodec"
 
 [build-system]
 build-backend = "maturin"

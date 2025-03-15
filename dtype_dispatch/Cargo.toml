@@ -9,7 +9,7 @@ description = "Macro builder for working with data types"
 include = ["src/**/*.rs", "Cargo.toml", "README.md"]
 keywords = ["dtype", "generic", "enum", "dispatch"]
 license = "Apache-2.0"
-repository = "https://github.com/mwlon/pcodec"
+repository = "https://github.com/pcodec/pcodec"
 rust-version = "1.73.0"
 
 [dependencies]

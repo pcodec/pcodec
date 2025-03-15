@@ -9,7 +9,7 @@ description = "compresses, inspects, and decompresses pco data"
 include = ["src/**/*.rs", "Cargo.toml", "README.md"]
 keywords = ["compression", "numerical", "delta"]
 license = "Apache-2.0"
-repository = "https://github.com/mwlon/pcodec"
+repository = "https://github.com/pcodec/pcodec"
 
 [[bin]]
 name = "pcodec"

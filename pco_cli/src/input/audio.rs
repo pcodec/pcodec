@@ -7,7 +7,7 @@ use arrow::array::{ArrayRef, Float32Array, Int16Array, Int32Array, UInt16Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use wav::BitDepth;
 
-pub fn get_wav_field(path: &Path) -> Result<Option<Field>> {
+pub fn get_wav_schema(path: &Path) -> Result<Schema> {
   // this is excessively slow, but easy for now
   let mut file = File::open(path)?;
   let (header, _) = wav::read(&mut file)?;
@@ -26,39 +26,69 @@ pub fn get_wav_field(path: &Path) -> Result<Option<Field>> {
     .unwrap()
     .to_str()
     .expect("somehow not unicode");
-  Ok(Some(Field::new(name, dtype, false)))
+
+  let fields: Vec<Field> = (0..header.channel_count)
+    .map(|i| {
+      Field::new(
+        format!("{}_channel_{}", name, i),
+        dtype.clone(),
+        false,
+      )
+    })
+    .collect();
+  Ok(Schema::new(fields))
 }
 
 pub struct WavColumnReader {
-  col_path: PathBuf,
+  path: PathBuf,
   dtype: DataType,
+  channel_idx: usize,
   did_read: bool,
 }
 
 impl WavColumnReader {
-  pub fn new(schema: &Schema, col_idx: usize) -> Result<Self> {
-    let col_path = PathBuf::from(schema.metadata.get(&col_idx.to_string()).unwrap());
+  pub fn new(schema: &Schema, path: &Path, col_idx: usize) -> Result<Self> {
     let dtype = schema.field(col_idx).data_type().clone();
     Ok(WavColumnReader {
-      col_path,
+      path: PathBuf::from(path),
       dtype,
+      channel_idx: col_idx,
       did_read: false,
     })
   }
 }
 
+fn filter_to_channel<T>(data: Vec<T>, channel_idx: usize, channel_count: u16) -> Vec<T> {
+  data
+    .into_iter()
+    .skip(channel_idx)
+    .step_by(channel_count as usize)
+    .collect()
+}
+
 impl WavColumnReader {
   fn get_array(&self) -> Result<ArrayRef> {
-    let mut inp_file = File::open(&self.col_path)?;
-    let (_, data) = wav::read(&mut inp_file)?;
+    let mut inp_file = File::open(&self.path)?;
+    let (header, data) = wav::read(&mut inp_file)?;
+
+    macro_rules! make_channel_array {
+      ($data:ident, $array_type:ty) => {
+        Arc::new(<$array_type>::from(filter_to_channel(
+          $data,
+          self.channel_idx,
+          header.channel_count,
+        )))
+      };
+    }
+
     let array: ArrayRef = match data {
       BitDepth::Eight(u8s) => {
         let u16s = u8s.into_iter().map(|x| x as u16).collect::<Vec<_>>();
-        Arc::new(UInt16Array::from(u16s))
+        make_channel_array!(u16s, UInt16Array)
       }
-      BitDepth::Sixteen(i16s) => Arc::new(Int16Array::from(i16s)),
-      BitDepth::TwentyFour(i32s) => Arc::new(Int32Array::from(i32s)),
-      BitDepth::ThirtyTwoFloat(f32s) => Arc::new(Float32Array::from(f32s)),
+      BitDepth::Sixteen(i16s) => make_channel_array!(i16s, Int16Array),
+      BitDepth::TwentyFour(i32s) => make_channel_array!(i32s, Int32Array),
+      BitDepth::ThirtyTwoFloat(f32s) => make_channel_array!(f32s, Float32Array),
       BitDepth::Empty => {
         if self.dtype == DataType::Int32 {
           Arc::new(Int32Array::from(Vec::<i32>::new()))

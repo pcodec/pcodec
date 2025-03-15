@@ -59,7 +59,7 @@ Each chunk meta consists of
 * [4 bits] `mode`, using this table:
 
   | value | mode         | n latent variables | `extra_mode_bits` |
-                                    |-------|--------------|--------------------|-------------------|
+  |-------|--------------|--------------------|-------------------|
   | 0     | Classic      | 1                  | 0                 |
   | 1     | IntMult      | 2                  | `dtype_size`      |
   | 2     | FloatMult    | 2                  | `dtype_size`      |

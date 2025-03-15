@@ -24,7 +24,7 @@ you're opposed to creating a Discord account, Github issues also work.
 
 Looking for ideas on what to contribute? Grep through the repo for concrete
 TODOs, or look at our
-[project ideas](https://github.com/mwlon/pcodec/wiki/pcodec-project-ideas)
+[project ideas](https://github.com/pcodec/pcodec/wiki/pcodec-project-ideas)
 for harder, underspecified problems.
 
 # Deploying Packages
