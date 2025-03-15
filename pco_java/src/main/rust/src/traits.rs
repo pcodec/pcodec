@@ -62,6 +62,12 @@ macro_rules! transmute_impl {
 }
 
 trivial_impl!(
+  i8,
+  get_byte_array_region,
+  new_byte_array,
+  set_byte_array_region
+);
+trivial_impl!(
   i16,
   get_short_array_region,
   new_short_array,
@@ -93,6 +99,7 @@ trivial_impl!(
 );
 
 transmute_impl!(f16, i16);
+transmute_impl!(u8, i8);
 transmute_impl!(u16, i16);
 transmute_impl!(u32, i32);
 transmute_impl!(u64, i64);
