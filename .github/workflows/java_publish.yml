@@ -36,7 +36,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dylib-${{ matrix.target }}
-          path: pco_java/target/classes/${{ env.GROUP_ID }}/linux-${{ matrix.target }}
+          path: target/classes/${{ env.GROUP_ID }}/linux-${{ matrix.target }}
 
   release:
     name: Release
