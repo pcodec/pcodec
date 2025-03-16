@@ -75,28 +75,6 @@
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.questdb</groupId>
-        <artifactId>rust-maven-plugin</artifactId>
-        <version>1.2.0</version>
-        <executions>
-          <execution>
-            <id>rust-build-id</id>
-            <goals>
-              <goal>build</goal>
-            </goals>
-            <configuration>
-              <environmentVariables>
-                <RUSTFLAGS>-C lto=true -C embed-bitcode=true -Zdylib-lto</RUSTFLAGS>
-              </environmentVariables>
-              <path>src/main/rust</path>
-              <copyTo>${project.basedir}/src/main/resources/io/github/pcodec</copyTo>
-              <copyWithPlatformDir>true</copyWithPlatformDir>
-              <release>true</release>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
         <version>3.2.7</version>
@@ -147,6 +125,38 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>rust</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.questdb</groupId>
+            <artifactId>rust-maven-plugin</artifactId>
+            <version>1.2.0</version>
+            <executions>
+              <execution>
+                <id>rust-build-id</id>
+                <goals>
+                  <goal>build</goal>
+                </goals>
+                <configuration>
+                  <environmentVariables>
+                    <RUSTFLAGS>-C lto=true -C embed-bitcode=true -Zdylib-lto</RUSTFLAGS>
+                  </environmentVariables>
+                  <path>src/main/rust</path>
+                  <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
+                  <copyWithPlatformDir>true</copyWithPlatformDir>
+                  <release>true</release>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
   <distributionManagement>
     <snapshotRepository>
