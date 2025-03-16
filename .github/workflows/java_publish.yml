@@ -32,6 +32,10 @@ jobs:
       - name: Build library
         # running test should also build the dynamic lib
         run: cd pco_java && mvn test
+      - name: TEMP_DEBUG
+        run: |
+          pwd
+          ls
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
