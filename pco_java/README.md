@@ -3,7 +3,9 @@
 Pcodec is a codec for numerical sequences. Example usage:
 
 ```java
-import io.github.pcodec.{ChunkConfig, NumArray, Standalone};
+import io.github.pcodec.ChunkConfig;
+import io.github.pcodec.NumArray;
+import io.github.pcodec.Standalone;
 
 int[] src = { 1, 2, 3 };
 NumArray numArray = NumArray.i32Array(src);
