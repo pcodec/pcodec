@@ -1,13 +1,38 @@
 <project>
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.pcodec</groupId>
-  <artifactId>pco</artifactId>
+  <artifactId>pco-jni</artifactId>
   <version>0.1.0</version>
+
+  <packaging>jar</packaging>
+  <description>Good compression for numerical sequences</description>
+  <url>https://github.com/pcodec/pcodec</url>
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>mwlon</id>
+      <name>Martin Loncaric</name>
+      <email>m.w.loncaric@gmail.com</email>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:git://github.com/pcodec/pcodec.git</connection>
+    <developerConnection>scm:git:ssh://github.com:pcodec/pcodec.git</developerConnection>
+    <url>https://github.com/pcodec/pcodec</url>
+  </scm>
+
   <properties>
     <maven.compiler.source>8</maven.compiler.source>
     <maven.compiler.target>8</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.questdb</groupId>
@@ -21,6 +46,7 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
   <build>
     <plugins>
       <plugin>
@@ -59,20 +85,73 @@
               <goal>build</goal>
             </goals>
             <configuration>
+              <environmentVariables>
+                <RUSTFLAGS>-C lto=true -C embed-bitcode=true -Zdylib-lto</RUSTFLAGS>
+              </environmentVariables>
               <path>src/main/rust</path>
               <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
               <copyWithPlatformDir>true</copyWithPlatformDir>
               <release>true</release>
-              <extra-args>
-                <extra-arg>-C</extra-arg>
-                <extra-arg>lto=true</extra-arg>
-                <extra-arg>-C</extra-arg>
-                <extra-arg>codegen-units=1</extra-arg>
-              </extra-args>
             </configuration>
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>3.2.7</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.11.2</version>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.7.0</version>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
+
+  <distributionManagement>
+    <snapshotRepository>
+      <id>ossrh</id>
+      <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+    </snapshotRepository>
+  </distributionManagement>
 </project>

@@ -17,3 +17,7 @@ exclude = [
   # conflicting dependencies and not worth upgrading
   "quantile-compression/q_compress_cli"
 ]
+
+#[profile.release.package.pco_java]
+#lto = true
+#codegen-units = 1
