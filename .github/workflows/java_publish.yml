@@ -22,6 +22,8 @@ jobs:
         target: [ x86_64, x86, aarch64, armv7 ]
     steps:
       - uses: actions/checkout@v4
+      - name: Set Rust version
+        run: rustup override set nightly
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -49,6 +51,8 @@ jobs:
         run: |
           mkdir -p pco_java/src/main/resources/${{ env.GROUP_ID }}
           cp temp_dylibs/* pco_java/src/main/resources/${{ env.GROUP_ID }}/
+      - name: Set Rust version
+        run: rustup override set nightly
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
