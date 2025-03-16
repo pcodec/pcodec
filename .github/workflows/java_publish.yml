@@ -36,11 +36,16 @@ jobs:
         run: |
           pwd
           ls
+          ls pco_java
+          ls pco_java/target
+          ls pco_java/target/classes
+          ls pco_java/target/classes/${{ env.GROUP_ID }}
+          ls pco_java/target/classes/${{ env.GROUP_ID }}/linux-${{ matrix.target }}
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
           name: dylib-${{ matrix.target }}
-          path: target/classes/${{ env.GROUP_ID }}/linux-${{ matrix.target }}
+          path: pco_java/target/classes/${{ env.GROUP_ID }}/linux-${{ matrix.target }}
 
   release:
     name: Release
