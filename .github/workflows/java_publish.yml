@@ -12,12 +12,35 @@ env:
 
 jobs:
   linux:
+    strategy:
+      matrix:
+        target: [ x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu ]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            jni_target: linux-x86-64
+          - target: aarch64-unknown-linux-gnu
+            jni_target: linux-aarch64
     runs-on: ubuntu-latest
     if: contains(github.event.release.name, 'Java')
     steps:
       - uses: actions/checkout@v4
       - name: Set Rust version
         run: rustup override set nightly
+      - name: Build target dylibs into resources dir
+        run: |
+          rustup target add "${{ matrix.target }}"
+          cargo build --release -p pco_java --target "${{ matrix.target }}"
+      - name: Upload dynamic lib
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ jni_target }}
+          path: target/${{ matrix.target }}/release/libpco_java.so
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [ linux ]
+    if: contains(github.event.release.name, 'Java')
+    steps:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -26,8 +49,17 @@ jobs:
           server-id: central
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
-      - name: Build target dylibs into resources dir
-        run: pco_java/build_for_all_targets.sh
+      - name: Download dylibs to resources
+        uses: actions/download-artifact@v4
+        with:
+          path: pco_java/src/main/resources/${{ env.GROUP_ID }}
+      - name: DEBUG
+        run: |
+          ls
+          ls pco_java
+          ls pco_java/src/main/resources/
+          ls pco_java/src/main/resources/${{ env.GROUP_ID }}
+          ls pco_java/src/main/resources/${{ env.GROUP_ID }}/linux-aarch64
       - name: Publish package
         run: cd pco_java && mvn --batch-mode deploy
         env:
