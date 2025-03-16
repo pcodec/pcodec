@@ -33,7 +33,7 @@ jobs:
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ jni_target }}
+          name: ${{ matrix.jni_target }}
           path: target/${{ matrix.target }}/release/libpco_java.so
 
   publish:
