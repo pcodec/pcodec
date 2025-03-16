@@ -20,3 +20,7 @@ For pcodec's uses, design, and benchmarks, [see the main repo](https://github.co
 
 Since Java does not natively support all data types, we transmute to the most appropriate Java integer type when necessary.
 For instance, 32-bit unsigned integers are decompressed as `int`s, and 16-bit floats are decompressed as `short`s.
+
+## For Developers
+
+TODO

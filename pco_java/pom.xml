@@ -89,7 +89,7 @@
                 <RUSTFLAGS>-C lto=true -C embed-bitcode=true -Zdylib-lto</RUSTFLAGS>
               </environmentVariables>
               <path>src/main/rust</path>
-              <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
+              <copyTo>${project.basedir}/src/main/resources/io/github/pcodec</copyTo>
               <copyWithPlatformDir>true</copyWithPlatformDir>
               <release>true</release>
             </configuration>
