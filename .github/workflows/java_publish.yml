@@ -24,6 +24,8 @@ jobs:
     if: contains(github.event.release.name, 'Java')
     steps:
       - uses: actions/checkout@v4
+      - name: Install cross compilation tools
+        run: sudo apt install gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - name: Set Rust version
         run: rustup override set nightly
       - name: Build target dylibs into resources dir
