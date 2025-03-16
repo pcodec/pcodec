@@ -44,7 +44,7 @@ jobs:
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
-          name: dylib-${{ matrix.target }}
+          name: dylib-linux-${{ matrix.target }}
           path: pco_java/target/classes/${{ env.GROUP_ID }}/linux-${{ matrix.target }}
 
   release:
