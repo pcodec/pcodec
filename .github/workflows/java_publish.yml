@@ -14,12 +14,16 @@ jobs:
   linux:
     strategy:
       matrix:
-        target: [ x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu ]
+        target: [ x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, aarch64-apple-darwin, x86_64-apple-darwin ]
         include:
           - target: x86_64-unknown-linux-gnu
             jni_target: linux-x86-64
           - target: aarch64-unknown-linux-gnu
             jni_target: linux-aarch64
+          - target: aarch64-apple-darwin
+            jni_target: darwin-aarch64
+          - target: x86_64-apple-darwin
+            jni_target: darwin-x86-64
     runs-on: ubuntu-latest
     if: contains(github.event.release.name, 'Java')
     steps:
