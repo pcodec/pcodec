@@ -26,10 +26,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set Rust version
         run: rustup override set nightly
-      - name: Cross compilation tools
-        run: cargo install cross
+      - name: Add rustup target
+        run: rustup target add "${{ matrix.target }}"
       - name: Build target dylibs
-        run: cross build --release -p pco_java --target "${{ matrix.target }}"
+        run: cargo build --release -p pco_java --target "${{ matrix.target }}"
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
@@ -51,10 +51,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set Rust version
         run: rustup override set nightly
-      - name: Cross compilation tools
-        run: cargo install cross
+      - name: Add rustup target
+        run: rustup target add "${{ matrix.target }}"
       - name: Build target dylibs
-        run: cross build --release -p pco_java --target "${{ matrix.target }}"
+        run: cargo build --release -p pco_java --target "${{ matrix.target }}"
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
@@ -74,10 +74,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set Rust version
         run: rustup override set nightly
-      - name: Cross compilation tools
-        run: cargo install cross
+      - name: Add rustup target
+        run: rustup target add "${{ matrix.target }}"
       - name: Build target dylibs
-        run: cross build --release -p pco_java --target "${{ matrix.target }}"
+        run: cargo build --release -p pco_java --target "${{ matrix.target }}"
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
