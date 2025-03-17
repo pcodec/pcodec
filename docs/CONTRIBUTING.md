@@ -27,9 +27,24 @@ TODOs, or look at our
 [project ideas](https://github.com/pcodec/pcodec/wiki/pcodec-project-ideas)
 for harder, underspecified problems.
 
-# Deploying Packages
+# Testing
 
-This is entirely managed by @mwlon right now, but just for reference:
+## Rust
+
+`cargo test`
+
+## Python
+
+From a venv with `maturin` installed, and from `pco_python/`, run
+`maturin develop` to recompile and install the python package into your venv.
+Then you can run `pytest --doctest-glob=*.md`.
+
+## Java
+
+With Maven installed, and from `pco_java/`, run `mvn test -P rust` if you want
+to recompile the Rust code, or just `mvn test` if not.
+
+# Deploying Packages
 
 ## Rust / Crates.io
 
@@ -39,7 +54,19 @@ clone of the repo.
 ## Python / PyPi
 
 `pco_python` is packaged by
-[a Github workflow](../.github/workflows/python_ci.yml)
+[a Github workflow](../.github/workflows/python_publish.yml)
 whenever the release name contains "Python". This runs a lot of maturin builds,
 each of which produces a dynamic library for a targets (in the sense of OS /
-hardware tuples). Each such package is automatically published to PyPi.
+hardware tuples).
+If all builds succeed, each such package is automatically and separately
+published to PyPi.
+
+## Java / JVM / Maven Central Repository
+
+`pco_java` is similarly packaged by
+[a Github workflow](../.github/workflows/java_publish.yml)
+whenever the release name contains "Java".
+Unlike Python, libraries for all platforms get bundled into a single JAR
+before being published to Maven Central Repository staging.
+After the upload, someone (probably @mwlon) needs to log into the Maven Central
+Repository website and promote it from staging to prod if it looks good.
