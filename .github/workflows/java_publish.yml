@@ -26,10 +26,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set Rust version
         run: rustup override set nightly
-      - name: Add rustup target
-        run: rustup target add "${{ matrix.target }}"
+      # it seems that rust targets don't work out of the box on linux,
+      # so use cross (which uses docker) instead
+      - name: Cross compilation tools
+        run: cargo install cross
       - name: Build target dylibs
-        run: cargo build --release -p pco_java --target "${{ matrix.target }}"
+        run: cross build --release -p pco_java --target "${{ matrix.target }}"
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
