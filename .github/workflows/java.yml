@@ -23,5 +23,5 @@ jobs:
           cache: maven
       - name: Test
         # batch mode for non-interactive,
-        run: cd pco_java && mvn --batch-mode test
+        run: cd pco_java && mvn --batch-mode test -P rust
 
