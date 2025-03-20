@@ -18,3 +18,10 @@ from somewhere in between `a.b.c` whatever Rust version follows that.
 | 0.3.1                   | 0.4.0              |
 | 0.3.2                   | 0.4.1              |
 | 0.3.3                   | 0.4.2              |
+
+# Java / JVM versions
+
+| Java `io.github.pcodec.pco-jni` version | Rust `pco` version |
+|-----------------------------------------|--------------------|
+| 0.1.0                                   | 0.4.2              |
+

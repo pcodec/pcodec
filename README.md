@@ -49,7 +49,7 @@ numerical sequences with
 
 [Use the CLI](./pco_cli/README.md) (also supports benchmarking)
 
-[Use the Rust API](./pco/README.md)
+[Use the Rust API](https://docs.rs/pco/latest/pco/)
 
 [Use the Python API](./pco_python/README.md)
 

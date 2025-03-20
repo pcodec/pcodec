@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::fs;
+use std::mem;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -25,7 +26,7 @@ use crate::dtypes::PcoNumber;
 use crate::num_vec::NumVec;
 use ::pco::data_types::NumberType;
 use ::pco::match_number_enum;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use clap::{CommandFactory, FromArgMatches};
 
 #[cfg(feature = "full_bench")]
@@ -172,7 +173,14 @@ impl<C: CodecInternal> CodecSurface for C {
       let rec_nums = self.decompress_dynamic(dtype, &compressed);
 
       if !opt.no_assertions {
-        rec_nums.check_equal(num_vec);
+        rec_nums.check_equal(num_vec).with_context(|| {
+          format!(
+            "on codec {}{}, dataset {}",
+            self.name(),
+            self.details(false),
+            dataset
+          )
+        })?;
       }
     }
 
@@ -203,8 +211,16 @@ impl<C: CodecInternal> CodecSurface for C {
       Duration::ZERO
     };
 
+    let uncompressed_size = match_number_enum!(
+      num_vec,
+      NumVec<T>(inner) => {
+        inner.len() * mem::size_of::<T>()
+      }
+    );
+
     Ok(BenchStat {
       compressed_size: precomputed.compressed.len(),
+      uncompressed_size,
       compress_dt,
       decompress_dt,
     })
