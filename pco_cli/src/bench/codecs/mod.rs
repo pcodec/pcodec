@@ -7,6 +7,8 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "full_bench")]
+use crate::bench::codecs::alp::AlpConfig;
+#[cfg(feature = "full_bench")]
 use crate::bench::codecs::blosc::BloscConfig;
 #[cfg(feature = "full_bench")]
 use crate::bench::codecs::brotli::BrotliConfig;
@@ -29,6 +31,8 @@ use ::pco::match_number_enum;
 use anyhow::{anyhow, Context, Result};
 use clap::{CommandFactory, FromArgMatches};
 
+#[cfg(feature = "full_bench")]
+mod alp;
 #[cfg(feature = "full_bench")]
 mod blosc;
 #[cfg(feature = "full_bench")]
@@ -254,6 +258,8 @@ impl FromStr for CodecConfig {
     }
 
     let codec: Result<Box<dyn CodecSurface>> = match name {
+      #[cfg(feature = "full_bench")]
+      "alp" => AlpConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "blosc" | "blosc2" => BloscConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]

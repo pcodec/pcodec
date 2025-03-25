@@ -16,6 +16,7 @@ name = "pcodec"
 path = "src/main.rs"
 
 [dependencies]
+alp = { version = "0.0.1", optional = true }
 anyhow = "1.0.71"
 arrow = { version = "53.0.0", features = ["csv"], default-features = false }
 better_io = { version = "0.1.0", path = "../better_io" }
@@ -45,4 +46,4 @@ zstd = "0.13"
 
 [features]
 audio = ["wav"]
-full_bench = ["blosc2-src", "brotli", "q_compress", "rayon", "spdp_sys", "turbo_pfor_sys"]
+full_bench = ["alp", "blosc2-src", "brotli", "q_compress", "rayon", "spdp_sys", "turbo_pfor_sys"]
