@@ -169,6 +169,8 @@ macro_rules! build_dtype_macros {
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
+  use std::collections::HashMap;
+
   trait Constraint: 'static {}
 
   impl Constraint for u16 {}
@@ -191,6 +193,13 @@ mod tests {
     MyEnum(Vec)
   );
 
+  type Counter<T> = HashMap<T, usize>;
+
+  define_enum!(
+    #[derive(Clone, Debug)]
+    AnotherContainerEnumInSameScope(Counter)
+  );
+
   // we use this helper just to prove that we can handle generic types, not
   // just concrete types
   fn generic_new<T: Constraint>(inner: Vec<T>) -> MyEnum {
@@ -204,5 +213,12 @@ mod tests {
     assert_eq!(bit_size, 80);
     let x = x.downcast::<u16>().unwrap();
     assert_eq!(x[0], 1);
+  }
+
+  #[test]
+  fn test_multiple_enums_defined_in_same_scope() {
+    // This was really tested during compilation, but I'm just using the new
+    // enum here to ensure the code doesn't die.
+    AnotherContainerEnumInSameScope::new(HashMap::<u16, usize>::new()).unwrap();
   }
 }
