@@ -65,56 +65,10 @@ macro_rules! build_dtype_macros {
         }
       };
       (#[$enum_attrs: meta] $vis: vis $name: ident($container: ident)) => {
-        $vis trait Downcast {
-          fn downcast<S: $constraint>(self) -> Option<$container<S>>;
-          fn downcast_ref<S: $constraint>(&self) -> Option<&$container<S>>;
-          fn downcast_mut<S: $constraint>(&mut self) -> Option<&mut $container<S>>;
-        }
-
         #[$enum_attrs]
         #[non_exhaustive]
         $vis enum $name {
           $($variant($container<$t>),)+
-        }
-
-        impl<T: $constraint> Downcast for $container<T> {
-          // we inline these because they compile down to basically nothing
-          #[inline]
-          fn downcast<S: $constraint>(self) -> Option<$container<S>> {
-            if std::any::TypeId::of::<S>() == std::any::TypeId::of::<T>() {
-              // Transmute doesn't work for containers whose size depends on T,
-              // so we use a hack from
-              // https://users.rust-lang.org/t/transmuting-a-generic-array/45645/6
-              let ptr = &self as *const $container<T> as *const $container<S>;
-              let res = unsafe { ptr.read() };
-              std::mem::forget(self);
-              Some(res)
-            } else {
-              None
-            }
-          }
-
-          #[inline]
-          fn downcast_ref<S: $constraint>(&self) -> Option<&$container<S>> {
-            if std::any::TypeId::of::<S>() == std::any::TypeId::of::<T>() {
-              unsafe {
-                Some(std::mem::transmute::<_, &$container<S>>(self))
-              }
-            } else {
-              None
-            }
-          }
-
-          #[inline]
-          fn downcast_mut<S: $constraint>(&mut self) -> Option<&mut $container<S>> {
-            if std::any::TypeId::of::<S>() == std::any::TypeId::of::<T>() {
-              unsafe {
-                Some(std::mem::transmute::<_, &mut $container<S>>(self))
-              }
-            } else {
-              None
-            }
-          }
         }
 
         impl $name {
@@ -123,7 +77,13 @@ macro_rules! build_dtype_macros {
             let type_id = std::any::TypeId::of::<S>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
-                return Some($name::$variant(inner.downcast::<$t>().unwrap()));
+                // Transmute doesn't work for containers whose size depends on T,
+                // so we use a hack from
+                // https://users.rust-lang.org/t/transmuting-a-generic-array/45645/6
+                let ptr = &inner as *const $container<S> as *const $container<$t>;
+                let typed = unsafe { ptr.read() };
+                std::mem::forget(inner);
+                return Some($name::$variant(typed));
               }
             )+
             None
@@ -132,7 +92,17 @@ macro_rules! build_dtype_macros {
           pub fn downcast<T: $constraint>(self) -> Option<$container<T>> {
             match self {
               $(
-                Self::$variant(inner) => inner.downcast::<T>(),
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    // same hack from `new`
+                    let ptr = &inner as *const $container<$t> as *const $container<T>;
+                    let typed = unsafe { ptr.read() };
+                    std::mem::forget(inner);
+                    Some(typed)
+                  } else {
+                    None
+                  }
+                }
               )+
             }
           }
@@ -140,7 +110,15 @@ macro_rules! build_dtype_macros {
           pub fn downcast_ref<T: $constraint>(&self) -> Option<&$container<T>> {
             match self {
               $(
-                Self::$variant(inner) => inner.downcast_ref::<T>(),
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    unsafe {
+                      Some(std::mem::transmute::<_, &$container<T>>(inner))
+                    }
+                  } else {
+                    None
+                  }
+                }
               )+
             }
           }
@@ -148,7 +126,15 @@ macro_rules! build_dtype_macros {
           pub fn downcast_mut<T: $constraint>(&mut self) -> Option<&mut $container<T>> {
             match self {
               $(
-                Self::$variant(inner) => inner.downcast_mut::<T>(),
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    unsafe {
+                      Some(std::mem::transmute::<_, &mut $container<T>>(inner))
+                    }
+                  } else {
+                    None
+                  }
+                }
               )+
             }
           }
