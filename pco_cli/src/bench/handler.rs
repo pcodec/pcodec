@@ -31,13 +31,11 @@ fn handle_for_codec_thread(
     core_dtype_to_str(num_vec.dtype()),
     name,
   );
-  progress_bar.set_message(format!("{} x {} warmup", dataset, codec));
   let precomputed = codec.warmup_iter(num_vec, &dataset, &opt.iter_opt, thread_idx)?;
   progress_bar.inc(1);
 
   let mut benches = Vec::with_capacity(opt.iters);
-  for i in 0..opt.iters {
-    progress_bar.set_message(format!("{} x {} iter {}", dataset, codec, i));
+  for _ in 0..opt.iters {
     benches.push(codec.stats_iter(num_vec, &precomputed, &opt.iter_opt)?);
     progress_bar.inc(1);
   }

@@ -144,8 +144,9 @@ fn make_progress_bar(n_columns: usize, opt: &BenchOpt) -> ProgressBar {
   ProgressBar::new(
     (opt.codecs.len() * n_columns * opt.threads.unwrap_or(1) * (opt.iters + 1)) as u64,
   )
+  .with_message("iters")
   .with_style(
-    ProgressStyle::with_template("[{elapsed_precise}] {wide_bar} ({msg}) {pos}/{len} ").unwrap(),
+    ProgressStyle::with_template("[{elapsed_precise}] {wide_bar} {pos}/{len} {msg} ").unwrap(),
   )
 }
 
