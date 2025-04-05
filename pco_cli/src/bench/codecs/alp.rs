@@ -12,15 +12,21 @@ use clap::Parser;
 pub struct AlpConfig {}
 
 fn as_any<T: PcoNumber>(nums: &[T]) -> &dyn Any {
-  unimplemented!()
-  //nums
+  nums
 }
 
-fn encode<R: ALPRDFloat>(values: &[R]) -> Vec<u8> {
-  unimplemented!()
-  //let sample = &values[..1000];
-  //let encoder = RDEncoder::new(sample);
-  //let split = encoder.split(values);
+impl AlpConfig {
+  fn encode_rd<R: ALPRDFloat>(&self, values: &[R]) -> Vec<u8> {
+    let sample = &values[..1000];
+    let encoder = RDEncoder::new(sample);
+    let split = encoder.split(values);
+    let (left_parts, left_dict, left_exceptions, right_parts, right_bitwidth) = split.into_parts();
+    let n = values.len() as u32;
+    let mut res = Vec::new();
+    res.extend(n.to_le_bytes());
+
+    res
+  }
 }
 
 impl CodecInternal for AlpConfig {
@@ -36,10 +42,10 @@ impl CodecInternal for AlpConfig {
     let type_id = nums.type_id();
     if type_id == TypeId::of::<&[f32]>() {
       let nums = as_any(nums).downcast_ref::<&[f32]>().unwrap();
-      encode(nums)
+      self.encode_rd(nums)
     } else if type_id == TypeId::of::<&[f64]>() {
       let nums = as_any(nums).downcast_ref::<&[f64]>().unwrap();
-      encode(nums)
+      self.encode_rd(nums)
     } else {
       panic!("ALP doesn't support type {:?}", type_id)
     }
