@@ -10,20 +10,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: jpetrucciani/ruff-check@main
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    # TODO: there has to be a cleaner way to do this and also add caching
-    - name: "create venv"
-      run: python -m venv .venv
-    - uses: PyO3/maturin-action@v1
-      with:
-        command: develop
-        args: --manifest-path pco_python/Cargo.toml
-        sscache: true
-    - name: Install test requirements
-      run: source .venv/bin/activate && pip install -r pco_python/test_requirements.txt
-    - name: Run tests
-      run: source .venv/bin/activate && pytest -v --doctest-glob=*.md
+      - uses: actions/checkout@v4
+      - uses: jpetrucciani/ruff-check@main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      # TODO: there has to be a cleaner way to do this and also add caching
+      - name: "create venv"
+        run: python -m venv .venv
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: develop
+          args: --manifest-path pco_python/Cargo.toml
+          sscache: true
+      - name: Install test requirements
+        run: source .venv/bin/activate && pip install -r pco_python/test_requirements.txt
+      - name: Run tests
+        run: source .venv/bin/activate && pytest -v --doctest-glob=*.md

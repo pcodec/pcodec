@@ -184,7 +184,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut offset_bit_idx = 0;
     let mut state_idxs = self.state.ans_state_idxs;
     for i in 0..batch_n {
-      let j = i % 4;
+      let j = i % ANS_INTERLEAVING;
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);

@@ -1,19 +1,28 @@
 use crate::dtypes::PcoNumber;
+use anyhow::{anyhow, Result};
 use pco::data_types::{Number, NumberType};
 use pco::{define_number_enum, match_number_enum};
 
-fn check_equal<T: PcoNumber>(recovered: &[T], original: &[T]) {
-  assert_eq!(recovered.len(), original.len());
-  for (i, (x, y)) in recovered.iter().zip(original.iter()).enumerate() {
-    assert_eq!(
-      x.to_latent_ordered(),
-      y.to_latent_ordered(),
-      "{} != {} at {}",
-      x,
-      y,
-      i
-    );
+fn check_equal<T: PcoNumber>(recovered: &[T], original: &[T]) -> Result<()> {
+  if recovered.len() != original.len() {
+    return Err(anyhow!(
+      "recovered length {} != original length {}",
+      recovered.len(),
+      original.len()
+    ));
   }
+
+  for (i, (x, y)) in recovered.iter().zip(original.iter()).enumerate() {
+    if x.to_latent_ordered() != y.to_latent_ordered() {
+      return Err(anyhow!(
+        "{} != {} at {}",
+        recovered[i],
+        original[i],
+        i
+      ));
+    }
+  }
+  Ok(())
 }
 
 define_number_enum!(
@@ -43,15 +52,16 @@ impl NumVec {
     )
   }
 
-  pub fn check_equal(&self, other: &NumVec) {
+  pub fn check_equal(&self, other: &NumVec) -> Result<()> {
     match_number_enum!(
       self,
       NumVec<T>(nums) => {
-        let other_nums = other.downcast_ref::<T>();
-        assert!(other_nums.is_some(), "NumVecs had mismatched types");
-        let other_nums = other_nums.unwrap();
-        check_equal(nums, other_nums);
+        let other_nums = other.downcast_ref::<T>().ok_or_else(|| anyhow!(
+          "NumVecs had mismatched types"
+        ))?;
+        check_equal(nums, other_nums)?;
       }
-    )
+    );
+    Ok(())
   }
 }

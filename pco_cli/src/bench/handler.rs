@@ -39,11 +39,11 @@ fn handle_for_codec_thread(
     benches.push(codec.stats_iter(num_vec, &precomputed, &opt.iter_opt)?);
     progress_bar.inc(1);
   }
-  Ok(PrintStat {
+  Ok(PrintStat::new(
     dataset,
-    codec: codec.to_string(),
-    bench_stat: BenchStat::aggregate_median(&benches),
-  })
+    codec.to_string(),
+    BenchStat::aggregate_median(&benches),
+  ))
 }
 
 impl<P: ArrowNumber> BenchHandler for ArrowHandlerImpl<P> {
@@ -98,11 +98,11 @@ impl<P: ArrowNumber> BenchHandler for ArrowHandlerImpl<P> {
           .iter()
           .map(|stat| stat.bench_stat.clone())
           .collect::<Vec<_>>();
-        stats.push(PrintStat {
+        stats.push(PrintStat::new(
           dataset,
           codec,
-          bench_stat: BenchStat::aggregate_median(&thread_benches),
-        });
+          BenchStat::aggregate_median(&thread_benches),
+        ));
         continue;
       }
 

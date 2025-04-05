@@ -24,7 +24,7 @@ accessible in download size:
 | taxi        | 2.14GB            | f64, i32, i64      |
 | r/place     | 4.19GB            | i32, i64           |
 
-<div style="text-align:center">
+<p align="center">
   <img
     alt="bar charts showing better compression for Pco than zstd.parquet"
     src="../images/real_world_compression_ratio.svg"
@@ -40,7 +40,7 @@ accessible in download size:
     src="../images/real_world_decompression_speed.svg"
     width="700px"
   >
-</div>
+</p>
 
 These were again done on a single core of an M3 performance core.
 Only numerical columns were used.

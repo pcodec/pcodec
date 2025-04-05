@@ -94,6 +94,9 @@ impl InputFileOpt {
 }
 
 fn schema_from_field_paths(mut field_paths: Vec<(Field, PathBuf)>) -> Result<Schema> {
+  // To support treating a whole directory of files as a multi-column input for
+  // single-column formats, we attach some metadata to the schema to be read
+  // back later.
   field_paths.sort_by_key(|(field, _)| field.name().to_string());
   let mut metadata = HashMap::new();
   for (i, (_, path)) in field_paths.iter().enumerate() {
@@ -223,7 +226,7 @@ fn infer_pco_schema(path: &Path) -> Result<Schema> {
 
 #[cfg(feature = "audio")]
 fn infer_wav_schema(path: &Path) -> Result<Schema> {
-  single_column_or_filtered_dir_schema(path, audio::get_wav_field)
+  audio::get_wav_schema(path)
 }
 
 #[cfg(not(feature = "audio"))]
@@ -250,16 +253,18 @@ pub fn get_schema(col_opt: &InputColumnOpt, file_opt: &InputFileOpt) -> Result<S
 #[cfg(feature = "audio")]
 fn new_wav_reader(
   schema: &Schema,
+  path: &Path,
   col_idx: usize,
 ) -> Result<Box<dyn Iterator<Item = Result<ArrayRef>>>> {
   Ok(Box::new(audio::WavColumnReader::new(
-    schema, col_idx,
+    schema, path, col_idx,
   )?))
 }
 
 #[cfg(not(feature = "audio"))]
 fn new_wav_reader(
   _schema: &Schema,
+  _path: &Path,
   _col_idx: usize,
 ) -> Result<Box<dyn Iterator<Item = Result<ArrayRef>>>> {
   Err(anyhow!("not compiled with audio feature"))
@@ -280,7 +285,7 @@ pub fn new_column_reader(
       schema, path, col_idx,
     )?),
     Format::Pco => Box::new(PcoColumnReader::new(schema, col_idx)?),
-    Format::Wav => new_wav_reader(schema, col_idx)?,
+    Format::Wav => new_wav_reader(schema, path, col_idx)?,
   };
   Ok(res)
 }

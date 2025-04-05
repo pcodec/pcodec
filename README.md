@@ -1,12 +1,13 @@
-<div style="text-align:center">
+<p align="center">
   <img
     alt="Pco logo: a pico-scale, compressed version of the Pyramid of Khafre in the palm of your hand" src="images/logo.svg"
     width="160px"
   >
-</div>
+</p>
 
 [![crates.io][crates-badge]][crates-url]
 [![pypi.org][pypi-badge]][pypi-url]
+[![https://central.sonatype.com/][maven-central-badge]][maven-central-url]
 
 [crates-badge]: https://img.shields.io/crates/v/pco.svg
 
@@ -16,15 +17,19 @@
 
 [pypi-url]: https://pypi.org/project/pcodec/
 
+[maven-central-badge]: https://img.shields.io/maven-central/v/io.github.pcodec/pco-jni
+
+[maven-central-url]: https://central.sonatype.com/artifact/io.github.pcodec/pco-jni
+
 # Pcodec
 
-<div style="text-align:center">
+<p align="center">
   <img
     alt="bar charts showing better compression for Pco than zstd parquet or blosc"
     src="images/real_world_compression_ratio.svg"
     width="700px"
   >
-</div>
+</p>
 
 Pcodec (or Pco) losslessly compresses and decompresses
 numerical sequences with
@@ -44,9 +49,11 @@ numerical sequences with
 
 [Use the CLI](./pco_cli/README.md) (also supports benchmarking)
 
-[Use the Rust API](./pco/README.md)
+[Use the Rust API](https://docs.rs/pco/latest/pco/)
 
 [Use the Python API](./pco_python/README.md)
+
+[Use the Java API](./pco_java/README.md)
 
 ## How is Pco so much better than alternatives?
 
@@ -97,6 +104,7 @@ It is mainly recommended for quick proofs of concept and benchmarking.
 
 Pco has a hierarchy of multiple batches per page; multiple pages per chunk; and
 multiple chunks per file.
+By default Pco uses up to 2^18 (~262k) numbers per chunk if available.
 
 |       | unit of ___                     | size for good compression |
 |-------|---------------------------------|---------------------------|
@@ -109,6 +117,7 @@ multiple chunks per file.
 You may get disappointing results from Pco if your data in a single chunk
 
 * combines semantically different sequences, or
+* contains too few numbers (see above section),
 * is inherently 2D or higher.
 
 Example: the NYC taxi dataset has `f64` columns for `fare` and
@@ -117,8 +126,8 @@ Suppose we assign these as `fare[0...n]` and `trip_miles[0...n]` respectively, w
 `n=50,000`.
 
 * separate chunk for each column => good compression
-* single chunk `fare[0], ... fare[n-1], trip_miles[0], ... trip_miles[n-1]` => bad compression
-* single chunk `fare[0], trip_miles[0], ... fare[n-1], trip_miles[n-1]` => bad compression
+* single chunk `fare[0], ... fare[n-1], trip_miles[0], ..., trip_miles[n-1]` => bad compression
+* single chunk `fare[0], trip_miles[0], ..., fare[n-1], trip_miles[n-1]` => bad compression
 
 ## Extra
 
@@ -133,6 +142,20 @@ Suppose we assign these as `fare[0...n]` and `trip_miles[0...n]` respectively, w
 [Quantile Compression: Pcodec's predecessor](./quantile-compression/README.md)
 
 [contributing guide](./docs/CONTRIBUTING.md)
+
+[Pcodec: Better Compression for Numerical Sequences](https://arxiv.org/abs/2502.06112) (academic paper)
+* to cite:
+  ```text
+  @misc{pcodec,
+    title={Pcodec: Better Compression for Numerical Sequences}, 
+    author={Martin Loncaric and Niels Jeppesen and Ben Zinberg},
+    year={2025},
+    eprint={2502.06112},
+    archivePrefix={arXiv},
+    primaryClass={cs.IT},
+    url={https://arxiv.org/abs/2502.06112}, 
+  }
+  ```
 
 ### Community
 

@@ -45,7 +45,7 @@ impl CodecInternal for SpdpConfig {
           self.level,
           src_batch_length,
           src_batch.as_mut_ptr(),
-          (&mut dst[pos..]).as_mut_ptr(),
+          dst[pos..].as_mut_ptr(),
         );
         dst[pos - 4..pos].copy_from_slice(&(csize as u32).to_le_bytes());
         dst.set_len(pos + csize);

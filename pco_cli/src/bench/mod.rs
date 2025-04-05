@@ -10,7 +10,7 @@ use std::{any, fs};
 
 use anyhow::{anyhow, Result};
 use arrow::datatypes::{DataType, Schema};
-use clap::{Args, Parser};
+use clap::{Args, Parser, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
 use tabled::settings::object::Columns;
 use tabled::settings::{Alignment, Modify, Style};
@@ -28,6 +28,13 @@ pub mod handler;
 
 const DEFAULT_BINARY_DIR: &str = "data/binary";
 // if this delta order is specified, use a dataset-specific order
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum Units {
+  Linear,
+  Inverse,
+  All,
+}
 
 /// Run benchmarks on datasets originating from another format.
 ///
@@ -80,6 +87,12 @@ pub struct BenchOpt {
   /// input_name, codec, compression_time/s, decompress_time/s, compressed_size/bytes
   #[arg(long)]
   pub results_csv: Option<PathBuf>,
+  /// What units to print the results table in.
+  /// Linear units are (de)compression time and size, whereas inverse units are
+  /// (de)compression speed and ratio.
+  /// Does not affect the results CSV.
+  #[arg(short, long, default_value = "linear")]
+  pub units: Units,
   /// Name of the input data to use in the --results-csv output.
   /// If you're not writing the results to a CSV, ignore this.
   #[arg(long)]
@@ -155,14 +168,15 @@ pub struct BenchStat {
   #[tabled(display_with = "display_duration")]
   pub decompress_dt: Duration,
   pub compressed_size: usize,
+  #[tabled(skip)]
+  pub uncompressed_size: usize,
 }
 
-#[derive(Clone, Tabled)]
-pub struct PrintStat {
-  pub dataset: String,
-  pub codec: String,
-  #[tabled(inline)]
-  pub bench_stat: BenchStat,
+#[derive(Clone, Default, Tabled)]
+pub struct InvStat {
+  pub compress_mb_per_s: f32,
+  pub decompress_mb_per_s: f32,
+  pub compression_ratio: f32,
 }
 
 impl AddAssign for BenchStat {
@@ -170,12 +184,17 @@ impl AddAssign for BenchStat {
     self.compressed_size += rhs.compressed_size;
     self.compress_dt += rhs.compress_dt;
     self.decompress_dt += rhs.decompress_dt;
+    self.uncompressed_size += rhs.uncompressed_size
   }
 }
 
 impl BenchStat {
   fn aggregate_median(benches: &[BenchStat]) -> Self {
-    let compressed_size = benches[0].compressed_size;
+    let BenchStat {
+      compressed_size,
+      uncompressed_size,
+      ..
+    } = benches[0];
     let compress_dts = benches
       .iter()
       .map(|bench| bench.compress_dt)
@@ -186,9 +205,38 @@ impl BenchStat {
       .collect::<Vec<_>>();
 
     BenchStat {
-      compressed_size,
       compress_dt: median_duration(compress_dts),
       decompress_dt: median_duration(decompress_dts),
+      compressed_size,
+      uncompressed_size,
+    }
+  }
+}
+
+#[derive(Clone, Tabled)]
+pub struct PrintStat {
+  pub dataset: String,
+  pub codec: String,
+  #[tabled(inline)]
+  pub bench_stat: BenchStat,
+  #[tabled(inline)]
+  pub inv_stat: InvStat,
+}
+
+impl PrintStat {
+  pub fn new(dataset: String, codec: String, bench_stat: BenchStat) -> Self {
+    let uncompressed_size = bench_stat.uncompressed_size as f32;
+    let inv_stat = InvStat {
+      compress_mb_per_s: uncompressed_size / (1_000_000.0 * bench_stat.compress_dt.as_secs_f32()),
+      decompress_mb_per_s: uncompressed_size
+        / (1_000_000.0 * bench_stat.decompress_dt.as_secs_f32()),
+      compression_ratio: uncompressed_size / bench_stat.compressed_size as f32,
+    };
+    Self {
+      dataset,
+      codec,
+      bench_stat,
+      inv_stat,
     }
   }
 }
@@ -256,6 +304,7 @@ fn update_results_csv(
         compress_dt: Duration::from_secs_f32(compress_dt.parse()?),
         decompress_dt: Duration::from_secs_f32(decompress_dt.parse()?),
         compressed_size: compressed_size.parse()?,
+        uncompressed_size: 0, // we don't know, and it doesn't matter
       };
       lines.insert(
         (dataset.to_string(), codec.to_string()),
@@ -307,10 +356,8 @@ fn print_stats(mut stats: Vec<PrintStat>, opt: &BenchOpt) -> Result<()> {
     ));
   }
 
-  let mut aggregate = BenchStat::default();
   let mut aggregate_by_codec: HashMap<String, BenchStat> = HashMap::new();
   for stat in &stats {
-    aggregate += stat.bench_stat.clone();
     aggregate_by_codec
       .entry(stat.codec.clone())
       .or_default()
@@ -318,18 +365,27 @@ fn print_stats(mut stats: Vec<PrintStat>, opt: &BenchOpt) -> Result<()> {
   }
   stats.extend(opt.codecs.iter().map(|codec| {
     let codec = codec.to_string();
-    PrintStat {
-      bench_stat: aggregate_by_codec.get(&codec).cloned().unwrap(),
-      codec,
-      dataset: "<sum>".to_string(),
-    }
+    let bench_stat = aggregate_by_codec.get(&codec).cloned().unwrap();
+    PrintStat::new("<sum>".to_string(), codec, bench_stat)
   }));
-  stats.push(PrintStat {
-    bench_stat: aggregate,
-    codec: "<sum>".to_string(),
-    dataset: "<sum>".to_string(),
-  });
-  let table = Table::new(stats)
+  let mut table_builder = Table::builder(stats);
+  match opt.units {
+    Units::All => (),
+    Units::Linear => {
+      for _ in 0..3 {
+        // Removing columns takes place immediately, so we remove the 5th one 3
+        // times to delete columns 5, 6, 7.
+        table_builder.remove_column(5);
+      }
+    }
+    Units::Inverse => {
+      for _ in 0..3 {
+        table_builder.remove_column(2);
+      }
+    }
+  }
+  let table = table_builder
+    .build()
     .with(Style::rounded())
     .with(Modify::new(Columns::new(2..)).with(Alignment::right()))
     .to_string();
