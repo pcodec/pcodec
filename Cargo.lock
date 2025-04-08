@@ -2010,8 +2010,6 @@ version = "0.4.2"
 dependencies = [
  "anyhow",
  "arrow",
- "arrow-arith",
- "arrow-array",
  "better_io",
  "blosc2-src",
  "brotli",
