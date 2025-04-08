@@ -163,9 +163,9 @@ fn display_duration(duration: &Duration) -> String {
 
 #[derive(Clone, Default, Tabled)]
 pub struct BenchStat {
-  #[tabled(display_with = "display_duration")]
+  #[tabled(display = "display_duration")]
   pub compress_dt: Duration,
-  #[tabled(display_with = "display_duration")]
+  #[tabled(display = "display_duration")]
   pub decompress_dt: Duration,
   pub compressed_size: usize,
   #[tabled(skip)]

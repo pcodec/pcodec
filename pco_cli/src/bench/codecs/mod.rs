@@ -6,18 +6,8 @@ use std::ops::Deref;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "full_bench")]
-use crate::bench::codecs::blosc::BloscConfig;
-#[cfg(feature = "full_bench")]
-use crate::bench::codecs::brotli::BrotliConfig;
 use crate::bench::codecs::parquet::ParquetConfig;
-#[cfg(feature = "full_bench")]
-use crate::bench::codecs::qco::QcoConfig;
 use crate::bench::codecs::snappy::SnappyConfig;
-#[cfg(feature = "full_bench")]
-use crate::bench::codecs::spdp::SpdpConfig;
-#[cfg(feature = "full_bench")]
-use crate::bench::codecs::turbo_pfor::TurboPforConfig;
 use crate::bench::codecs::zstd::ZstdConfig;
 use crate::bench::IterOpt;
 use crate::bench::{BenchStat, Precomputed};
@@ -43,6 +33,8 @@ mod spdp;
 #[cfg(feature = "full_bench")]
 mod turbo_pfor;
 pub mod utils;
+#[cfg(feature = "full_bench")]
+mod vortex;
 mod zstd;
 
 // Unfortunately we can't make a Box<dyn this> because it has generic
@@ -255,18 +247,20 @@ impl FromStr for CodecConfig {
 
     let codec: Result<Box<dyn CodecSurface>> = match name {
       #[cfg(feature = "full_bench")]
-      "blosc" | "blosc2" => BloscConfig::from_kv_args(&clap_kv_args),
+      "blosc" | "blosc2" => blosc::BloscConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
-      "brotli" => BrotliConfig::from_kv_args(&clap_kv_args),
+      "brotli" => brotli::BrotliConfig::from_kv_args(&clap_kv_args),
       "parquet" => ParquetConfig::from_kv_args(&clap_kv_args),
       "pco" | "pcodec" => ChunkConfigOpt::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
-      "qco" | "q_compress" => QcoConfig::from_kv_args(&clap_kv_args),
+      "qco" | "q_compress" => qco::QcoConfig::from_kv_args(&clap_kv_args),
       "snap" | "snappy" => SnappyConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
-      "spdp" => SpdpConfig::from_kv_args(&clap_kv_args),
+      "spdp" => spdp::SpdpConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
-      "tpfor" | "turbopfor" => TurboPforConfig::from_kv_args(&clap_kv_args),
+      "tpfor" | "turbopfor" => turbo_pfor::TurboPforConfig::from_kv_args(&clap_kv_args),
+      #[cfg(feature = "full_bench")]
+      "vortex" => vortex::VortexConfig::from_kv_args(&clap_kv_args),
       "zstd" | "zstandard" => ZstdConfig::from_kv_args(&clap_kv_args),
       _ => {
         return Err(anyhow!(
