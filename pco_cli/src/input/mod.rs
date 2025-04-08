@@ -17,7 +17,7 @@ use arrow::record_batch::RecordBatchReader;
 use clap::Parser;
 use half::f16;
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
-use parquet::arrow::ProjectionMask;
+use parquet::arrow::{ArrowSchemaConverter, ProjectionMask};
 
 use pco::data_types::NumberType;
 use pco::standalone::simple_decompress;
@@ -343,7 +343,7 @@ impl ParquetColumnReader {
   fn new(schema: &Schema, path: &Path, col_idx: usize) -> Result<Self> {
     let file = File::open(path)?;
     let batch_reader_builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let parquet_schema = parquet::arrow::arrow_to_parquet_schema(schema)?;
+    let parquet_schema = ArrowSchemaConverter::default().convert(schema)?;
     let batch_reader = batch_reader_builder
       .with_projection(ProjectionMask::leaves(
         &parquet_schema,
