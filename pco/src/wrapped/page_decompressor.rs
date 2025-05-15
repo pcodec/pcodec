@@ -57,6 +57,68 @@ fn convert_from_latents_to_numbers<T: Number>(dst: &mut [T]) {
   }
 }
 
+fn make_latent_scratch(lpd: Option<&DynLatentPageDecompressor>) -> Option<LatentScratch> {
+  let lpd = lpd?;
+
+  match_latent_enum!(
+    lpd,
+    DynLatentPageDecompressor<L>(inner) => {
+      let maybe_constant_value = inner.maybe_constant_value;
+      Some(LatentScratch {
+        is_constant: maybe_constant_value.is_some(),
+        dst: DynLatents::new(vec![maybe_constant_value.unwrap_or_default(); FULL_BATCH_N]).unwrap(),
+      })
+    }
+  )
+}
+
+fn make_latent_decompressors(
+  chunk_meta: &ChunkMeta,
+  page_meta: &PageMeta,
+  n: usize,
+) -> PcoResult<PerLatentVar<DynLatentPageDecompressor>> {
+  let mut states = PerLatentVarBuilder::default();
+  for (key, (chunk_latent_var_meta, page_latent_var_meta)) in chunk_meta
+    .per_latent_var
+    .as_ref()
+    .zip_exact(page_meta.per_latent_var.as_ref())
+    .enumerated()
+  {
+    let var_delta_encoding = chunk_meta.delta_encoding.for_latent_var(key);
+    let n_in_body = n.saturating_sub(var_delta_encoding.n_latents_per_state());
+    let state = match_latent_enum!(
+      &chunk_latent_var_meta.bins,
+      DynBins<L>(bins) => {
+        let delta_state = page_latent_var_meta
+          .delta_state
+          .downcast_ref::<L>()
+          .unwrap()
+          .clone();
+
+        if bins.is_empty() && n_in_body > 0 {
+          return Err(PcoError::corruption(format!(
+            "unable to decompress chunk with no bins and {} latents",
+            n_in_body
+          )));
+        }
+
+        let lpd = LatentPageDecompressor::new(
+          chunk_latent_var_meta.ans_size_log,
+          bins,
+          var_delta_encoding,
+          page_latent_var_meta.ans_final_state_idxs,
+          delta_state,
+        )?;
+
+        DynLatentPageDecompressor::new(lpd).unwrap()
+      }
+    );
+
+    states.set(key, state);
+  }
+  Ok(states.into())
+}
+
 impl<R: BetterBufRead> PageDecompressorInner<R> {
   pub(crate) fn new(mut src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
     bit_reader::ensure_buf_read_capacity(&mut src, PERFORMANT_BUF_READ_CAPACITY);
@@ -66,62 +128,8 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
     let mode = chunk_meta.mode;
+    let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
 
-    let mut states = PerLatentVarBuilder::default();
-    for (key, (chunk_latent_var_meta, page_latent_var_meta)) in chunk_meta
-      .per_latent_var
-      .as_ref()
-      .zip_exact(page_meta.per_latent_var.as_ref())
-      .enumerated()
-    {
-      let var_delta_encoding = chunk_meta.delta_encoding.for_latent_var(key);
-      let n_in_body = n.saturating_sub(var_delta_encoding.n_latents_per_state());
-      let state = match_latent_enum!(
-        &chunk_latent_var_meta.bins,
-        DynBins<L>(bins) => {
-          let delta_state = page_latent_var_meta
-            .delta_state
-            .downcast_ref::<L>()
-            .unwrap()
-            .clone();
-
-          if bins.is_empty() && n_in_body > 0 {
-            return Err(PcoError::corruption(format!(
-              "unable to decompress chunk with no bins and {} latents",
-              n_in_body
-            )));
-          }
-
-          let lpd = LatentPageDecompressor::new(
-            chunk_latent_var_meta.ans_size_log,
-            bins,
-            var_delta_encoding,
-            page_latent_var_meta.ans_final_state_idxs,
-            delta_state,
-          )?;
-
-          DynLatentPageDecompressor::new(lpd).unwrap()
-        }
-      );
-
-      states.set(key, state);
-    }
-    let latent_decompressors: PerLatentVar<DynLatentPageDecompressor> = states.into();
-
-    fn make_latent_scratch(lpd: Option<&DynLatentPageDecompressor>) -> Option<LatentScratch> {
-      let lpd = lpd?;
-
-      match_latent_enum!(
-        lpd,
-        DynLatentPageDecompressor<L>(inner) => {
-          let maybe_constant_value = inner.maybe_constant_value;
-          Some(LatentScratch {
-            is_constant: maybe_constant_value.is_some(),
-            dst: DynLatents::new(vec![maybe_constant_value.unwrap_or_default(); FULL_BATCH_N]).unwrap(),
-          })
-        }
-      )
-    }
     let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
     let secondary_scratch = make_latent_scratch(latent_decompressors.secondary.as_ref());
 

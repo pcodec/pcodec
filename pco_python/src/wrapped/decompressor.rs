@@ -11,6 +11,8 @@ use pco::wrapped::{ChunkDecompressor, FileDecompressor};
 use crate::utils::{core_dtype_from_str, pco_err_to_py};
 use crate::PyProgress;
 
+/// The top-level object for decompressing wrapped pcodec files.
+/// Has a default constructor.
 #[pyclass(name = "FileDecompressor")]
 struct PyFd(FileDecompressor);
 
@@ -19,10 +21,11 @@ pco::define_number_enum!(
   DynCd(ChunkDecompressor)
 );
 
+/// Holds metadata about a chunk and supports decompressing one batch at a
+/// time.
 #[pyclass(name = "ChunkDecompressor")]
 struct PyCd(DynCd);
 
-/// The top-level object for decompressing wrapped pcodec files.
 #[pymethods]
 impl PyFd {
   /// Creates a FileDecompressor.
@@ -30,7 +33,7 @@ impl PyFd {
   /// :param src: a bytes object containing the encoded header
   ///
   /// :returns: a tuple containing a FileDecompressor and the number of bytes
-  /// read
+  ///   read
   ///
   /// :raises: TypeError, RuntimeError
   #[staticmethod]
@@ -49,7 +52,7 @@ impl PyFd {
   /// :param dtype: a data type supported by pcodec; e.g. 'f32' or 'i64'
   ///
   /// :returns: a tuple containing a ChunkDecompressor and the number of bytes
-  /// read
+  ///   read
   ///
   /// :raises: TypeError, RuntimeError
   fn read_chunk_meta(&self, src: &Bound<PyBytes>, dtype: &str) -> PyResult<(PyCd, usize)> {
@@ -83,15 +86,15 @@ impl PyCd {
   ///
   /// :param page: the encoded page
   /// :param page_n: the total count of numbers in the encoded page. It is
-  /// expected that the wrapping format provides this information.
+  ///   expected that the wrapping format provides this information.
   /// :param dst: a numpy array to fill with the decompressed values. Must be
-  /// contiguous, and its length must either be
-  /// * >= page_n, or
-  /// * a multiple of 256.
+  ///   contiguous, and its length must either be
+  ///   * >= page_n, or
+  ///   * a multiple of 256.
   ///
   /// :returns: a tuple containing progress and the number of bytes read.
-  /// Progress is an object with a count of elements written and
-  /// whether the compressed data was finished.
+  ///   Progress is an object with a count of elements written and
+  ///   whether the compressed data was finished.
   ///
   /// :raises: TypeError, RuntimeError
   fn read_page_into(

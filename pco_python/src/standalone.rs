@@ -76,10 +76,10 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   /// Compresses an array into a standalone format.
   ///
   /// :param nums: numpy array to compress. This may have any shape.
-  /// However, it must be contiguous, and only the following data types are
-  /// supported: float16, float32, float64, int16, int32, int64, uint16, uint32, uint64.
+  ///   However, it must be contiguous, and only the following data types are
+  ///   supported: float16, float32, float64, int16, int32, int64, uint16, uint32, uint64.
   /// :param config: a ChunkConfig object containing compression level and
-  /// other settings.
+  ///   other settings.
   ///
   /// :returns: compressed bytes for an entire standalone file
   ///
@@ -105,13 +105,13 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   ///
   /// :param compressed: a bytes object a full standalone file of compressed data.
   /// :param dst: a numpy array to fill with the decompressed values. May have
-  /// any shape, but must be contiguous.
+  ///   any shape, but must be contiguous.
   ///
   /// :returns: progress, an object with a count of elements written and
-  /// whether the compressed data was finished. If dst is shorter than the
-  /// numbers in compressed, writes as much as possible and leaves the rest
-  /// untouched. If dst is longer, fills dst and does nothing with the
-  /// remaining data.
+  ///   whether the compressed data was finished. If dst is shorter than the
+  ///   numbers in compressed, writes as much as possible and leaves the rest
+  ///   untouched. If dst is longer, fills dst and does nothing with the
+  ///   remaining data.
   ///
   /// :raises: TypeError, RuntimeError
   #[pyfunction]
@@ -135,9 +135,9 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   /// :param compressed: a bytes object a full standalone file of compressed data.
   ///
   /// :returns: data, either a 1D numpy array of the decompressed values or, in
-  /// the event that there are no values, a None.
-  /// The array's data type will be set appropriately based on the contents of
-  /// the file header.
+  ///   the event that there are no values, a None.
+  ///   The array's data type will be set appropriately based on the contents of
+  ///   the file header.
   ///
   /// :raises: TypeError, RuntimeError
   #[pyfunction]

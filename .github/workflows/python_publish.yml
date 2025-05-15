@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # enable LTO to reduce binary size (empirically by ~20%)
+  RUSTFLAGS: "-C lto=true -C embed-bitcode=true -Zdylib-lto"
+
 jobs:
   linux:
     runs-on: ubuntu-latest

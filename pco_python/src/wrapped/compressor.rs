@@ -13,6 +13,7 @@ use crate::utils::pco_err_to_py;
 use crate::{utils, PyChunkConfig};
 
 /// The top-level object for creating wrapped pcodec files.
+/// Has a default constructor.
 #[pyclass(name = "FileCompressor")]
 struct PyFc {
   inner: FileCompressor,
@@ -62,10 +63,10 @@ impl PyFc {
   /// This does the bulk of the work of compression.
   ///
   /// :param nums: numpy array to compress. This may have any shape.
-  /// However, it must be contiguous, and only the following data types are
-  /// supported: float16, float32, float64, int16, int32, int64, uint16, uint32, uint64.
+  ///   However, it must be contiguous, and only the following data types are
+  ///   supported: float16, float32, float64, int16, int32, int64, uint16, uint32, uint64.
   /// :param config: a ChunkConfig object containing compression level and
-  /// other settings.
+  ///   other settings.
   ///
   /// :returns: a ChunkCompressor
   ///
