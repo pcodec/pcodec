@@ -28,6 +28,7 @@ impl<L: Latent> BinDecompressionInfo<L> {
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
   // scratch needs no backup
+  // TODO: use an arena and heap-allocate these?
   offset_bits_csum_scratch: [Bitlen; FULL_BATCH_N],
   offset_bits_scratch: [Bitlen; FULL_BATCH_N],
   lowers_scratch: [L; FULL_BATCH_N],
