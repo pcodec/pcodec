@@ -51,9 +51,9 @@ pub struct BenchOpt {
   /// colon-separated configurations.
   ///
   /// For example, setting this to
-  /// `zstd,zstd:level=10,pco:level=9:delta=Consecutive@0`
+  /// `zstd,zstd:level=10,pco:level=9:delta=Consecutive@1`
   /// will compare 3 codecs: zstd at default compression level (3), zstd at
-  /// level 10, and pco at level 9 with 0th order delta encoding.
+  /// level 10, and pco at level 9 with 1st order delta encoding.
   ///
   /// To see what valid configurations look like, try entering an invalid one.
   #[arg(long, short, default_value = "pco", value_parser = CodecConfig::from_str, value_delimiter = ',')]
