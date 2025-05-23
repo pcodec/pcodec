@@ -51,7 +51,7 @@ pub struct BenchOpt {
   /// colon-separated configurations.
   ///
   /// For example, setting this to
-  /// `zstd,zstd:level=10,pco:level=9:delta_order=0`
+  /// `zstd,zstd:level=10,pco:level=9:delta=Consecutive@0`
   /// will compare 3 codecs: zstd at default compression level (3), zstd at
   /// level 10, and pco at level 9 with 0th order delta encoding.
   ///
