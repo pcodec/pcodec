@@ -2,6 +2,7 @@
 name = "pco"
 version = "0.4.2"
 edition = "2021"
+build = "build.rs"
 
 authors = ["mwlon <m.w.loncaric@gmail.com>"]
 categories = ["compression", "encoding"]
