@@ -23,7 +23,8 @@ fn main() {
         "cargo:warning=[pco] Building on x64 in release mode without the \
         following instruction sets: {}. \
         This can substantially hinder performance. \
-        Follow the instructions at https://github.com/pcodec/pcodec/tree/pco. \
+        To fix: follow the instructions at \
+        https://github.com/pcodec/pcodec/tree/main/pco. \
         To ignore: set {}=1",
         missing_instructions.join(", "),
         DISMISS_WARNINGS_VAR,
