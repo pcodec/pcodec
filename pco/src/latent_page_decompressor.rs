@@ -5,6 +5,7 @@ use crate::bit_reader::BitReader;
 use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
+use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
@@ -64,6 +65,16 @@ pub struct LatentPageDecompressor<L: Latent> {
   state: State<L>,
 }
 
+// Because the size of LatentPageDecompressor is enormous (largely due to
+// scratch buffers), it makes more sense to allocate them on the heap. We only
+// need to derefernce them once per batch, which is plenty infrequent.
+pub type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
+
+define_latent_enum!(
+  #[derive()]
+  pub DynLatentPageDecompressor(BoxedLatentPageDecompressor)
+);
+
 impl<L: Latent> LatentPageDecompressor<L> {
   pub fn new(
     ans_size_log: Bitlen,
@@ -71,7 +82,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     delta_encoding: DeltaEncoding,
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
-  ) -> PcoResult<Self> {
+  ) -> PcoResult<BoxedLatentPageDecompressor<L>> {
     let u64s_per_offset = read_write_uint::calc_max_u64s(bins::max_offset_bits(bins));
     let infos = bins
       .iter()
@@ -117,7 +128,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
         None
       };
 
-    Ok(Self {
+    Ok(Box::new(Self {
       u64s_per_offset,
       infos,
       needs_ans,
@@ -125,7 +136,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
       delta_encoding,
       maybe_constant_value,
       state,
-    })
+    }))
   }
 
   // This implementation handles only a full batch, but is faster.

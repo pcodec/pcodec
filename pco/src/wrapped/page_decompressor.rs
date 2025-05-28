@@ -7,10 +7,10 @@ use better_io::BetterBufRead;
 use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
 use crate::constants::{FULL_BATCH_N, PAGE_PADDING};
-use crate::data_types::{Latent, Number};
+use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
-use crate::latent_page_decompressor::LatentPageDecompressor;
-use crate::macros::{define_latent_enum, match_latent_enum};
+use crate::latent_page_decompressor::{DynLatentPageDecompressor, LatentPageDecompressor};
+use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
@@ -23,11 +23,6 @@ struct LatentScratch {
   is_constant: bool,
   dst: DynLatents,
 }
-
-define_latent_enum!(
-  #[derive()]
-  DynLatentPageDecompressor(LatentPageDecompressor)
-);
 
 struct PageDecompressorInner<R: BetterBufRead> {
   // immutable
