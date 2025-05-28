@@ -9,7 +9,7 @@ use crate::bit_reader::BitReaderBuilder;
 use crate::constants::{FULL_BATCH_N, PAGE_PADDING};
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
-use crate::latent_page_decompressor::{DynLatentPageDecompressor, LatentPageDecompressor};
+use crate::latent_page_decompressor::DynLatentPageDecompressor;
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
@@ -97,15 +97,13 @@ fn make_latent_decompressors(
           )));
         }
 
-        let lpd = LatentPageDecompressor::new(
+        DynLatentPageDecompressor::create(
           chunk_latent_var_meta.ans_size_log,
           bins,
           var_delta_encoding,
           page_latent_var_meta.ans_final_state_idxs,
           delta_state,
-        )?;
-
-        DynLatentPageDecompressor::new(lpd).unwrap()
+        )?
       }
     );
 
