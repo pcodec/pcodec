@@ -1,8 +1,6 @@
 use crate::latent_batch_dissector::LatentBatchDissector;
 use crate::latent_chunk_compressor::LatentChunkCompressor;
-use crate::latent_page_decompressor::{
-  BoxedLatentPageDecompressor, DynLatentPageDecompressor, LatentPageDecompressor,
-};
+use crate::latent_page_decompressor::{DynLatentPageDecompressor, LatentPageDecompressor};
 use crate::metadata::PerLatentVar;
 use crate::wrapped::{ChunkCompressor, ChunkDecompressor, PageDecompressor};
 use std::mem;

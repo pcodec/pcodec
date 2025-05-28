@@ -267,7 +267,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
 // Because the size of LatentPageDecompressor is enormous (largely due to
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
-pub type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
+type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
 
 define_latent_enum!(
   #[derive()]
