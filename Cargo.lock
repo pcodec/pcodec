@@ -1996,7 +1996,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pco"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "better_io",
  "dtype_dispatch",
@@ -2007,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "pco_cli"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "arrow",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "pco_python"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "half",
  "numpy",

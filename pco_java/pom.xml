@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.pcodec</groupId>
   <artifactId>pco-jni</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 
   <packaging>jar</packaging>
   <description>Good compression for numerical sequences</description>

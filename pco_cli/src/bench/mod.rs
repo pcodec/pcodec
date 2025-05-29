@@ -289,6 +289,10 @@ fn update_results_csv(
       }
 
       let fields: Vec<&str> = line.split(',').take(5).collect::<Vec<&str>>();
+      if fields.len() == 1 && fields[0] == "" {
+          // skip empty lines
+          continue;
+      }
       let fields: [&str; 5] = fields.clone().try_into().map_err(|_| {
         anyhow!(
           "existing results CSV row contained fewer than 5 fields: {:?}",
