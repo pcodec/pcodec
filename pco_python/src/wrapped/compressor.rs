@@ -54,7 +54,7 @@ impl PyFc {
   fn write_header<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
     let mut res = Vec::new();
     self.inner.write_header(&mut res).map_err(pco_err_to_py)?;
-    Ok(PyBytes::new_bound(py, &res))
+    Ok(PyBytes::new(py, &res))
   }
 
   /// Create a chunk compressor, computing the chunk metadata necessary to
@@ -97,7 +97,7 @@ impl PyCc {
   fn write_chunk_meta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
     let mut res = Vec::new();
     self.0.write_chunk_meta(&mut res).map_err(pco_err_to_py)?;
-    Ok(PyBytes::new_bound(py, &res))
+    Ok(PyBytes::new(py, &res))
   }
 
   /// :returns: a list containing the count of numbers in each page.
@@ -114,7 +114,7 @@ impl PyCc {
     let mut res = Vec::new();
     py.allow_threads(|| self.0.write_page(page_idx, &mut res))
       .map_err(pco_err_to_py)?;
-    Ok(PyBytes::new_bound(py, &res))
+    Ok(PyBytes::new(py, &res))
   }
 }
 

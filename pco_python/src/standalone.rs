@@ -39,7 +39,7 @@ fn decompress_chunks<'py, T: Number + Element>(
       Ok(res)
     })
     .map_err(pco_err_to_py)?;
-  let py_array = res.into_pyarray_bound(py);
+  let py_array = res.into_pyarray(py);
   Ok(py_array)
 }
 
@@ -55,7 +55,7 @@ fn simple_compress_generic<'py, T: Number + Element>(
     .map_err(pco_err_to_py)?;
   // TODO apparently all the places we use PyBytes::new() copy the data.
   // Maybe there's a zero-copy way to do this.
-  Ok(PyBytes::new_bound(py, &compressed))
+  Ok(PyBytes::new(py, &compressed))
 }
 
 fn simple_decompress_into_generic<T: Number + Element>(
@@ -158,7 +158,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
           }
         )
       }
-      Termination => Ok(PyNone::get_bound(py).to_object(py)),
+      Termination => Ok(PyNone::get(py).to_object(py)),
       Unknown(other) => Err(PyRuntimeError::new_err(format!(
         "unrecognized dtype byte {:?}",
         other,

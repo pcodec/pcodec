@@ -23,23 +23,23 @@ pub fn core_dtype_from_str(s: &str) -> PyResult<NumberType> {
 }
 
 pub fn number_type_from_numpy(py: Python, dtype: &Bound<PyArrayDescr>) -> PyResult<NumberType> {
-  let res = if dtype.is_equiv_to(&numpy::dtype_bound::<u16>(py)) {
+  let res = if dtype.is_equiv_to(&numpy::dtype::<u16>(py)) {
     NumberType::U16
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<u32>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<u32>(py)) {
     NumberType::U32
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<u64>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<u64>(py)) {
     NumberType::U64
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<i16>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<i16>(py)) {
     NumberType::I16
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<i32>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<i32>(py)) {
     NumberType::I32
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<i64>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<i64>(py)) {
     NumberType::I64
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<half::f16>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<half::f16>(py)) {
     NumberType::F16
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<f32>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<f32>(py)) {
     NumberType::F32
-  } else if dtype.is_equiv_to(&numpy::dtype_bound::<f64>(py)) {
+  } else if dtype.is_equiv_to(&numpy::dtype::<f64>(py)) {
     NumberType::F64
   } else {
     return Err(PyTypeError::new_err(format!(
