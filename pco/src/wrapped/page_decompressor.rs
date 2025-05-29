@@ -33,7 +33,6 @@ struct PageDecompressorInner<R: BetterBufRead> {
   // mutable
   reader_builder: BitReaderBuilder<R>,
   n_processed: usize,
-  // TODO make these heap allocated
   latent_decompressors: PerLatentVar<DynLatentPageDecompressor>,
   delta_scratch: Option<LatentScratch>,
   secondary_scratch: Option<LatentScratch>,

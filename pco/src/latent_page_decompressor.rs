@@ -29,7 +29,6 @@ impl<L: Latent> BinDecompressionInfo<L> {
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
   // scratch needs no backup
-  // TODO: use an arena and heap-allocate these?
   offset_bits_csum_scratch: [Bitlen; FULL_BATCH_N],
   offset_bits_scratch: [Bitlen; FULL_BATCH_N],
   lowers_scratch: [L; FULL_BATCH_N],
@@ -267,6 +266,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
 // Because the size of LatentPageDecompressor is enormous (largely due to
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
+// TODO: consider an arena for these?
 type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
 
 define_latent_enum!(
