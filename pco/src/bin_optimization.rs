@@ -5,6 +5,7 @@ use crate::constants::{Bitlen, Weight};
 use crate::data_types::Latent;
 use crate::histograms::HistogramBin;
 use crate::metadata::Bin;
+use fast_math::log2_raw;
 
 // vec of [start_bin_idx, end_bin_idx], inclusive
 type Partitioning = Vec<(usize, usize)>;
@@ -26,7 +27,8 @@ fn bin_cost<L: Latent>(
   #[cfg(target_os = "windows")]
   let ans_cost = total_count_log2 - count.log(2.0);
   #[cfg(not(target_os = "windows"))]
-  let ans_cost = total_count_log2 - count.log2();
+  let ans_cost = total_count_log2 - log2_raw(count);
+  // let ans_cost = total_count_log2 - count.log2();
   let offset_cost = bits::bits_to_encode_offset(upper - lower) as f32;
   bin_meta_cost + (ans_cost + offset_cost) * count
 }
