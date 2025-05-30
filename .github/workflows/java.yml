@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set Rust version
+        run: rustup override set nightly
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -21,5 +23,5 @@ jobs:
           cache: maven
       - name: Test
         # batch mode for non-interactive,
-        run: cd pco_java && mvn --batch-mode test
+        run: cd pco_java && mvn --batch-mode test -P rust
 

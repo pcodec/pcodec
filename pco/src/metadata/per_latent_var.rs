@@ -65,7 +65,7 @@ impl<T> From<PerLatentVarBuilder<T>> for PerLatentVar<T> {
 }
 
 impl<T> PerLatentVar<T> {
-  pub(crate) fn map<S, F: Fn(LatentVarKey, T) -> S>(self, f: F) -> PerLatentVar<S> {
+  pub(crate) fn map<S, F: FnMut(LatentVarKey, T) -> S>(self, mut f: F) -> PerLatentVar<S> {
     PerLatentVar {
       delta: self.delta.map(|delta| f(LatentVarKey::Delta, delta)),
       primary: f(LatentVarKey::Primary, self.primary),

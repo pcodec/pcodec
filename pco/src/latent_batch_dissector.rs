@@ -13,6 +13,7 @@ pub struct LatentBatchDissector<'a, L: Latent> {
   encoder: &'a ans::Encoder,
 
   // mutable
+  // TODO: use an arena and heap-allocate these?
   lower_scratch: [L; FULL_BATCH_N],
   symbol_scratch: [Symbol; FULL_BATCH_N],
 }

@@ -5,6 +5,7 @@ use crate::bit_reader::BitReader;
 use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
+use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
@@ -64,69 +65,6 @@ pub struct LatentPageDecompressor<L: Latent> {
 }
 
 impl<L: Latent> LatentPageDecompressor<L> {
-  pub fn new(
-    ans_size_log: Bitlen,
-    bins: &[Bin<L>],
-    delta_encoding: DeltaEncoding,
-    ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
-    stored_delta_state: Vec<L>,
-  ) -> PcoResult<Self> {
-    let u64s_per_offset = read_write_uint::calc_max_u64s(bins::max_offset_bits(bins));
-    let infos = bins
-      .iter()
-      .map(BinDecompressionInfo::new)
-      .collect::<Vec<_>>();
-    let weights = bins::weights(bins);
-    let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let decoder = ans::Decoder::new(&ans_spec);
-
-    let (working_delta_state, delta_state_pos) = match delta_encoding {
-      DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
-      DeltaEncoding::Lookback(config) => {
-        delta::new_lookback_window_buffer_and_pos(config, &stored_delta_state)
-      }
-    };
-
-    let mut state = State {
-      offset_bits_csum_scratch: [0; FULL_BATCH_N],
-      offset_bits_scratch: [0; FULL_BATCH_N],
-      lowers_scratch: [L::ZERO; FULL_BATCH_N],
-      ans_state_idxs: ans_final_state_idxs,
-      delta_state: working_delta_state,
-      delta_state_pos,
-    };
-
-    let needs_ans = bins.len() != 1;
-    if !needs_ans {
-      // we optimize performance by setting state once and never again
-      let bin = &bins[0];
-      let mut csum = 0;
-      for i in 0..FULL_BATCH_N {
-        state.offset_bits_scratch[i] = bin.offset_bits;
-        state.offset_bits_csum_scratch[i] = csum;
-        state.lowers_scratch[i] = bin.lower;
-        csum += bin.offset_bits;
-      }
-    }
-
-    let maybe_constant_value =
-      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
-        bins.first().map(|bin| bin.lower)
-      } else {
-        None
-      };
-
-    Ok(Self {
-      u64s_per_offset,
-      infos,
-      needs_ans,
-      decoder,
-      delta_encoding,
-      maybe_constant_value,
-      state,
-    })
-  }
-
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
   unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader) {
@@ -322,5 +260,82 @@ impl<L: Latent> LatentPageDecompressor<L> {
         }
       }
     }
+  }
+}
+
+// Because the size of LatentPageDecompressor is enormous (largely due to
+// scratch buffers), it makes more sense to allocate them on the heap. We only
+// need to derefernce them once per batch, which is plenty infrequent.
+// TODO: consider an arena for these?
+type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
+
+define_latent_enum!(
+  #[derive()]
+  pub DynLatentPageDecompressor(BoxedLatentPageDecompressor)
+);
+
+impl DynLatentPageDecompressor {
+  pub fn create<L: Latent>(
+    ans_size_log: Bitlen,
+    bins: &[Bin<L>],
+    delta_encoding: DeltaEncoding,
+    ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
+    stored_delta_state: Vec<L>,
+  ) -> PcoResult<Self> {
+    let u64s_per_offset = read_write_uint::calc_max_u64s(bins::max_offset_bits(bins));
+    let infos = bins
+      .iter()
+      .map(BinDecompressionInfo::new)
+      .collect::<Vec<_>>();
+    let weights = bins::weights(bins);
+    let ans_spec = Spec::from_weights(ans_size_log, weights)?;
+    let decoder = ans::Decoder::new(&ans_spec);
+
+    let (working_delta_state, delta_state_pos) = match delta_encoding {
+      DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
+      DeltaEncoding::Lookback(config) => {
+        delta::new_lookback_window_buffer_and_pos(config, &stored_delta_state)
+      }
+    };
+
+    let mut state = State {
+      offset_bits_csum_scratch: [0; FULL_BATCH_N],
+      offset_bits_scratch: [0; FULL_BATCH_N],
+      lowers_scratch: [L::ZERO; FULL_BATCH_N],
+      ans_state_idxs: ans_final_state_idxs,
+      delta_state: working_delta_state,
+      delta_state_pos,
+    };
+
+    let needs_ans = bins.len() != 1;
+    if !needs_ans {
+      // we optimize performance by setting state once and never again
+      let bin = &bins[0];
+      let mut csum = 0;
+      for i in 0..FULL_BATCH_N {
+        state.offset_bits_scratch[i] = bin.offset_bits;
+        state.offset_bits_csum_scratch[i] = csum;
+        state.lowers_scratch[i] = bin.lower;
+        csum += bin.offset_bits;
+      }
+    }
+
+    let maybe_constant_value =
+      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
+        bins.first().map(|bin| bin.lower)
+      } else {
+        None
+      };
+
+    let lpd = LatentPageDecompressor {
+      u64s_per_offset,
+      infos,
+      needs_ans,
+      decoder,
+      delta_encoding,
+      maybe_constant_value,
+      state,
+    };
+    Ok(Self::new(Box::new(lpd)).unwrap())
   }
 }

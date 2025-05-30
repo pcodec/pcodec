@@ -52,7 +52,11 @@ pub fn find_col_idx(
 }
 
 pub fn dtype_name<T: Number>() -> String {
-  any::type_name::<T>().split(':').last().unwrap().to_string()
+  any::type_name::<T>()
+    .split(':')
+    .next_back()
+    .unwrap()
+    .to_string()
 }
 
 pub fn arrow_to_nums<P: ArrowNumber>(arrow_array: ArrayRef) -> Vec<P::Pco> {

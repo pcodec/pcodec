@@ -8,3 +8,5 @@ temp
 *.swp
 **/__pycache__/**
 .vscode/*
+pco_java/src/main/resources
+**/_build

@@ -12,8 +12,7 @@ pub struct ChunkConfigOpt {
   // We fully quality `Option` to use a value parser that returns Option<usize>
   // instead of just usize. See
   // https://github.com/clap-rs/clap/issues/5536#issuecomment-2179646989
-  /// Can be an integer for how many times to apply delta encoding, or "Auto",
-  /// which tries to automatically detect the best delta encoding order.
+  /// Can be "Auto", "None", "Consecutive@<order>", or "Lookback".
   #[arg(long, default_value = "Auto", value_parser = parse::delta_spec)]
   pub delta: DeltaSpec,
   /// Can be "Auto", "Classic", "FloatMult@<base>", "FloatQuant@<k>", or

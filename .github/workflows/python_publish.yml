@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # enable LTO to reduce binary size (empirically by ~20%)
+  RUSTFLAGS: "-C lto=true -C embed-bitcode=true -Zdylib-lto"
+
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -20,6 +24,8 @@ jobs:
         target: [ x86_64, x86, aarch64, armv7 ]
     steps:
       - uses: actions/checkout@v4
+      - name: Set Rust version
+        run: rustup override set nightly
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -44,6 +50,8 @@ jobs:
         target: [ x64 ]
     steps:
       - uses: actions/checkout@v4
+      - name: Set Rust version
+        run: rustup override set nightly
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -68,6 +76,8 @@ jobs:
         target: [ x86_64, aarch64 ]
     steps:
       - uses: actions/checkout@v4
+      - name: Set Rust version
+        run: rustup override set nightly
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
@@ -88,6 +98,8 @@ jobs:
     if: contains(github.event.release.name, 'Python')
     steps:
       - uses: actions/checkout@v4
+      - name: Set Rust version
+        run: rustup override set nightly
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:

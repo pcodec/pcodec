@@ -6,7 +6,6 @@ use arrow::datatypes as arrow_dtypes;
 use arrow::datatypes::DataType as ArrowDataType;
 use arrow::datatypes::{ArrowPrimitiveType, DataType};
 use half::f16;
-
 use pco::data_types::{Number, NumberType};
 
 use crate::num_vec::NumVec;
@@ -51,7 +50,9 @@ pub trait TurboPforable: Sized {
 }
 
 #[cfg(feature = "full_bench")]
-pub trait PcoNumber: Number + Parquetable + QCompressable + TurboPforable {
+pub trait PcoNumber:
+  Number + Parquetable + QCompressable + TurboPforable + vortex::dtype::NativePType
+{
   const ARROW_DTYPE: DataType;
 
   type Arrow: ArrowPrimitiveType;

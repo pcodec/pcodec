@@ -1,12 +1,13 @@
 [package]
 name = "pco"
-version = "0.4.2"
+version = "0.4.4"
 edition = "2021"
+build = "build.rs"
 
 authors = ["mwlon <m.w.loncaric@gmail.com>"]
 categories = ["compression", "encoding"]
 description = "Good compression for numerical sequences"
-include = ["src/**/*.rs", "Cargo.toml", "README.md"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "build.rs"]
 keywords = ["compression", "numerical", "delta"]
 license = "Apache-2.0"
 repository = "https://github.com/pcodec/pcodec"

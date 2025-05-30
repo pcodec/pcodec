@@ -283,7 +283,7 @@ fn new_candidate_w_split_and_delta_encoding(
       ),
     };
 
-    match_latent_enum!(
+    let (var_meta, lcc, bin_counts) = match_latent_enum!(
       latents,
       DynLatents<L>(latents) => {
         let contiguous_deltas = collect_contiguous_latents(&latents, &page_infos, key);
@@ -300,11 +300,12 @@ fn new_candidate_w_split_and_delta_encoding(
           bins: DynBins::new(bins).unwrap(),
           ans_size_log,
         };
-        var_metas.set(key, var_meta);
-        latent_chunk_compressors.set(key, lcc);
-        bin_countss.set(key, bin_counts);
+        (var_meta, lcc, bin_counts)
       }
-    )
+    );
+    var_metas.set(key, var_meta);
+    latent_chunk_compressors.set(key, lcc);
+    bin_countss.set(key, bin_counts);
   }
 
   let var_metas = var_metas.into();
