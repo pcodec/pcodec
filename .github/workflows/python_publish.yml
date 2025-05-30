@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: 3.x
       - name: Cargo Config
-        run: mv .cargo/config_for_publishing.toml .cargo/config.toml
+        run: mv -f .cargo/config_for_publishing.toml .cargo/config.toml
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -52,7 +52,7 @@ jobs:
           python-version: 3.x
           architecture: ${{ matrix.target }}
       - name: Cargo Config
-        run: mv .cargo/config_for_publishing.toml .cargo/config.toml
+        run: mv -f .cargo/config_for_publishing.toml .cargo/config.toml
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -78,7 +78,7 @@ jobs:
         with:
           python-version: 3.x
       - name: Cargo Config
-        run: mv .cargo/config_for_publishing.toml .cargo/config.toml
+        run: mv -f .cargo/config_for_publishing.toml .cargo/config.toml
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:

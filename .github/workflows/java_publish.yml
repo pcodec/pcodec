@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cargo Config
-        run: mv .cargo/config_for_publishing.toml .cargo/config.toml
+        run: mv -f .cargo/config_for_publishing.toml .cargo/config.toml
       - name: Set Rust version
         run: rustup override set nightly
       # it seems that rust targets don't work out of the box on linux,
@@ -52,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cargo Config
-        run: mv .cargo/config_for_publishing.toml .cargo/config.toml
+        run: mv -f .cargo/config_for_publishing.toml .cargo/config.toml
       - name: Set Rust version
         run: rustup override set nightly
       - name: Add rustup target
@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cargo Config
-        run: mv .cargo/config_for_publishing.toml .cargo/config.toml
+        run: mv -f .cargo/config_for_publishing.toml .cargo/config.toml
       - name: Set Rust version
         run: rustup override set nightly
       - name: Add rustup target
