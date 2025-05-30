@@ -5,6 +5,7 @@
   <version>0.1.1</version>
 
   <packaging>jar</packaging>
+  <name>${project.groupId}:${project.artifactId}</name>
   <description>Good compression for numerical sequences</description>
   <url>https://github.com/pcodec/pcodec</url>
   <licenses>
