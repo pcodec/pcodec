@@ -333,7 +333,7 @@ macro_rules! impl_float_number {
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
           }
-          Mode::FloatQuant(k) => k <= Self::PRECISION_BITS,
+          Mode::FloatQuant(k) => k > 0 && k <= Self::PRECISION_BITS,
           _ => false,
         }
       }
@@ -436,10 +436,10 @@ mod tests {
     }
 
     // FLOAT QUANT
-    for k in [0, 1, 22, 23] {
+    for k in [1, 22, 23] {
       assert!(f32::mode_is_valid(Mode::FloatQuant(k)));
     }
-    for k in [24, 32] {
+    for k in [0, 24, 32] {
       assert!(!f32::mode_is_valid(Mode::FloatQuant(k)));
     }
 
