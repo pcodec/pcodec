@@ -405,6 +405,28 @@ mod tests {
     let nums = (0..1000).map(|i| (i as f64) * base).collect::<Vec<_>>();
     let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
     assert_eq!(mode, Mode::float_mult(base));
+    assert!(f64::mode_is_valid(mode))
+  }
+
+  #[test]
+  fn test_mode_validation() {
+    assert!(f32::mode_is_valid(Mode::float_mult(
+      0.777_f32
+    )));
+    // subnormal
+    assert!(f32::mode_is_valid(Mode::float_mult(
+      0.000000000000000000000000000000000000003416741_f32,
+    )));
+
+    assert!(!f32::mode_is_valid(Mode::float_mult(
+      f32::INFINITY
+    )));
+    assert!(!f32::mode_is_valid(Mode::float_mult(
+      f32::NEG_INFINITY
+    )));
+    assert!(!f32::mode_is_valid(Mode::float_mult(
+      f32::NAN
+    )));
   }
 
   #[test]
