@@ -520,6 +520,13 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
   validate_chunk_size(n)?;
 
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
+  if !T::mode_is_valid(mode) {
+    return Err(PcoError::invalid_argument(
+      "The chosen mode of {:?} was invalid for type {}. \
+      This is most likely due to an invalid argument, but if using Auto mode \
+      spec, it could also be a bug in pco.",
+    ));
+  }
 
   let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
   if candidate.should_fallback(
