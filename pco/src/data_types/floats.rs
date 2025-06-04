@@ -330,7 +330,7 @@ macro_rules! impl_float_number {
           Mode::Classic => true,
           Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            Self::from_latent_ordered(base_latent).is_normal()
+            Self::from_latent_ordered(base_latent).is_finite()
           }
           Mode::FloatQuant(k) => k <= Self::PRECISION_BITS,
           _ => false,
