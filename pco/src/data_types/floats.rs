@@ -417,6 +417,7 @@ mod tests {
     assert!(f32::mode_is_valid(Mode::float_mult(
       0.000000000000000000000000000000000000003416741_f32,
     )));
+    assert!(f32::mode_is_valid(Mode::float_mult(0.0_f32)));
 
     assert!(!f32::mode_is_valid(Mode::float_mult(
       f32::INFINITY
