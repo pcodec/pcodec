@@ -330,7 +330,8 @@ macro_rules! impl_float_number {
           Mode::Classic => true,
           Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            Self::from_latent_ordered(base_latent).is_finite()
+            let base = Self::from_latent_ordered(base_latent);
+            base.is_finite() && base.abs() > Self::ZERO
           }
           Mode::FloatQuant(k) => k <= Self::PRECISION_BITS,
           _ => false,
@@ -398,6 +399,7 @@ impl_float_number!(f16, u16, 1_u16 << 15, 9);
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::metadata::DynLatent;
 
   #[test]
   fn test_choose_mult_mode() {
@@ -410,23 +412,40 @@ mod tests {
 
   #[test]
   fn test_mode_validation() {
-    assert!(f32::mode_is_valid(Mode::float_mult(
-      0.777_f32
-    )));
-    // subnormal
-    assert!(f32::mode_is_valid(Mode::float_mult(
-      0.000000000000000000000000000000000000003416741_f32,
-    )));
-    assert!(f32::mode_is_valid(Mode::float_mult(0.0_f32)));
+    // CLASSIC
+    assert!(f32::mode_is_valid(Mode::Classic));
 
-    assert!(!f32::mode_is_valid(Mode::float_mult(
-      f32::INFINITY
-    )));
-    assert!(!f32::mode_is_valid(Mode::float_mult(
-      f32::NEG_INFINITY
-    )));
-    assert!(!f32::mode_is_valid(Mode::float_mult(
-      f32::NAN
+    // FLOAT MULT
+    for base in [
+      0.777_f32,
+      0.000000000000000000000000000000000000003416741_f32,
+    ] {
+      assert!(
+        f32::mode_is_valid(Mode::float_mult(base)),
+        "{} was invalid",
+        base
+      );
+    }
+
+    for base in [0.0_f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+      assert!(
+        !f32::mode_is_valid(Mode::float_mult(base)),
+        "{} was valid",
+        base
+      )
+    }
+
+    // FLOAT QUANT
+    for k in [0, 1, 22, 23] {
+      assert!(f32::mode_is_valid(Mode::FloatQuant(k)));
+    }
+    for k in [24, 32] {
+      assert!(!f32::mode_is_valid(Mode::FloatQuant(k)));
+    }
+
+    // INT MULT
+    assert!(!f32::mode_is_valid(Mode::IntMult(
+      DynLatent::new(77_u32).unwrap()
     )));
   }
 

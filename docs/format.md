@@ -69,6 +69,9 @@ Each chunk meta consists of
 * [`extra_mode_bits` bits] for certain modes, extra data is parsed. See the
   mode-specific formulas below for how this is used, e.g. as the `mult` or `k`
   values.
+  The value encoded in these bits should be validated; namely, mult mode bases
+  should be finite and nonzero, quant mode must have `0 < k <= MANTISSA_BITS`,
+  int modes cannot apply to floats, and vice versa.
 * [4 bits] `delta_encoding`, using this table:
 
   | value | delta encoding | n latent variables | `extra_delta_bits` |
