@@ -5,13 +5,34 @@ use crate::constants::{Bitlen, Weight};
 use crate::data_types::Latent;
 use crate::histograms::HistogramBin;
 use crate::metadata::Bin;
-use fast_math::log2_raw;
+use ieee754::Ieee754;
 
 // vec of [start_bin_idx, end_bin_idx], inclusive
 type Partitioning = Vec<(usize, usize)>;
 
 const SINGLE_BIN_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 const TRIVIAL_OFFSET_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
+
+const SQRT2: f32 = std::f32::consts::SQRT_2;
+const SQRT2_SIGNIF: u32 = (1 << 23) + SQRT2.to_bits() & ((1 << 24) - 1);
+const A: f32 = -2.0 * SQRT2 + 2.0 / 3.0;
+const B: f32 = 2.0 * SQRT2;
+const C: f32 = -2.0 / 3.0;
+
+/// Fast approximate base-2 logarithm for **positive, finite, non-denormal** `x`.
+/// Inspired by `log2_raw` from the `fast-math` crate by Huon Wilson.
+/// Altered for continuity and smaller absolute error. See #287 for details.
+#[inline]
+fn log2_raw(x: f32) -> f32 {
+  let (_sign, exp, signif) = x.decompose_raw();
+  debug_assert!(!_sign && 1 <= exp && exp <= 254);
+
+  let high_bit = (signif > SQRT2_SIGNIF) as u8;
+  let add_exp = (exp + high_bit) as i32 - 127;
+
+  let normalized = f32::recompose_raw(false, 0x7F ^ high_bit, signif);
+  add_exp as f32 + A + normalized * (B + C * normalized)
+}
 
 // using f32 instead of f64 because the .log2() is faster
 fn bin_cost<L: Latent>(
@@ -22,13 +43,7 @@ fn bin_cost<L: Latent>(
   total_count_log2: f32,
 ) -> f32 {
   let count = count as f32;
-  // On Windows, log2() is very slow, so we use log(2.0) instead, which is
-  // about 10x faster. On other platforms, we stick with log2(). See #223.
-  #[cfg(target_os = "windows")]
-  let ans_cost = total_count_log2 - count.log(2.0);
-  #[cfg(not(target_os = "windows"))]
   let ans_cost = total_count_log2 - log2_raw(count);
-  // let ans_cost = total_count_log2 - count.log2();
   let offset_cost = bits::bits_to_encode_offset(upper - lower) as f32;
   bin_meta_cost + (ans_cost + offset_cost) * count
 }

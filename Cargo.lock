@@ -853,15 +853,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fast-math"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2465292146cdfc2011350fe3b1c616ac83cf0faeedb33463ba1c332ed8948d66"
-dependencies = [
- "ieee754",
-]
-
-[[package]]
 name = "fastlanes"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2015,8 +2006,8 @@ version = "0.4.4"
 dependencies = [
  "better_io",
  "dtype_dispatch",
- "fast-math",
  "half",
+ "ieee754",
  "rand 0.8.5",
  "rand_xoshiro",
 ]

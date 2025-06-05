@@ -16,8 +16,8 @@ rust-version = "1.74.0"
 [dependencies]
 better_io = { version = "0.1.0", path = "../better_io" }
 dtype_dispatch = { version = "0.1.0", path = "../dtype_dispatch" }
-fast-math = "0.1.1"
 half = { version = "2.0.0", features = ["std"] }
+ieee754 = "0.2.6"
 rand_xoshiro = { version = "0.6.0" }
 
 [dev-dependencies]
