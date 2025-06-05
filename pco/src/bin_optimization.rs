@@ -24,7 +24,7 @@ const C: f32 = -2.0 / 3.0;
 #[inline]
 fn log2_approx(x: f32) -> f32 {
   debug_assert!(
-    x >= 1.0 && x.is_finite() && x.is_normal(),
+    x >= 0.0 && x.is_finite() && x.is_normal(),
     "log2_approx called with non-positive, non-finite or denormalized value: {x}"
   );
 
