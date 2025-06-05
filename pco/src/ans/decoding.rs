@@ -3,11 +3,11 @@ use crate::ans::{AnsState, Symbol};
 use crate::constants::Bitlen;
 
 #[derive(Clone, Debug)]
-#[repr(align(16))]
+#[repr(align(8))]
 pub struct Node {
-  pub symbol: Symbol,
-  pub next_state_idx_base: AnsState,
-  pub bits_to_read: Bitlen,
+  pub symbol: u16,
+  pub next_state_idx_base: u16,
+  pub bits_to_read: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -29,8 +29,8 @@ impl Decoder {
         bits_to_read += 1;
       }
       nodes.push(Node {
-        symbol,
-        next_state_idx_base: next_state_base - table_size as AnsState,
+        symbol: symbol as u16,
+        next_state_idx_base: (next_state_base - table_size as AnsState) as u16,
         bits_to_read,
       });
       symbol_x_s[symbol as usize] += 1;
