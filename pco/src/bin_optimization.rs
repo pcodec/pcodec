@@ -24,16 +24,16 @@ const C: f32 = -2.0 / 3.0;
 #[inline]
 fn log2_approx(x: f32) -> f32 {
   debug_assert!(
-    x > 0.0 && x.is_finite() && x.is_normal(),
+    x >= 1.0 && x.is_finite() && x.is_normal(),
     "log2_approx called with non-positive, non-finite or denormalized value: {x}"
   );
 
   let bits = x.to_bits();
-  let exp = ((bits >> 23) & 0xFF) as u8;
+  let exp = ((bits >> 23) & 0xFF) as i32;
   let signif = bits & 0x7FFFFF;
 
-  let high_bit = (signif > SQRT2_SIGNIF) as u8;
-  let add_exp = (exp + high_bit) as i32 - 127;
+  let high_bit = (signif > SQRT2_SIGNIF) as i32;
+  let add_exp = (exp + high_bit) - 127;
 
   let exp = (0x7F ^ high_bit) as u32;
   let bits = (exp << 23) | signif;
