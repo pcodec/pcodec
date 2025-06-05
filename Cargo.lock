@@ -1294,12 +1294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ieee754"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9007da9cacbd3e6343da136e98b0d2df013f553d35bdec8b518f07bea768e19c"
-
-[[package]]
 name = "indexmap"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2007,7 +2001,6 @@ dependencies = [
  "better_io",
  "dtype_dispatch",
  "half",
- "ieee754",
  "rand 0.8.5",
  "rand_xoshiro",
 ]

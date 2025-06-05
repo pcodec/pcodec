@@ -5,7 +5,6 @@ use crate::constants::{Bitlen, Weight};
 use crate::data_types::Latent;
 use crate::histograms::HistogramBin;
 use crate::metadata::Bin;
-use ieee754::Ieee754;
 
 // vec of [start_bin_idx, end_bin_idx], inclusive
 type Partitioning = Vec<(usize, usize)>;
@@ -24,13 +23,21 @@ const C: f32 = -2.0 / 3.0;
 /// Altered for continuity and smaller absolute error. See #287 for details.
 #[inline]
 fn log2_approx(x: f32) -> f32 {
-  let (_sign, exp, signif) = x.decompose_raw();
-  debug_assert!(!_sign && 1 <= exp && exp <= 254);
+  debug_assert!(
+    x > 0.0 && x.is_finite() && x.is_normal(),
+    "log2_approx called with non-positive, non-finite or denormalized value: {x}"
+  );
+
+  let bits = x.to_bits();
+  let exp = ((bits >> 23) & 0xFF) as u8;
+  let signif = bits & 0x7FFFFF;
 
   let high_bit = (signif > SQRT2_SIGNIF) as u8;
   let add_exp = (exp + high_bit) as i32 - 127;
 
-  let normalized = f32::recompose_raw(false, 0x7F ^ high_bit, signif);
+  let exp = (0x7F ^ high_bit) as u32;
+  let bits = (exp << 23) | signif;
+  let normalized = f32::from_bits(bits);
   add_exp as f32 + A + normalized * (B + C * normalized)
 }
 
@@ -111,6 +118,7 @@ fn choose_optimized_partitioning<L: Latent>(
   let lowers = bins.iter().map(|bin| bin.lower).collect::<Vec<_>>();
   let uppers = bins.iter().map(|bin| bin.upper).collect::<Vec<_>>();
   let total_count_log2 = (c as f32).log2();
+  // let total_count_log2 = log2_approx(c as f32);
 
   let mut best_js = Vec::with_capacity(bins.len());
 
