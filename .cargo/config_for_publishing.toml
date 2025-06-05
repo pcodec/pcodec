@@ -1,0 +1,17 @@
+[build]
+rustflags = [
+  # enable LTO to reduce binary size (empirically by ~20%)
+  "-C", "lto=true",
+  "-C", "embed-bitcode=true",
+  "-Zdylib-lto"
+]
+
+# for x64 we have a more specific config to enable the good instruction sets
+[target.'cfg(target_arch = "x86_64")']
+rustflags = [
+  "-C", "target-feature=+bmi1,+bmi2,+avx2",
+  "-C", "lto=true",
+  "-C", "embed-bitcode=true",
+  "-Zdylib-lto"
+]
+

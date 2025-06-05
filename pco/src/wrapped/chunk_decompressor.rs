@@ -17,7 +17,8 @@ impl<T: Number> ChunkDecompressor<T> {
   pub(crate) fn new(meta: ChunkMeta) -> PcoResult<Self> {
     if !T::mode_is_valid(meta.mode) {
       return Err(PcoError::corruption(format!(
-        "invalid mode for data type: {:?}",
+        "invalid mode for {} data type: {:?}",
+        std::any::type_name::<T>(),
         meta.mode
       )));
     }

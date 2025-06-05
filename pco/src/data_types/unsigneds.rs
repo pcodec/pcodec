@@ -14,7 +14,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
   match config.mode_spec {
     ModeSpec::Auto => {
       if let Some(base) = int_mult_utils::choose_base(nums) {
-        let mode = Mode::IntMult(DynLatent::new(base).unwrap());
+        let mode = Mode::int_mult(base);
         let latents = int_mult_utils::split_latents(nums, base);
         Ok((mode, latents))
       } else {
@@ -32,6 +32,14 @@ pub fn choose_mode_and_split_latents<T: Number>(
       let latents = int_mult_utils::split_latents(nums, base);
       Ok((mode, latents))
     }
+  }
+}
+
+pub fn mode_is_valid<L: Latent>(mode: Mode) -> bool {
+  match mode {
+    Mode::Classic => true,
+    Mode::IntMult(base) => *base.downcast_ref::<L>().unwrap() > L::ZERO,
+    _ => false,
   }
 }
 
@@ -90,11 +98,7 @@ macro_rules! impl_unsigned_number {
       }
 
       fn mode_is_valid(mode: Mode) -> bool {
-        match mode {
-          Mode::Classic => true,
-          Mode::IntMult(_) => true,
-          _ => false,
-        }
+        mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
         nums: &[Self],
@@ -136,3 +140,24 @@ macro_rules! impl_unsigned_number {
 impl_unsigned_number!(u32, 1);
 impl_unsigned_number!(u64, 2);
 impl_unsigned_number!(u16, 7);
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::metadata::Mode;
+
+  #[test]
+  fn test_mode_validation() {
+    // CLASSIC
+    assert!(u32::mode_is_valid(Mode::Classic));
+
+    // INT MULT
+    for base in [1_u32, 77, u32::MAX] {
+      assert!(u32::mode_is_valid(Mode::int_mult(base)))
+    }
+    assert!(!u32::mode_is_valid(Mode::int_mult(0_u32)));
+
+    // FLOAT
+    assert!(!u32::mode_is_valid(Mode::FloatQuant(3)));
+  }
+}
