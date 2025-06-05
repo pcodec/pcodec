@@ -23,7 +23,7 @@ const C: f32 = -2.0 / 3.0;
 /// Inspired by `log2_raw` from the `fast-math` crate by Huon Wilson.
 /// Altered for continuity and smaller absolute error. See #287 for details.
 #[inline]
-fn log2_raw(x: f32) -> f32 {
+fn log2_approx(x: f32) -> f32 {
   let (_sign, exp, signif) = x.decompose_raw();
   debug_assert!(!_sign && 1 <= exp && exp <= 254);
 
@@ -43,7 +43,7 @@ fn bin_cost<L: Latent>(
   total_count_log2: f32,
 ) -> f32 {
   let count = count as f32;
-  let ans_cost = total_count_log2 - log2_raw(count);
+  let ans_cost = total_count_log2 - log2_approx(count);
   let offset_cost = bits::bits_to_encode_offset(upper - lower) as f32;
   bin_meta_cost + (ans_cost + offset_cost) * count
 }
