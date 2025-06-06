@@ -67,7 +67,7 @@ fn log2_approx_fast_math(x: f32) -> f32 {
   );
 
   let bits = x.to_bits();
-  let exp = (bits >> 23);
+  let exp = bits >> 23;
   let signif = bits & SIGNIF_MASK;
 
   debug_assert!(
@@ -78,7 +78,7 @@ fn log2_approx_fast_math(x: f32) -> f32 {
   let high_bit = (signif >> 22) & 1;
   let add_exp = (exp + high_bit) - 127;
   let exp = 0x7F ^ high_bit;
-  let bits = ((exp as u32) << 23) | signif;
+  let bits = (exp << 23) | signif;
   let normalised = f32::from_bits(bits) - 1.0;
   const A: f32 = -0.6296735;
   const B: f32 = 1.466967;
