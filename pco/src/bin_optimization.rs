@@ -16,6 +16,7 @@ const TRIVIAL_OFFSET_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 /// Inspired by `log2_raw` from the `fast-math` crate by Huon Wilson.
 /// Altered for continuity and smaller absolute error. See #287 for details.
 #[inline]
+#[allow(dead_code)]
 fn log2_approx(x: f32) -> f32 {
   const SQRT2: f32 = std::f32::consts::SQRT_2;
   const SIGNIF_MASK: u32 = 0x7FFFFF;
@@ -25,13 +26,22 @@ fn log2_approx(x: f32) -> f32 {
   const C: f32 = -2.0 / 3.0;
 
   debug_assert!(
-    x >= 0.0 && x.is_finite() && x.is_normal(),
-    "log2_approx called with non-positive, non-finite or denormalized value: {x}"
+    x.is_normal(),
+    "log2_approx called with denormalized value: {x}"
+  );
+  debug_assert!(
+    1.0 <= x,
+    "log2_approx called with 1 <= x: {x}"
   );
 
   let bits = x.to_bits();
   let exp = bits >> 23;
   let signif = bits & SIGNIF_MASK;
+
+  debug_assert!(
+    1 <= exp && exp <= 254,
+    "log2_approx exp out of range: {exp}"
+  );
 
   let high_bit = (signif > SQRT2_SIGNIF) as u32;
   let log_int_plus_127 = exp + high_bit;
@@ -40,6 +50,39 @@ fn log2_approx(x: f32) -> f32 {
   let bits = (exp << 23) | signif;
   let normalized = f32::from_bits(bits);
   log_int_plus_127 as f32 + (-127.0 + A) + normalized * (B + C * normalized)
+}
+
+#[inline]
+#[allow(dead_code)]
+fn log2_approx_fast_math(x: f32) -> f32 {
+  const SIGNIF_MASK: u32 = 0x7FFFFF;
+
+  debug_assert!(
+    x.is_normal(),
+    "log2_approx called with denormalized value: {x}"
+  );
+  debug_assert!(
+    1.0 <= x,
+    "log2_approx called with 1 <= x: {x}"
+  );
+
+  let bits = x.to_bits();
+  let exp = (bits >> 23);
+  let signif = bits & SIGNIF_MASK;
+
+  debug_assert!(
+    1 <= exp && exp <= 254,
+    "log2_approx exp out of range: {exp}"
+  );
+
+  let high_bit = (signif >> 22) & 1;
+  let add_exp = (exp + high_bit) - 127;
+  let exp = 0x7F ^ high_bit;
+  let bits = ((exp as u32) << 23) | signif;
+  let normalised = f32::from_bits(bits) - 1.0;
+  const A: f32 = -0.6296735;
+  const B: f32 = 1.466967;
+  add_exp as f32 + normalised * (B + A * normalised)
 }
 
 // using f32 instead of f64 because the .log2() is faster
@@ -199,6 +242,8 @@ pub fn optimize_bins<L: Latent>(
 
 #[cfg(test)]
 mod tests {
+  use crate::bin_optimization::log2_approx;
+  use crate::bin_optimization::log2_approx_fast_math;
   use crate::bin_optimization::optimize_bins;
   use crate::compression_intermediates::BinCompressionInfo;
   use crate::histograms::HistogramBin;
@@ -275,5 +320,71 @@ mod tests {
         },
       ]
     )
+  }
+
+  #[test]
+  fn test_log2_approx_fast_math() {
+    // This is the max absolute error compared to `f64::log2`.
+    const MAX_ERROR: f64 = 0.009;
+    let mut prev_approx_log2 = -f64::INFINITY;
+    for i in 1..=u32::MAX {
+      let x = i as f64;
+      let log2_exact = x.log2();
+      let log2_approx_value = log2_approx_fast_math(x as f32) as f64;
+      let error = (log2_exact - log2_approx_value).abs();
+
+      assert!(
+        log2_approx_value >= prev_approx_log2,
+        "log2_approx({}) = {}, expected >= {}, error: {}",
+        x,
+        log2_approx_value,
+        prev_approx_log2,
+        error
+      );
+
+      assert!(
+        error < MAX_ERROR,
+        "log2_approx({}) = {}, expected {}, error: {}",
+        x,
+        log2_approx_value,
+        log2_exact,
+        error
+      );
+
+      prev_approx_log2 = log2_approx_value;
+    }
+  }
+
+  #[test]
+  fn test_log2_approx() {
+    // This is the max absolute error compared to `f64::log2`.
+    const MAX_ERROR: f64 = 0.00481;
+    let mut prev_approx_log2 = -f64::INFINITY;
+    for i in 1..=u32::MAX {
+      let x = i as f64;
+      let log2_exact = x.log2();
+      let log2_approx_value = log2_approx(x as f32) as f64;
+      let error = (log2_exact - log2_approx_value).abs();
+
+      assert!(
+        log2_approx_value >= prev_approx_log2,
+        "log2_approx({}) = {}, expected >= {}, error: {}",
+        x,
+        log2_approx_value,
+        prev_approx_log2,
+        error
+      );
+
+      assert!(
+        error < MAX_ERROR,
+        "log2_approx({}) = {}, expected {}, error: {}",
+        x,
+        log2_approx_value,
+        log2_exact,
+        error
+      );
+
+      prev_approx_log2 = log2_approx_value;
+    }
   }
 }
