@@ -18,7 +18,7 @@ const TRIVIAL_OFFSET_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 #[inline]
 #[allow(dead_code)]
 fn log2_approx(x: f32) -> f32 {
-  const Z: f32 = 0.675; // cutoff for local approximation in [z, 2z]
+  const Z: f32 = 0.674; // cutoff for local approximation in [z, 2z]
   const SIGNIF_MASK: u32 = 0x7FFFFF;
   const Z_SIGNIF: u32 = Z.to_bits() & SIGNIF_MASK;
   const B: f32 = 2.0 / Z;
@@ -357,7 +357,7 @@ mod tests {
 
   #[test]
   fn test_log2_approx() {
-    const MAX_ERROR: f64 = 0.00769;
+    const MAX_ERROR: f64 = 0.0076;
     let mut prev_approx_log2 = -f64::INFINITY;
     for i in 1..=100 {
       let x = i as f64;
