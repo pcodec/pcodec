@@ -12,33 +12,34 @@ type Partitioning = Vec<(usize, usize)>;
 const SINGLE_BIN_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 const TRIVIAL_OFFSET_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 
-const SQRT2: f32 = std::f32::consts::SQRT_2;
-const SQRT2_SIGNIF: u32 = (1 << 23) + SQRT2.to_bits() & ((1 << 24) - 1);
-const A: f32 = -2.0 * SQRT2 + 2.0 / 3.0;
-const B: f32 = 2.0 * SQRT2;
-const C: f32 = -2.0 / 3.0;
-
 /// Fast approximate base-2 logarithm for **positive, finite, non-denormal** `x`.
 /// Inspired by `log2_raw` from the `fast-math` crate by Huon Wilson.
 /// Altered for continuity and smaller absolute error. See #287 for details.
 #[inline]
 fn log2_approx(x: f32) -> f32 {
+  const SQRT2: f32 = std::f32::consts::SQRT_2;
+  const SIGNIF_MASK: u32 = 0x7FFFFF;
+  const SQRT2_SIGNIF: u32 = SQRT2.to_bits() & SIGNIF_MASK;
+  const A: f32 = -2.0 * SQRT2 + 2.0 / 3.0;
+  const B: f32 = 2.0 * SQRT2;
+  const C: f32 = -2.0 / 3.0;
+
   debug_assert!(
     x >= 0.0 && x.is_finite() && x.is_normal(),
     "log2_approx called with non-positive, non-finite or denormalized value: {x}"
   );
 
   let bits = x.to_bits();
-  let exp = ((bits >> 23) & 0xFF) as i32;
-  let signif = bits & 0x7FFFFF;
+  let exp = bits >> 23;
+  let signif = bits & SIGNIF_MASK;
 
-  let high_bit = (signif > SQRT2_SIGNIF) as i32;
-  let add_exp = (exp + high_bit) - 127;
+  let high_bit = (signif > SQRT2_SIGNIF) as u32;
+  let log_int_plus_127 = exp + high_bit;
 
-  let exp = (0x7F ^ high_bit) as u32;
+  let exp = 0x7F ^ high_bit;
   let bits = (exp << 23) | signif;
   let normalized = f32::from_bits(bits);
-  add_exp as f32 + A + normalized * (B + C * normalized)
+  log_int_plus_127 as f32 + (-127.0 + A) + normalized * (B + C * normalized)
 }
 
 // using f32 instead of f64 because the .log2() is faster
