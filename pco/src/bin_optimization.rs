@@ -56,6 +56,8 @@ fn log2_approx(x: f32) -> f32 {
 #[allow(dead_code)]
 fn log2_approx_fast_math(x: f32) -> f32 {
   const SIGNIF_MASK: u32 = 0x7FFFFF;
+  const A: f32 = -0.6296735;
+  const B: f32 = 1.466967;
 
   debug_assert!(
     x.is_normal(),
@@ -80,8 +82,6 @@ fn log2_approx_fast_math(x: f32) -> f32 {
   let exp = 0x7F ^ high_bit;
   let bits = (exp << 23) | signif;
   let normalised = f32::from_bits(bits) - 1.0;
-  const A: f32 = -0.6296735;
-  const B: f32 = 1.466967;
   add_exp as f32 + normalised * (B + A * normalised)
 }
 
