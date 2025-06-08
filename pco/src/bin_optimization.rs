@@ -12,6 +12,36 @@ type Partitioning = Vec<(usize, usize)>;
 const SINGLE_BIN_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 const TRIVIAL_OFFSET_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 
+/// Fast approximate base-2 logarithm for **positive, finite, non-denormal** `x`.
+/// Inspired by `log2_raw` from the `fast-math` crate by Huon Wilson.
+/// Altered for continuity and smaller absolute error. See #287 for details.
+#[inline]
+fn log2_approx(x: f32) -> f32 {
+  const Z: f32 = 0.674; // cutoff for local approximation in [z, 2z]
+  const SIGNIF_MASK: u32 = 0x7FFFFF;
+  const Z_SIGNIF: u32 = Z.to_bits() & SIGNIF_MASK;
+  const B: f32 = 2.0 / Z;
+  const C: f32 = -B / (6.0 * Z);
+  const A: f32 = -B - C;
+
+  debug_assert!(
+    x.is_normal() && x > 0.0,
+    "log2_approx called with non-normal or non-positive value: {x}"
+  );
+
+  let bits = x.to_bits();
+  let exp = bits >> 23;
+  let signif = bits & SIGNIF_MASK;
+
+  let high_bit = (signif > Z_SIGNIF) as u32;
+  let log_int = exp + high_bit - 127;
+
+  let exp = 0x7F ^ high_bit;
+  let bits = (exp << 23) | signif;
+  let normalized = f32::from_bits(bits);
+  log_int as f32 + A + normalized * (B + C * normalized)
+}
+
 // using f32 instead of f64 because the .log2() is faster
 fn bin_cost<L: Latent>(
   bin_meta_cost: f32,
@@ -21,12 +51,7 @@ fn bin_cost<L: Latent>(
   total_count_log2: f32,
 ) -> f32 {
   let count = count as f32;
-  // On Windows, log2() is very slow, so we use log(2.0) instead, which is
-  // about 10x faster. On other platforms, we stick with log2(). See #223.
-  #[cfg(target_os = "windows")]
-  let ans_cost = total_count_log2 - count.log(2.0);
-  #[cfg(not(target_os = "windows"))]
-  let ans_cost = total_count_log2 - count.log2();
+  let ans_cost = total_count_log2 - log2_approx(count);
   let offset_cost = bits::bits_to_encode_offset(upper - lower) as f32;
   bin_meta_cost + (ans_cost + offset_cost) * count
 }
@@ -93,7 +118,7 @@ fn choose_optimized_partitioning<L: Latent>(
   let total_count = c;
   let lowers = bins.iter().map(|bin| bin.lower).collect::<Vec<_>>();
   let uppers = bins.iter().map(|bin| bin.upper).collect::<Vec<_>>();
-  let total_count_log2 = (c as f32).log2();
+  let total_count_log2 = log2_approx(c as f32);
 
   let mut best_js = Vec::with_capacity(bins.len());
 
@@ -174,7 +199,7 @@ pub fn optimize_bins<L: Latent>(
 
 #[cfg(test)]
 mod tests {
-  use crate::bin_optimization::optimize_bins;
+  use super::*;
   use crate::compression_intermediates::BinCompressionInfo;
   use crate::histograms::HistogramBin;
 
@@ -250,5 +275,43 @@ mod tests {
         },
       ]
     )
+  }
+
+  #[test]
+  fn test_log2_approx() {
+    // should be exact at powers of 2
+    for exp in 0..32 {
+      let approx = log2_approx((1_u32 << exp) as f32);
+      assert_eq!(approx, exp as f32, "{} {}", exp, approx);
+    }
+
+    const MAX_ERROR: f32 = 0.0076;
+    let mut prev_approx_log2 = -f32::INFINITY;
+    for i in 1..=100 {
+      let x = i as f32;
+      let log2_exact = x.log2();
+      let log2_approx_value = log2_approx(x);
+      let error = (log2_exact - log2_approx_value).abs();
+
+      assert!(
+        log2_approx_value >= prev_approx_log2,
+        "log2_approx({}) = {}, expected >= {}, error: {}",
+        x,
+        log2_approx_value,
+        prev_approx_log2,
+        error
+      );
+
+      assert!(
+        error < MAX_ERROR,
+        "log2_approx({}) = {}, expected {}, error: {}",
+        x,
+        log2_approx_value,
+        log2_exact,
+        error
+      );
+
+      prev_approx_log2 = log2_approx_value;
+    }
   }
 }
