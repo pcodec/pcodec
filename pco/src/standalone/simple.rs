@@ -8,8 +8,9 @@ use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{FileDecompressor, MaybeChunkDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
-// TODO in 0.4 make this generic to Write and make all compress methods
+// TODO in 1.0 make this generic to Write and make all compress methods
 // accepting a Write return the number of bytes written?
+// TODO in 1.0 set a uniform number type for the file
 /// Takes in a slice of numbers and an exact configuration and writes compressed
 /// bytes to the destination, retuning the number of bytes written.
 ///
