@@ -160,6 +160,20 @@ So far, these standalone versions exist:
 | 2              | 0.1.1              | uniform number type unsupported                                          |
 | 3              | 0.4.5              | -                                                                        |
 
+As well as these number type 1-byte representations:
+
+| number type | byte |
+|-------------|------|
+| f16         | 9 |
+| f32         | 5 |
+| f64         | 6 |
+| i16         | 8 |
+| i32         | 3 |
+| i64         | 4 |
+| u16         | 7 |
+| u32         | 1 |
+| u64         | 2 |
+
 ## Processing Formulas
 
 In order of decompression steps in a batch:
