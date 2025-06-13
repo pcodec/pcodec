@@ -78,6 +78,7 @@ fn decompress_chunks<T: Number + JavaConversions>(
   {
     let initial_len = res.len(); // probably always zero to start, since we just created res
     let remaining = chunk_decompressor.n();
+    res.reserve(remaining);
     unsafe {
       res.set_len(initial_len + remaining);
     }
