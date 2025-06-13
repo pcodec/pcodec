@@ -83,13 +83,18 @@ def test_simple_decompress_errors():
         standalone.simple_decompress(bytes(truncated))
 
     compressed[8] = 99
-    with pytest.raises(RuntimeError, match="chunk's number type of 99 does not match file's uniform number type of U32"):
+    with pytest.raises(
+        RuntimeError,
+        match="chunk's number type of 99 does not match file's uniform number type of U32",
+    ):
         standalone.simple_decompress(bytes(compressed))
 
     # new behavior when using uniform type: returns an empty array.
     # this happens if the user passed in a file with no chunks.
     compressed[8] = 0
-    np.testing.assert_array_equal(standalone.simple_decompress(bytes(compressed)), np.array([], dtype=np.uint32))
+    np.testing.assert_array_equal(
+        standalone.simple_decompress(bytes(compressed)), np.array([], dtype=np.uint32)
+    )
 
     # files not using uniform dtypes store no dtype and return None instead.
     compressed[5] = 0
