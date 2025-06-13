@@ -1,9 +1,10 @@
-use crate::data_types::Number;
+use crate::data_types::{Number, NumberType};
 use crate::errors::PcoResult;
+use crate::standalone::FileCompressor;
 use crate::{standalone, ChunkConfig, DeltaSpec, ModeSpec};
 use half::f16;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 fn get_asset_dir() -> PathBuf {
@@ -44,23 +45,23 @@ fn assert_compatible<T: Number>(version: &str, name: &str, expected: &[T]) -> Pc
   Ok(())
 }
 
+fn needs_write(version: &str, path: &Path) -> bool {
+  version == env!("CARGO_PKG_VERSION") && !path.exists()
+}
+
 fn simple_write_if_version_matches<T: Number>(
   version: &str,
   name: &str,
   nums: &[T],
   config: &ChunkConfig,
 ) -> PcoResult<()> {
-  if version != env!("CARGO_PKG_VERSION") {
-    return Ok(());
-  }
-
-  let pco_path = get_pco_path(version, name);
-  if pco_path.exists() {
+  let path = get_pco_path(version, name);
+  if !needs_write(version, &path) {
     return Ok(());
   }
 
   fs::write(
-    pco_path,
+    path,
     standalone::simple_compress(nums, config)?,
   )?;
   Ok(())
@@ -191,6 +192,33 @@ fn v0_4_0_lookback_delta() -> PcoResult<()> {
   .repeat(100);
   let config = ChunkConfig::default().with_delta_spec(DeltaSpec::TryLookback);
   simple_write_if_version_matches(version, name, &nums, &config)?;
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}
+
+#[test]
+fn v0_4_5_uniform_type() -> PcoResult<()> {
+  // v0.4.5 introduced optional uniform types in standalone
+  let version = "0.4.5";
+  let name = "uniform_type";
+
+  // we write as two chunks for good measure
+  let nums: Vec<u32> = vec![1, 2, 3, 4, 5];
+  let config = ChunkConfig::default();
+
+  let path = get_pco_path(version, name);
+  if needs_write(version, &path) {
+    let mut dst = vec![];
+    let fc = FileCompressor::default().with_uniform_type(Some(NumberType::U32));
+    fc.write_header(&mut dst)?;
+    fc.chunk_compressor(&nums[0..3], &config)?
+      .write_chunk(&mut dst)?;
+    fc.chunk_compressor(&nums[3..5], &config)?
+      .write_chunk(&mut dst)?;
+    fc.write_footer(&mut dst)?;
+    fs::write(path, dst)?;
+  }
+
   assert_compatible(version, name, &nums)?;
   Ok(())
 }

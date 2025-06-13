@@ -78,7 +78,7 @@ pub(crate) trait Float:
   fn from_latent_numerical(l: Self::L) -> Self;
 }
 
-// TODO in 1.0 entirely hide Latent from the user as an implementation detail?
+// TODO in 1.0 seal Latent and Number
 /// **unstable API** Trait for data types that behave like unsigned integers.
 ///
 /// This is used extensively in `pco` to guarantee that bitwise
