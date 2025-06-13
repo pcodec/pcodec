@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from pathlib import Path
 from pcodec import (
     ChunkConfig,
     DeltaSpec,
@@ -73,7 +74,8 @@ def test_simple_decompress_into_errors():
 
 def test_simple_decompress_errors():
     """Test possible error states for standalone.simple_decompress"""
-    with open("../pco/assets/v0_4_5_uniform_type.pco", "rb") as f:
+    test_file_path = Path(__file__).parent / "../../pco/assets/v0_4_5_uniform_type.pco"
+    with open(test_file_path, "rb") as f:
         compressed = bytearray(f.read())
 
     # byte 5 is the uniform number type
