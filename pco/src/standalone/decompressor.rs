@@ -2,7 +2,7 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::constants::Bitlen;
-use crate::data_types::Number;
+use crate::data_types::{Number, NumberType};
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
@@ -15,6 +15,21 @@ unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let res = reader.read_uint(power);
   reader.drain_empty_byte("standalone size hint")?;
   Ok(res)
+}
+
+unsafe fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberType>> {
+  let byte = reader.read_aligned_bytes(1)?[0];
+  if byte == MAGIC_TERMINATION_BYTE {
+    return Ok(None);
+  }
+
+  match NumberType::from_descriminant(byte) {
+    Some(number_type) => Ok(Some(number_type)),
+    None => Err(PcoError::corruption(format!(
+      "unknown data type byte: {}",
+      byte
+    ))),
+  }
 }
 
 /// Top-level entry point for decompressing standalone .pco files.
@@ -43,6 +58,7 @@ unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
 /// ```
 #[derive(Clone, Debug)]
 pub struct FileDecompressor {
+  uniform_type: Option<NumberType>,
   n_hint: usize,
   inner: wrapped::FileDecompressor,
 }
@@ -78,19 +94,26 @@ impl FileDecompressor {
       )));
     }
 
-    let (standalone_version, n_hint) = reader_builder.with_reader(|reader| unsafe {
-      let standalone_version = reader.read_usize(BITS_TO_ENCODE_STANDALONE_VERSION);
-      let n_hint = if standalone_version >= 2 {
-        read_varint(reader)? as usize
-      } else {
-        // These versions only had wrapped version; we need to rewind so they can
-        // reuse it.
-        reader.bits_past_byte -= BITS_TO_ENCODE_STANDALONE_VERSION;
-        0
-      };
+    let (standalone_version, uniform_number_type, n_hint) =
+      reader_builder.with_reader(|reader| unsafe {
+        let standalone_version = reader.read_usize(BITS_TO_ENCODE_STANDALONE_VERSION);
+        if standalone_version < 2 {
+          // These versions only had wrapped version; we need to rewind so they can
+          // reuse it.
+          reader.bits_past_byte -= BITS_TO_ENCODE_STANDALONE_VERSION;
+          return Ok((standalone_version, None, 0));
+        }
 
-      Ok((standalone_version, n_hint))
-    })?;
+        let uniform_type = if standalone_version >= 3 {
+          read_uniform_type(reader)?
+        } else {
+          None
+        };
+
+        let n_hint = read_varint(reader)? as usize;
+
+        Ok((standalone_version, uniform_type, n_hint))
+      })?;
 
     if standalone_version > CURRENT_STANDALONE_VERSION {
       return Err(PcoError::compatibility(format!(
@@ -100,11 +123,22 @@ impl FileDecompressor {
     }
 
     let (inner, rest) = wrapped::FileDecompressor::new(reader_builder.into_inner())?;
-    Ok((Self { inner, n_hint }, rest))
+    Ok((
+      Self {
+        inner,
+        uniform_type: uniform_number_type,
+        n_hint,
+      },
+      rest,
+    ))
   }
 
   pub fn format_version(&self) -> u8 {
     self.inner.format_version()
+  }
+
+  pub fn uniform_type(&self) -> Option<NumberType> {
+    self.uniform_type
   }
 
   pub fn n_hint(&self) -> usize {
@@ -114,8 +148,13 @@ impl FileDecompressor {
   /// Peeks at what's next in the file, returning whether it's a termination
   /// or chunk with some data type.
   ///
+  /// If a uniform number type for the file exists, it will be used instead.
   /// Will return an error if there is insufficient data.
   pub fn peek_number_type_or_termination(&self, src: &[u8]) -> PcoResult<NumberTypeOrTermination> {
+    if let Some(uniform_type) = self.uniform_type {
+      return Ok(NumberTypeOrTermination::Known(uniform_type));
+    }
+
     match src.first() {
       Some(&byte) => Ok(NumberTypeOrTermination::from(byte)),
       None => Err(PcoError::insufficient_data(
@@ -143,10 +182,20 @@ impl FileDecompressor {
       ));
     }
 
+    if let Some(uniform_type) = self.uniform_type() {
+      if uniform_type as u8 != type_or_termination_byte {
+        return Err(PcoError::corruption(format!(
+          "chunk's number type of {} does not match file's uniform number type of {:?}",
+          type_or_termination_byte, uniform_type,
+        )));
+      }
+    }
     if type_or_termination_byte != T::NUMBER_TYPE_BYTE {
+      // This is most likely user error, but since we can't be certain
+      // of that, we call it a corruption.
       return Err(PcoError::corruption(format!(
-        "data type byte does not match {:?}; instead found {:?}",
-        T::NUMBER_TYPE_BYTE,
+        "requested chunk decompression with {:?} does not match chunk's number type of {:?}",
+        NumberType::from_descriminant(T::NUMBER_TYPE_BYTE),
         type_or_termination_byte,
       )));
     }

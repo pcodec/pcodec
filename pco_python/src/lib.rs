@@ -1,3 +1,7 @@
+#![allow(clippy::uninit_vec)]
+#![deny(clippy::unused_unit)]
+#![deny(dead_code)]
+
 use crate::config::{PyChunkConfig, PyDeltaSpec, PyModeSpec, PyPagingSpec};
 use crate::progress::PyProgress;
 use pyo3::prelude::*;

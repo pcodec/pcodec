@@ -11,10 +11,12 @@ use crate::PagingSpec;
 pub fn header_size() -> usize {
   let max_varint_bits = BITS_TO_ENCODE_VARINT_POWER + 64;
   MAGIC_HEADER.len()
+    + 1 // uniform dtype
     + (max_varint_bits + BITS_TO_ENCODE_STANDALONE_VERSION).div_ceil(8) as usize
     + wrapped_guarantee::header_size()
 }
 
+// TODO in 1.0 make these take NumberType enums?
 /// Returns the maximum possible byte size of a standalone chunk for a given
 /// latent type (e.g. u32 or u64) and count of numbers.
 pub fn chunk_size<L: Latent>(n: usize) -> usize {
@@ -44,14 +46,16 @@ mod tests {
 
   use super::*;
   use crate::chunk_config::DeltaSpec;
-  use crate::data_types::Number;
+  use crate::data_types::{Number, NumberType};
   use crate::errors::PcoResult;
   use crate::standalone::{simple_compress, FileCompressor};
   use crate::{ChunkConfig, ModeSpec, PagingSpec};
 
   #[test]
   fn test_header_guarantee() -> PcoResult<()> {
-    let fc = FileCompressor::default().with_n_hint(1 << 63);
+    let fc = FileCompressor::default()
+      .with_n_hint(usize::MAX)
+      .with_uniform_type(Some(NumberType::F64));
     let mut dst = Vec::new();
     fc.write_header(&mut dst)?;
     assert_eq!(header_size(), dst.len());

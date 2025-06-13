@@ -13,6 +13,9 @@ pub enum NumberTypeOrTermination {
   /// This indicates that there is a chunk, and its data type is the given
   /// known value.
   Known(NumberType),
+  // TODO in 1.0 since it seems decided we aren't implementing custom data
+  // types, it's unclear if Unknown adds anything over returning a
+  // corruption error?
   /// This indicates that there is a chunk, but its data type is not part of
   /// pco's core implementation. It may be possible to decode it with custom
   /// data types.

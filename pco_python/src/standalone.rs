@@ -29,6 +29,7 @@ fn decompress_chunks<'py, T: Number + Element>(
       {
         let initial_len = res.len(); // probably always zero to start, since we just created res
         let remaining = chunk_decompressor.n();
+        res.reserve(remaining);
         unsafe {
           res.set_len(initial_len + remaining);
         }
@@ -160,7 +161,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
       }
       Termination => Ok(PyNone::get(py).to_object(py)),
       Unknown(other) => Err(PyRuntimeError::new_err(format!(
-        "unrecognized dtype byte {:?}",
+        "unrecognized number type byte {:?}",
         other,
       ))),
     }
