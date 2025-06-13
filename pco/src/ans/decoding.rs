@@ -1,13 +1,13 @@
 use crate::ans::spec::Spec;
-use crate::ans::{AnsState, Symbol};
-use crate::constants::Bitlen;
+use crate::ans::{AnsState, CompactAnsState, CompactSymbol};
+use crate::constants::CompactBitlen;
 
 #[derive(Clone, Debug)]
 #[repr(align(8))]
 pub struct Node {
-  pub symbol: u16,
-  pub next_state_idx_base: u16,
-  pub bits_to_read: u16,
+  pub symbol: CompactSymbol,
+  pub next_state_idx_base: CompactAnsState,
+  pub bits_to_read: CompactBitlen,
 }
 
 #[derive(Clone, Debug)]
@@ -29,8 +29,8 @@ impl Decoder {
         bits_to_read += 1;
       }
       nodes.push(Node {
-        symbol: symbol as u16,
-        next_state_idx_base: (next_state_base - table_size as AnsState) as u16,
+        symbol: symbol as CompactSymbol,
+        next_state_idx_base: (next_state_base - table_size as AnsState) as CompactAnsState,
         bits_to_read,
       });
       symbol_x_s[symbol as usize] += 1;

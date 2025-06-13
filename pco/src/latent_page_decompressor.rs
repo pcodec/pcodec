@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
-use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
+use crate::constants::{Bitlen, CompactBitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
@@ -14,14 +14,14 @@ use crate::{ans, bit_reader, delta, read_write_uint};
 #[derive(Clone, Copy, Debug)]
 pub struct BinDecompressionInfo<L: Latent> {
   pub lower: L,
-  pub offset_bits: u16,
+  pub offset_bits: CompactBitlen,
 }
 
 impl<L: Latent> BinDecompressionInfo<L> {
   fn new(bin: &Bin<L>) -> Self {
     Self {
       lower: bin.lower,
-      offset_bits: bin.offset_bits as u16,
+      offset_bits: bin.offset_bits as CompactBitlen,
     }
   }
 }
