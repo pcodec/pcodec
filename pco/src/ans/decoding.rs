@@ -22,16 +22,13 @@ impl Decoder {
     // x_s from Jarek Duda's paper
     let mut symbol_x_s = spec.symbol_weights.clone();
     for &symbol in &spec.state_symbols {
-      let mut next_state_base = symbol_x_s[symbol as usize] as AnsState;
-      let mut bits_to_read = 0;
-      while next_state_base < table_size as AnsState {
-        next_state_base *= 2;
-        bits_to_read += 1;
-      }
+      let next_state_base = symbol_x_s[symbol as usize] as AnsState;
+      let bits_to_read = next_state_base.leading_zeros() - (table_size as AnsState).leading_zeros();
+      let next_state_base = next_state_base << bits_to_read;
       nodes.push(Node {
         symbol: symbol as CompactSymbol,
         next_state_idx_base: (next_state_base - table_size as AnsState) as CompactAnsState,
-        bits_to_read,
+        bits_to_read: bits_to_read as CompactBitlen,
       });
       symbol_x_s[symbol as usize] += 1;
     }
