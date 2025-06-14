@@ -165,6 +165,15 @@ impl FileDecompressor {
     };
     Ok(MaybeChunkDecompressor::Some(res))
   }
+
+  pub fn simple_decompress<T: Number>(&self, mut src: &[u8]) -> PcoResult<Vec<T>> {
+    let mut res = Vec::with_capacity(self.n_hint());
+    while let MaybeChunkDecompressor::Some(mut chunk_decompressor) = self.chunk_decompressor(src)? {
+      chunk_decompressor.decompress_remaining_extend(&mut res)?;
+      src = chunk_decompressor.into_src();
+    }
+    Ok(res)
+  }
 }
 
 /// Holds metadata about a chunk and supports decompression.
