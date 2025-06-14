@@ -1,4 +1,6 @@
 #![allow(clippy::uninit_vec)]
+#![deny(clippy::unused_unit)]
+#![deny(dead_code)]
 
 mod config;
 mod num_array;
@@ -12,7 +14,7 @@ use jni::sys::*;
 use jni::JNIEnv;
 use pco::data_types::{Number, NumberType};
 use pco::match_number_enum;
-use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+use pco::standalone::FileDecompressor;
 
 fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   // We need a function that creates a fake instance of the return type, due
@@ -68,24 +70,11 @@ fn simple_compress_inner(
 
 fn decompress_chunks<T: Number + JavaConversions>(
   env: &mut JNIEnv,
-  mut src: &[u8],
+  src: &[u8],
   file_decompressor: FileDecompressor,
 ) -> Result<jobject> {
-  let n_hint = file_decompressor.n_hint();
-  let mut res: Vec<T> = Vec::with_capacity(n_hint);
-  while let MaybeChunkDecompressor::Some(mut chunk_decompressor) =
-    file_decompressor.chunk_decompressor::<T, &[u8]>(src)?
-  {
-    let initial_len = res.len(); // probably always zero to start, since we just created res
-    let remaining = chunk_decompressor.n();
-    unsafe {
-      res.set_len(initial_len + remaining);
-    }
-    let progress = chunk_decompressor.decompress(&mut res[initial_len..])?;
-    assert!(progress.finished);
-    src = chunk_decompressor.into_src();
-  }
-  let num_array = num_array::to_java(env, &res)?;
+  let nums = file_decompressor.simple_decompress::<T>(src)?;
+  let num_array = num_array::to_java(env, &nums)?;
   let optional = env.call_static_method(
     "Ljava/util/Optional;",
     "of",
@@ -118,7 +107,7 @@ fn simple_decompress_inner(env: &mut JNIEnv, src: jbyteArray) -> Result<jobject>
       match_number_enum!(
           number_type,
           NumberType<T> => {
-              decompress_chunks::<T>(env, rest, file_decompressor)
+            decompress_chunks::<T>(env, rest, file_decompressor)
           }
       )
     }

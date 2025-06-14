@@ -9,39 +9,11 @@ use pyo3::types::{PyBytes, PyModule, PyNone};
 use pyo3::{pyfunction, wrap_pyfunction, Bound, PyObject, PyResult, Python};
 
 use pco::data_types::{Number, NumberType};
-use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+use pco::standalone::FileDecompressor;
 use pco::{match_number_enum, standalone, ChunkConfig};
 
 use crate::utils::pco_err_to_py;
 use crate::{utils, PyChunkConfig, PyProgress};
-
-fn decompress_chunks<'py, T: Number + Element>(
-  py: Python<'py>,
-  mut src: &[u8],
-  file_decompressor: FileDecompressor,
-) -> PyResult<Bound<'py, PyArray1<T>>> {
-  let res = py
-    .allow_threads(|| {
-      let n_hint = file_decompressor.n_hint();
-      let mut res: Vec<T> = Vec::with_capacity(n_hint);
-      while let MaybeChunkDecompressor::Some(mut chunk_decompressor) =
-        file_decompressor.chunk_decompressor::<T, &[u8]>(src)?
-      {
-        let initial_len = res.len(); // probably always zero to start, since we just created res
-        let remaining = chunk_decompressor.n();
-        unsafe {
-          res.set_len(initial_len + remaining);
-        }
-        let progress = chunk_decompressor.decompress(&mut res[initial_len..])?;
-        assert!(progress.finished);
-        src = chunk_decompressor.into_src();
-      }
-      Ok(res)
-    })
-    .map_err(pco_err_to_py)?;
-  let py_array = res.into_pyarray(py);
-  Ok(py_array)
-}
 
 fn simple_compress_generic<'py, T: Number + Element>(
   py: Python<'py>,
@@ -154,7 +126,12 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
         match_number_enum!(
           number_type,
           NumberType<T> => {
-            Ok(decompress_chunks::<T>(py, src, file_decompressor)?.to_object(py))
+            let res = py
+              .allow_threads(|| file_decompressor.simple_decompress::<T>(src))
+              .map_err(pco_err_to_py)?
+              .into_pyarray(py)
+              .to_object(py);
+            Ok(res)
           }
         )
       }

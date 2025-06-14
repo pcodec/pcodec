@@ -157,16 +157,8 @@ pub fn simpler_compress<T: Number>(nums: &[T], compression_level: usize) -> PcoR
 /// Will return an error if there are any compatibility, corruption,
 /// or insufficient data issues.
 pub fn simple_decompress<T: Number>(src: &[u8]) -> PcoResult<Vec<T>> {
-  let (file_decompressor, mut src) = FileDecompressor::new(src)?;
-
-  let mut res = Vec::with_capacity(file_decompressor.n_hint());
-  while let MaybeChunkDecompressor::Some(mut chunk_decompressor) =
-    file_decompressor.chunk_decompressor(src)?
-  {
-    chunk_decompressor.decompress_remaining_extend(&mut res)?;
-    src = chunk_decompressor.into_src();
-  }
-  Ok(res)
+  let (file_decompressor, src) = FileDecompressor::new(src)?;
+  file_decompressor.simple_decompress(src)
 }
 
 #[cfg(test)]

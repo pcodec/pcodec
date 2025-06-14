@@ -165,6 +165,26 @@ impl FileDecompressor {
     };
     Ok(MaybeChunkDecompressor::Some(res))
   }
+
+  /// Takes in compressed bytes (after the header, at the start of the chunks)
+  /// and returns a vector of numbers.
+  ///
+  /// Will return an error if there are any compatibility, corruption,
+  /// or insufficient data issues.
+  ///
+  /// This function exists (in addition to the [standalone
+  /// functions][crate::standalone]) because the user may want to peek at the
+  /// dtype, allowing them to know which type `<T>` to use here. There is no
+  /// analagous file compressor method because the user always knows the dtype
+  /// during compression.
+  pub fn simple_decompress<T: Number>(&self, mut src: &[u8]) -> PcoResult<Vec<T>> {
+    let mut res = Vec::with_capacity(self.n_hint());
+    while let MaybeChunkDecompressor::Some(mut chunk_decompressor) = self.chunk_decompressor(src)? {
+      chunk_decompressor.decompress_remaining_extend(&mut res)?;
+      src = chunk_decompressor.into_src();
+    }
+    Ok(res)
+  }
 }
 
 /// Holds metadata about a chunk and supports decompression.
