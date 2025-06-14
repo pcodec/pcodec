@@ -2,6 +2,8 @@ use crate::ans::spec::Spec;
 use crate::ans::{AnsState, CompactAnsState, Symbol};
 use crate::constants::CompactBitlen;
 
+// Using smallar types for AnsState and Bitlen to reduce the memory footprint
+// of Node. This improves performance, likely due to fewer cache misses.
 #[derive(Clone, Debug)]
 #[repr(align(8))]
 pub struct Node {
