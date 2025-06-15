@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
-use crate::constants::{Bitlen, CompactBitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
+use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
@@ -14,14 +14,14 @@ use crate::{ans, bit_reader, delta, read_write_uint};
 #[derive(Clone, Copy, Debug)]
 pub struct BinDecompressionInfo<L: Latent> {
   pub lower: L,
-  pub offset_bits: CompactBitlen,
+  pub offset_bits: Bitlen,
 }
 
 impl<L: Latent> BinDecompressionInfo<L> {
   fn new(bin: &Bin<L>) -> Self {
     Self {
       lower: bin.lower,
-      offset_bits: bin.offset_bits as CompactBitlen,
+      offset_bits: bin.offset_bits,
     }
   }
 }
@@ -43,7 +43,7 @@ impl<L: Latent> State<L> {
   fn set_scratch(&mut self, i: usize, offset_bit_idx: Bitlen, info: &BinDecompressionInfo<L>) {
     unsafe {
       *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
-      *self.offset_bits_scratch.get_unchecked_mut(i) = info.offset_bits as Bitlen;
+      *self.offset_bits_scratch.get_unchecked_mut(i) = info.offset_bits;
       *self.lowers_scratch.get_unchecked_mut(i) = info.lower;
     };
   }
@@ -96,8 +96,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << node.bits_to_read) - 1);
           let info = unsafe { infos.get_unchecked(node.symbol as usize) };
           self.state.set_scratch(i, offset_bit_idx, info);
-          bits_past_byte += node.bits_to_read as Bitlen;
-          offset_bit_idx += info.offset_bits as Bitlen;
+          bits_past_byte += node.bits_to_read;
+          offset_bit_idx += info.offset_bits;
           $state_idx = node.next_state_idx_base as AnsState + ans_val;
         };
       }
