@@ -130,8 +130,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << node.bits_to_read) - 1);
       let info = &self.infos[node.symbol as usize];
       self.state.set_scratch(i, offset_bit_idx, info);
-      bits_past_byte += node.bits_to_read;
-      offset_bit_idx += info.offset_bits;
+      bits_past_byte += node.bits_to_read as Bitlen;
+      offset_bit_idx += info.offset_bits as Bitlen;
       state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;
     }
 
