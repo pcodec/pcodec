@@ -9,6 +9,7 @@ mod spec;
 
 // must be u16 or larger
 // should not be exposed in public API
+pub(crate) type CompactAnsState = u16;
 pub(crate) type AnsState = u32;
 // must be u16 or larger
 // should not be exposed in public API
@@ -21,6 +22,7 @@ mod tests {
   use crate::bit_reader::BitReader;
   use crate::bit_writer::BitWriter;
   use crate::bits;
+  use crate::constants::Bitlen;
   use crate::errors::PcoResult;
 
   fn assert_recovers(spec: &Spec, symbols: Vec<Symbol>, expected_byte_len: usize) -> PcoResult<()> {
@@ -56,8 +58,8 @@ mod tests {
     for _ in 0..symbols.len() {
       let node = &decoder.nodes[state_idx as usize];
       decoded.push(node.symbol);
-      state_idx =
-        node.next_state_idx_base + unsafe { reader.read_uint::<AnsState>(node.bits_to_read) };
+      state_idx = node.next_state_idx_base as AnsState
+        + unsafe { reader.read_uint::<AnsState>(node.bits_to_read as Bitlen) };
     }
 
     assert_eq!(decoded, symbols);

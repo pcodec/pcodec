@@ -1,13 +1,15 @@
 use crate::ans::spec::Spec;
-use crate::ans::{AnsState, Symbol};
-use crate::constants::Bitlen;
+use crate::ans::{AnsState, CompactAnsState, Symbol};
+use crate::constants::CompactBitlen;
 
+// Using smallar types for AnsState and Bitlen to reduce the memory footprint
+// of Node. This improves performance, likely due to fewer cache misses.
 #[derive(Clone, Debug)]
-#[repr(align(16))]
+#[repr(align(8))]
 pub struct Node {
   pub symbol: Symbol,
-  pub next_state_idx_base: AnsState,
-  pub bits_to_read: Bitlen,
+  pub next_state_idx_base: CompactAnsState,
+  pub bits_to_read: CompactBitlen,
 }
 
 #[derive(Clone, Debug)]
@@ -22,16 +24,13 @@ impl Decoder {
     // x_s from Jarek Duda's paper
     let mut symbol_x_s = spec.symbol_weights.clone();
     for &symbol in &spec.state_symbols {
-      let mut next_state_base = symbol_x_s[symbol as usize] as AnsState;
-      let mut bits_to_read = 0;
-      while next_state_base < table_size as AnsState {
-        next_state_base *= 2;
-        bits_to_read += 1;
-      }
+      let next_state_base = symbol_x_s[symbol as usize] as AnsState;
+      let bits_to_read = next_state_base.leading_zeros() - (table_size as AnsState).leading_zeros();
+      let next_state_base = next_state_base << bits_to_read;
       nodes.push(Node {
         symbol,
-        next_state_idx_base: next_state_base - table_size as AnsState,
-        bits_to_read,
+        next_state_idx_base: (next_state_base - table_size as AnsState) as CompactAnsState,
+        bits_to_read: bits_to_read as CompactBitlen,
       });
       symbol_x_s[symbol as usize] += 1;
     }
