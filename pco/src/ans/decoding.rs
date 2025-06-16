@@ -13,27 +13,26 @@ pub struct Node(u64);
 //   pub bits_to_read: CompactBitlen,
 // }
 
-const SYMBOL_MASK: usize = u32::MAX as usize;
-const STATE_IDX_MASK: usize = (1 << 16) - 1;
-
 impl Node {
   fn new(symbol: Symbol, next_state_idx_base: AnsState, bits_to_read: Bitlen) -> Self {
-    Self((symbol as u64) | ((next_state_idx_base as u64) << 32) | ((bits_to_read as u64) << 48))
+    // Self((symbol as u64) | ((next_state_idx_base as u64) << 16) | ((bits_to_read as u64) << 32))
+    Self((bits_to_read as u64) | ((next_state_idx_base as u64) << 32) | ((symbol as u64) << 48))
   }
 
   #[inline]
   pub fn symbol(&self) -> usize {
-    self.0 as usize & SYMBOL_MASK
+    (self.0 >> 48) as usize
+    // self.0 as usize & SYMBOL_MASK
   }
 
   #[inline]
-  pub fn next_state_idx_base(&self) -> usize {
-    (self.0 >> 32) as usize & STATE_IDX_MASK
+  pub fn next_state_idx_base(&self) -> AnsState {
+    (self.0 >> 32) as AnsState & ((1 << 16) - 1)
   }
 
   #[inline]
   pub fn bits_to_read(&self) -> Bitlen {
-    (self.0 >> 48) as Bitlen
+    self.0 as Bitlen
   }
 }
 
