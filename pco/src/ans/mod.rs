@@ -9,7 +9,6 @@ mod spec;
 
 // must be u16 or larger
 // should not be exposed in public API
-pub(crate) type CompactAnsState = u16;
 pub(crate) type AnsState = u32;
 // must be u16 or larger
 // should not be exposed in public API

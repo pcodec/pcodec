@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
-use crate::constants::{Bitlen, CompactBitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
+use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
@@ -14,14 +14,14 @@ use crate::{ans, bit_reader, delta, read_write_uint};
 #[derive(Clone, Copy, Debug)]
 pub struct BinDecompressionInfo<L: Latent> {
   pub lower: L,
-  pub offset_bits: CompactBitlen,
+  pub offset_bits: Bitlen,
 }
 
 impl<L: Latent> BinDecompressionInfo<L> {
   fn new(bin: &Bin<L>) -> Self {
     Self {
       lower: bin.lower,
-      offset_bits: bin.offset_bits as CompactBitlen,
+      offset_bits: bin.offset_bits as Bitlen,
     }
   }
 }
@@ -93,12 +93,13 @@ impl<L: Latent> LatentPageDecompressor<L> {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
-          let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << node.bits_to_read) - 1);
-          let info = unsafe { infos.get_unchecked(node.symbol as usize) };
+          let bits_to_read = node.bits_to_read();
+          let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
+          let info = unsafe { infos.get_unchecked(node.symbol() as usize) };
           self.state.set_scratch(i, offset_bit_idx, info);
-          bits_past_byte += node.bits_to_read as Bitlen;
+          bits_past_byte += bits_to_read as Bitlen;
           offset_bit_idx += info.offset_bits as Bitlen;
-          $state_idx = node.next_state_idx_base as AnsState + ans_val;
+          $state_idx = node.next_state_idx_base() as AnsState + ans_val;
         };
       }
       handle_single_symbol!(0, state_idx_0);
@@ -127,12 +128,13 @@ impl<L: Latent> LatentPageDecompressor<L> {
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
       let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
-      let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << node.bits_to_read) - 1);
-      let info = &self.infos[node.symbol as usize];
+      let bits_to_read = node.bits_to_read();
+      let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
+      let info = &self.infos[node.symbol() as usize];
       self.state.set_scratch(i, offset_bit_idx, info);
-      bits_past_byte += node.bits_to_read as Bitlen;
+      bits_past_byte += bits_to_read as Bitlen;
       offset_bit_idx += info.offset_bits as Bitlen;
-      state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;
+      state_idxs[j] = node.next_state_idx_base() as AnsState + ans_val;
     }
 
     reader.stale_byte_idx = stale_byte_idx;
