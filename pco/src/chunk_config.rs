@@ -188,20 +188,20 @@ impl PagingSpec {
         // page boundaries, we are a bit careful about keeping track of remainders to
         // exactly match the rounding behavior of the previous code.  See:
         // https://github.com/pcodec/pcodec/issues/298
-        let rem_inc = n % *max_page_n;
-        let inc = if rem_inc == 0 {
-          *max_page_n
-        } else {
-          *max_page_n - 1
-        };
+        if n == 0 {
+          return Ok(Vec::new());
+        }
+        let n_pages = n.div_ceil(*max_page_n);
+        let quot_inc = n.div_ceil(n_pages);
+        let rem_inc = n % n_pages;
         let mut res = Vec::new();
         let mut start = 0;
         let mut rem = 0;
         while start < n {
-          let mut end = start + inc;
+          let mut end = start + quot_inc;
           rem += rem_inc;
-          if rem >= *max_page_n {
-            rem -= *max_page_n;
+          if rem >= n_pages {
+            rem -= n_pages;
             end += 1;
           }
           end = min(end, n);
