@@ -189,7 +189,11 @@ impl PagingSpec {
         // exactly match the rounding behavior of the previous code.  See:
         // https://github.com/pcodec/pcodec/issues/298
         let rem_inc = n % *max_page_n;
-        let inc = if rem_inc == 0 { *max_page_n } else { *max_page_n - 1 };
+        let inc = if rem_inc == 0 {
+          *max_page_n
+        } else {
+          *max_page_n - 1
+        };
         let mut res = Vec::new();
         let mut start = 0;
         let mut rem = 0;
