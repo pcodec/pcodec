@@ -1,6 +1,7 @@
 use crate::constants::{Bitlen, DEFAULT_MAX_PAGE_N};
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
+use std::cmp::min;
 
 /// Specifies how Pco should choose a [`mode`][crate::metadata::Mode] to compress this
 /// chunk of data.
@@ -181,11 +182,25 @@ impl PagingSpec {
       // And the 2nd idea has only shown mixed/negative results, so I'm leaving
       // this as-is.
       PagingSpec::EqualPagesUpTo(max_page_n) => {
-        let n_pages = n.div_ceil(*max_page_n);
+        // Conceptually, we want to iterate over ceil(n / max_page_n) pages, each except
+        // the last one having size equal or almost-equal to max_page_n.  For backward
+        // compatibility with a previous version that used integer division to compute the
+        // page boundaries, we are a bit careful about keeping track of remainders to
+        // exactly match the rounding behavior of the previous code.  See:
+        // https://github.com/pcodec/pcodec/issues/298
+        let rem_inc = n % *max_page_n;
+        let inc = if rem_inc == 0 { *max_page_n } else { *max_page_n - 1 };
         let mut res = Vec::new();
         let mut start = 0;
-        for i in 0..n_pages {
-          let end = ((i + 1) * n) / n_pages;
+        let mut rem = 0;
+        while start < n {
+          let mut end = start + inc;
+          rem += rem_inc;
+          if rem >= *max_page_n {
+            rem -= *max_page_n;
+            end += 1;
+          }
+          end = min(end, n);
           res.push(end - start);
           start = end;
         }
