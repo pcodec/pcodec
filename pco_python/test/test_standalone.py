@@ -7,6 +7,7 @@ from pcodec import (
     PagingSpec,
     standalone,
 )
+from pathlib import Path
 
 np.random.seed(12345)
 all_lengths = (
@@ -150,3 +151,11 @@ def test_compression_float_mode_spec_options(mode_spec):
 
     # check that the decompressed data is correct
     np.testing.assert_array_equal(data, out)
+
+
+def test_decompress_without_n_hint():
+    # old files didn't have n_hint
+    with open(Path(__file__).parent / "../../pco/assets/v0_0_0_classic.pco", "rb") as f:
+        compressed = f.read()
+
+    assert len(standalone.simple_decompress(compressed)) == 2000
