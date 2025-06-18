@@ -1,7 +1,6 @@
 use crate::constants::{Bitlen, DEFAULT_MAX_PAGE_N};
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
-use std::cmp::min;
 
 /// Specifies how Pco should choose a [`mode`][crate::metadata::Mode] to compress this
 /// chunk of data.
@@ -182,32 +181,24 @@ impl PagingSpec {
       // And the 2nd idea has only shown mixed/negative results, so I'm leaving
       // this as-is.
       PagingSpec::EqualPagesUpTo(max_page_n) => {
-        // Conceptually, we want to iterate over ceil(n / max_page_n) pages, each except
-        // the last one having size equal or almost-equal to max_page_n.  For backward
-        // compatibility with a previous version that used integer division to compute the
-        // page boundaries, we are a bit careful about keeping track of remainders to
-        // exactly match the rounding behavior of the previous code.  See:
-        // https://github.com/pcodec/pcodec/issues/298
+        // Create a sequence of page lengths satisfying these constraints:
+        // * All pages have length at most `max_page_n`
+        // * The page lengths are approximately equal
+        // * As few pages as possible, within the above two constraints.
         if n == 0 {
           return Ok(Vec::new());
         }
         let n_pages = n.div_ceil(*max_page_n);
-        let quot_inc = n / n_pages;
-        let rem_inc = n % n_pages;
-        let mut res = Vec::new();
-        let mut start = 0;
-        let mut rem = 0;
-        while start < n {
-          let mut end = start + quot_inc;
-          rem += rem_inc;
-          if rem >= n_pages {
-            rem -= n_pages;
-            end += 1;
-          }
-          end = min(end, n);
-          res.push(end - start);
-          start = end;
+        let page_n_low = n / n_pages;
+        let page_n_high = page_n_low + 1;
+        let r = n % n_pages;
+        debug_assert!(r == 0 || page_n_high <= *max_page_n);
+        let mut res = Vec::with_capacity(n_pages);
+        unsafe {
+          res.set_len(n_pages);
         }
+        res[..r].fill(page_n_high);
+        res[r..].fill(page_n_low);
         res
       }
       PagingSpec::Exact(n_per_page) => n_per_page.to_vec(),
