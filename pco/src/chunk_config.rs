@@ -193,12 +193,8 @@ impl PagingSpec {
         let page_n_high = page_n_low + 1;
         let r = n % n_pages;
         debug_assert!(r == 0 || page_n_high <= *max_page_n);
-        let mut res = Vec::with_capacity(n_pages);
-        unsafe {
-          res.set_len(n_pages);
-        }
+        let mut res = vec![page_n_low; n_pages];
         res[..r].fill(page_n_high);
-        res[r..].fill(page_n_low);
         res
       }
       PagingSpec::Exact(n_per_page) => n_per_page.to_vec(),
