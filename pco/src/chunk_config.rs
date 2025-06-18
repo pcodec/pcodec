@@ -192,7 +192,7 @@ impl PagingSpec {
           return Ok(Vec::new());
         }
         let n_pages = n.div_ceil(*max_page_n);
-        let quot_inc = n.div_ceil(n_pages);
+        let quot_inc = n / n_pages;
         let rem_inc = n % n_pages;
         let mut res = Vec::new();
         let mut start = 0;
