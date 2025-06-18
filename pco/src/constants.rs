@@ -2,7 +2,7 @@
 // u32 is performant because it aligns with other things and doesn't require
 // masking
 // exposed in public API
-pub(crate) type CompactBitlen = u8;
+// pub(crate) type CompactBitlen = u8;
 pub(crate) type Bitlen = u32;
 // must be u32 or larger
 // exposed in public API

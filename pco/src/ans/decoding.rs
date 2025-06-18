@@ -1,6 +1,5 @@
 use crate::ans::spec::Spec;
 use crate::ans::{AnsState, CompactAnsState, CompactSymbol};
-use crate::constants::CompactBitlen;
 use crate::data_types::Latent;
 use crate::metadata::Bin;
 
@@ -9,11 +8,12 @@ use crate::metadata::Bin;
 #[derive(Clone, Debug)]
 #[repr(align(8))]
 pub struct Node {
+  pub offset_bits_bits_to_read: u32,
   pub symbol: CompactSymbol,
   pub next_state_idx_base: CompactAnsState,
   // pub ans_part: CompactAnsState,
-  pub offset_bits: CompactBitlen,
-  pub bits_to_read: CompactBitlen,
+  // pub offset_bits: CompactBitlen,
+  // pub bits_to_read: CompactBitlen,
 }
 
 #[derive(Clone, Debug)]
@@ -31,12 +31,18 @@ impl Decoder {
       let next_state_base = symbol_x_s[symbol as usize] as AnsState;
       let bits_to_read = next_state_base.leading_zeros() - (table_size as AnsState).leading_zeros();
       let next_state_base = next_state_base << bits_to_read;
+      let offset_bits = if bins.len() > symbol as usize {
+        bins[symbol as usize].offset_bits
+      } else {
+        0
+      };
       nodes.push(Node {
         symbol: symbol as CompactSymbol,
         next_state_idx_base: (next_state_base - table_size as AnsState) as CompactAnsState,
-        offset_bits: bins[symbol as usize].offset_bits as CompactBitlen,
-        bits_to_read: bits_to_read as CompactBitlen,
+        // offset_bits: bins[symbol as usize].offset_bits as CompactBitlen,
+        // bits_to_read: bits_to_read as CompactBitlen,
         // ans_part: ((1 << bits_to_read) - 1) as CompactAnsState,
+        offset_bits_bits_to_read: (offset_bits << 16) | bits_to_read,
       });
       symbol_x_s[symbol as usize] += 1;
     }
