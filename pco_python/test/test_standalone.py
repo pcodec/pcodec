@@ -68,27 +68,38 @@ def test_simple_decompress_into_errors():
     compressed = standalone.simple_compress(data, ChunkConfig())
 
     out = np.zeros(100).astype(np.float64)
-    with pytest.raises(RuntimeError, match="data type byte does not match"):
+    with pytest.raises(RuntimeError, match="does not match chunk's number type"):
         standalone.simple_decompress_into(compressed, out)
 
 
 def test_simple_decompress_errors():
     """Test possible error states for standalone.simple_decompress"""
-    data = np.random.uniform(size=100).astype(np.float32)
-    compressed = bytearray(standalone.simple_compress(data, ChunkConfig()))
+    test_file_path = Path(__file__).parent / "../../pco/assets/v0_4_5_uniform_type.pco"
+    with open(test_file_path, "rb") as f:
+        compressed = bytearray(f.read())
 
+    # byte 5 is the uniform number type
+    # byte 8 is the first chunk's number type
     truncated = compressed[:8]
-    with pytest.raises(RuntimeError, match="empty bytes"):
+    with pytest.raises(RuntimeError, match="InsufficientData"):
         standalone.simple_decompress(bytes(truncated))
 
-    # corrupt the data with unknown dtype byte
-    # (is this safe to hard code? could the length of the header change in future version?)
     compressed[8] = 99
-    with pytest.raises(RuntimeError, match="unrecognized dtype byte"):
+    with pytest.raises(
+        RuntimeError,
+        match="chunk's number type of 99 does not match file's uniform number type of U32",
+    ):
         standalone.simple_decompress(bytes(compressed))
 
+    # new behavior when using uniform type: returns an empty array.
     # this happens if the user passed in a file with no chunks.
     compressed[8] = 0
+    np.testing.assert_array_equal(
+        standalone.simple_decompress(bytes(compressed)), np.array([], dtype=np.uint32)
+    )
+
+    # files not using uniform dtypes store no dtype and return None instead.
+    compressed[5] = 0
     assert standalone.simple_decompress(bytes(compressed)) is None
 
 

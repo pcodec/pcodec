@@ -137,7 +137,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
       }
       Termination => Ok(PyNone::get(py).to_object(py)),
       Unknown(other) => Err(PyRuntimeError::new_err(format!(
-        "unrecognized dtype byte {:?}",
+        "unrecognized number type byte {:?}",
         other,
       ))),
     }
