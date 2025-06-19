@@ -4,7 +4,7 @@ use crate::constants::Bitlen;
 
 // Using smallar types for AnsState and Bitlen to reduce the memory footprint
 // of Node. This improves performance, likely due to fewer cache misses.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Node(u64);
 // #[repr(align(8))]
 // pub struct Node {
@@ -20,19 +20,31 @@ impl Node {
   }
 
   #[inline]
-  pub fn symbol(&self) -> usize {
+  pub fn symbol(self) -> usize {
     (self.0 >> 48) as usize
     // self.0 as usize & SYMBOL_MASK
+    // let foo = &self.0 as *const u64 as *const u16;
+    // unsafe {
+    //   *(foo.add(3)) as usize // TODO this won't work on bigendian systems
+    // }
   }
 
   #[inline]
-  pub fn next_state_idx_base(&self) -> AnsState {
+  pub fn next_state_idx_base(self) -> AnsState {
     (self.0 >> 32) as AnsState & ((1 << 16) - 1)
+    // let foo = &self.0 as *const u64 as *const u16;
+    // unsafe {
+    //   *(foo.add(2)) as AnsState // TODO this won't work on bigendian systems
+    // }
   }
 
   #[inline]
-  pub fn bits_to_read(&self) -> Bitlen {
+  pub fn bits_to_read(self) -> Bitlen {
     self.0 as Bitlen
+    // let foo = &self.0 as *const u64;
+    // unsafe {
+    //   *(foo as *const Bitlen) // TODO this won't work on bigendian systems
+    // }
   }
 }
 
