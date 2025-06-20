@@ -181,14 +181,20 @@ impl PagingSpec {
       // And the 2nd idea has only shown mixed/negative results, so I'm leaving
       // this as-is.
       PagingSpec::EqualPagesUpTo(max_page_n) => {
-        let n_pages = n.div_ceil(*max_page_n);
-        let mut res = Vec::new();
-        let mut start = 0;
-        for i in 0..n_pages {
-          let end = ((i + 1) * n) / n_pages;
-          res.push(end - start);
-          start = end;
+        // Create a sequence of page lengths satisfying these constraints:
+        // * All pages have length at most `max_page_n`
+        // * The page lengths are approximately equal
+        // * As few pages as possible, within the above two constraints.
+        if n == 0 {
+          return Ok(Vec::new());
         }
+        let n_pages = n.div_ceil(*max_page_n);
+        let page_n_low = n / n_pages;
+        let page_n_high = page_n_low + 1;
+        let r = n % n_pages;
+        debug_assert!(r == 0 || page_n_high <= *max_page_n);
+        let mut res = vec![page_n_low; n_pages];
+        res[..r].fill(page_n_high);
         res
       }
       PagingSpec::Exact(n_per_page) => n_per_page.to_vec(),
