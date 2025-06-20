@@ -76,15 +76,15 @@ impl<L: Latent> LatentPageDecompressor<L> {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
-          let bits_to_read = node.bits_to_read;
+          let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
           let lower = *unsafe { bin_lowers.get_unchecked(node.symbol as usize) };
           let offset_bits = node.offset_bits as Bitlen;
           self
             .state
             .set_scratch(i, offset_bit_idx, offset_bits, lower);
-          bits_past_byte += node.bits_to_read as Bitlen;
-          offset_bit_idx += node.offset_bits as Bitlen;
+          bits_past_byte += bits_to_read;
+          offset_bit_idx += offset_bits;
           $state_idx = node.next_state_idx_base as AnsState + ans_val;
         };
       }
