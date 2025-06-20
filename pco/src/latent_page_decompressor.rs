@@ -9,19 +9,6 @@ use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
-// Default here is meaningless and should only be used to fill in empty
-// vectors.
-#[derive(Clone, Copy, Debug)]
-pub struct BinDecompressionInfo<L: Latent> {
-  pub lower: L,
-}
-
-impl<L: Latent> BinDecompressionInfo<L> {
-  fn new(bin: &Bin<L>) -> Self {
-    Self { lower: bin.lower }
-  }
-}
-
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
   // scratch needs no backup
@@ -50,7 +37,7 @@ impl<L: Latent> State<L> {
 pub struct LatentPageDecompressor<L: Latent> {
   // known information about this latent variable
   u64s_per_offset: usize,
-  infos: Vec<BinDecompressionInfo<L>>,
+  bin_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
@@ -71,18 +58,15 @@ impl<L: Latent> LatentPageDecompressor<L> {
     // ANS_INTERLEAVING == 4.
     let src = reader.src;
     let mut stale_byte_idx = reader.stale_byte_idx;
-    // let mut bits_past_byte = reader.bits_past_byte;
-    // let mut offset_bit_idx = 0;
-    let mut offset_bit_idx_bits_past_byte: u32 = reader.bits_past_byte;
+    let mut bits_past_byte = reader.bits_past_byte;
+    let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let infos = self.infos.as_slice();
+    let bin_lowers = self.bin_lowers.as_slice();
     let ans_nodes = self.decoder.nodes.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
-      stale_byte_idx += (offset_bit_idx_bits_past_byte & 0xFFFF) as usize / 8;
-      // stale_byte_idx += bits_past_byte as usize / 8;
-      offset_bit_idx_bits_past_byte &= 0xFFFF_0007;
-      // bits_past_byte %= 8;
+      stale_byte_idx += bits_past_byte as usize / 8;
+      bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
       // I hate that I have to do this with a macro, but it gives a serious
       // performance gain. If I use a [AnsState; 4] for the state_idxs instead
@@ -92,18 +76,15 @@ impl<L: Latent> LatentPageDecompressor<L> {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
-          let ans_val = (packed >> (offset_bit_idx_bits_past_byte & 0xFFFF)) as AnsState
-            & ((1 << (node.offset_bits_bits_to_read & 0xFFFF)) - 1);
-          let info = unsafe { infos.get_unchecked(node.symbol as usize) };
-          self.state.set_scratch(
-            i,
-            offset_bit_idx_bits_past_byte >> 16,
-            node.offset_bits_bits_to_read >> 16,
-            info.lower,
-          );
-          offset_bit_idx_bits_past_byte += node.offset_bits_bits_to_read;
-          // bits_past_byte += node.bits_to_read as Bitlen;
-          // offset_bit_idx += node.offset_bits as Bitlen;
+          let bits_to_read = node.bits_to_read;
+          let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
+          let lower = *unsafe { bin_lowers.get_unchecked(node.symbol as usize) };
+          let offset_bits = node.offset_bits as Bitlen;
+          self
+            .state
+            .set_scratch(i, offset_bit_idx, offset_bits, lower);
+          bits_past_byte += node.bits_to_read as Bitlen;
+          offset_bit_idx += node.offset_bits as Bitlen;
           $state_idx = node.next_state_idx_base as AnsState + ans_val;
         };
       }
@@ -114,8 +95,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     }
 
     reader.stale_byte_idx = stale_byte_idx;
-    reader.bits_past_byte = offset_bit_idx_bits_past_byte & 0xFFFF;
-    // reader.bits_past_byte = bits_past_byte;
+    reader.bits_past_byte = bits_past_byte;
     self.state.ans_state_idxs = [state_idx_0, state_idx_1, state_idx_2, state_idx_3];
   }
 
@@ -125,35 +105,29 @@ impl<L: Latent> LatentPageDecompressor<L> {
   unsafe fn decompress_ans_symbols(&mut self, reader: &mut BitReader, batch_n: usize) {
     let src = reader.src;
     let mut stale_byte_idx = reader.stale_byte_idx;
-    // let mut bits_past_byte = reader.bits_past_byte;
-    // let mut offset_bit_idx = 0;
-    let mut offset_bit_idx_bits_past_byte: u32 = reader.bits_past_byte;
+    let mut bits_past_byte = reader.bits_past_byte;
+    let mut offset_bit_idx = 0;
     let mut state_idxs = self.state.ans_state_idxs;
     for i in 0..batch_n {
       let j = i % ANS_INTERLEAVING;
-      stale_byte_idx += (offset_bit_idx_bits_past_byte & 0xFFFF) as usize / 8;
-      // stale_byte_idx += bits_past_byte as usize / 8;
-      offset_bit_idx_bits_past_byte &= 0xFFFF_0007;
-      // bits_past_byte %= 8;
+      stale_byte_idx += bits_past_byte as usize / 8;
+      bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
       let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
-      let ans_val = (packed >> (offset_bit_idx_bits_past_byte & 0xFFFF)) as AnsState
-        & ((1 << (node.offset_bits_bits_to_read & 0xFFFF)) - 1);
-      let info = &self.infos[node.symbol as usize];
-      self.state.set_scratch(
-        i,
-        offset_bit_idx_bits_past_byte >> 16,
-        node.offset_bits_bits_to_read >> 16,
-        info.lower,
-      );
-      offset_bit_idx_bits_past_byte += node.offset_bits_bits_to_read;
-      // bits_past_byte += node.bits_to_read as Bitlen;
-      // offset_bit_idx += node.offset_bits as Bitlen;
+      let bits_to_read = node.bits_to_read as Bitlen;
+      let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
+      let lower = self.bin_lowers[node.symbol as usize];
+      let offset_bits = node.offset_bits as Bitlen;
+      self
+        .state
+        .set_scratch(i, offset_bit_idx, offset_bits, lower);
+      bits_past_byte += bits_to_read;
+      offset_bit_idx += offset_bits;
       state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;
     }
 
     reader.stale_byte_idx = stale_byte_idx;
-    reader.bits_past_byte = offset_bit_idx_bits_past_byte & 0xFFFF;
+    reader.bits_past_byte = bits_past_byte;
     self.state.ans_state_idxs = state_idxs;
   }
 
@@ -300,13 +274,11 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let u64s_per_offset = read_write_uint::calc_max_u64s(bins::max_offset_bits(bins));
-    let infos = bins
-      .iter()
-      .map(BinDecompressionInfo::new)
-      .collect::<Vec<_>>();
+    let bin_lowers = bins.iter().map(|bin| bin.lower).collect();
+    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let decoder = ans::Decoder::new(&ans_spec, &bins);
+    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
       DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
@@ -346,7 +318,7 @@ impl DynLatentPageDecompressor {
 
     let lpd = LatentPageDecompressor {
       u64s_per_offset,
-      infos,
+      bin_lowers,
       needs_ans,
       decoder,
       delta_encoding,

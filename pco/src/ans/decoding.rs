@@ -1,19 +1,22 @@
 use crate::ans::spec::Spec;
 use crate::ans::{AnsState, CompactAnsState, CompactSymbol};
+use crate::constants::Bitlen;
 use crate::data_types::Latent;
 use crate::metadata::Bin;
 
-// Using smallar types for AnsState and Bitlen to reduce the memory footprint
-// of Node. This improves performance, likely due to fewer cache misses.
+// Using smaller types to reduce the memory footprint of Node. This improves
+// performance when the table gets large, likely due to fewer cache misses.
+//
+// Also note that we include the bin's offset_bits in the struct, even though it
+// isn't a part of ANS coding; it just fits. We still have to look up the bin's
+// lower bound from a separate table.  This is another performance hack.
 #[derive(Clone, Debug)]
 #[repr(align(8))]
 pub struct Node {
-  pub offset_bits_bits_to_read: u32,
-  pub symbol: CompactSymbol,
-  pub next_state_idx_base: CompactAnsState,
-  // pub ans_part: CompactAnsState,
-  // pub offset_bits: CompactBitlen,
-  // pub bits_to_read: CompactBitlen,
+  pub symbol: u16,
+  pub next_state_idx_base: u16,
+  pub offset_bits: u16,
+  pub bits_to_read: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -22,7 +25,7 @@ pub struct Decoder {
 }
 
 impl Decoder {
-  pub fn new<L: Latent>(spec: &Spec, bins: &[Bin<L>]) -> Self {
+  pub fn new(spec: &Spec, bin_offset_bits: &[Bitlen]) -> Self {
     let table_size = spec.table_size();
     let mut nodes = Vec::with_capacity(table_size);
     // x_s from Jarek Duda's paper
@@ -31,18 +34,14 @@ impl Decoder {
       let next_state_base = symbol_x_s[symbol as usize] as AnsState;
       let bits_to_read = next_state_base.leading_zeros() - (table_size as AnsState).leading_zeros();
       let next_state_base = next_state_base << bits_to_read;
-      let offset_bits = if bins.len() > symbol as usize {
-        bins[symbol as usize].offset_bits
-      } else {
-        0
-      };
+      // In a degenerate case there are 0 bins, but the tANS table always has at
+      // least one node, so we handle that by using 0 offset bits.
+      let offset_bits = bin_offset_bits.get(symbol as usize).cloned().unwrap_or(0);
       nodes.push(Node {
-        symbol: symbol as CompactSymbol,
-        next_state_idx_base: (next_state_base - table_size as AnsState) as CompactAnsState,
-        // offset_bits: bins[symbol as usize].offset_bits as CompactBitlen,
-        // bits_to_read: bits_to_read as CompactBitlen,
-        // ans_part: ((1 << bits_to_read) - 1) as CompactAnsState,
-        offset_bits_bits_to_read: (offset_bits << 16) | bits_to_read,
+        symbol: symbol as u16,
+        next_state_idx_base: (next_state_base - table_size as AnsState) as u16,
+        offset_bits: offset_bits as u16,
+        bits_to_read: bits_to_read as u16,
       });
       symbol_x_s[symbol as usize] += 1;
     }
