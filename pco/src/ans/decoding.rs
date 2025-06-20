@@ -4,6 +4,11 @@ use crate::constants::Bitlen;
 
 // Using smaller types to reduce the memory footprint of Node. This improves
 // performance when the table gets large, likely due to fewer cache misses.
+// All these values fit within u16 cleanly:
+// * symbol < 2^15 since we encode n_bins with 15 bits
+// * next_state_idx_base < 2^16 since we encode ANS table size log2 with 4 bits
+// * offset_bits <= the largest number size, currently 64 bits
+// * bits_to_read <= 16, the max ANS table size log2.
 //
 // Also note that we include the bin's offset_bits in the struct, even though it
 // isn't a part of ANS coding; it just fits. We still have to look up the bin's
