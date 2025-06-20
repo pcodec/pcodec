@@ -50,14 +50,16 @@ mod tests {
     // DECODE
     compressed.extend(&vec![0; 100]);
     let mut reader = BitReader::new(&compressed, expected_byte_len, 0);
-    let decoder = Decoder::new(spec);
+    let max_symbol = symbols.iter().max().copied().unwrap();
+    let offset_bits = vec![0; max_symbol as usize + 1];
+    let decoder = Decoder::new(spec, &offset_bits);
     let mut decoded = Vec::new();
     let mut state_idx = final_state - table_size;
     for _ in 0..symbols.len() {
       let node = &decoder.nodes[state_idx as usize];
-      decoded.push(node.symbol);
+      decoded.push(node.symbol());
       state_idx =
-        node.next_state_idx_base + unsafe { reader.read_uint::<AnsState>(node.bits_to_read) };
+        node.next_state_idx_base() + unsafe { reader.read_uint::<AnsState>(node.bits_to_read()) };
     }
 
     assert_eq!(decoded, symbols);
