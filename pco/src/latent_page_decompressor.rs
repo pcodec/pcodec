@@ -77,14 +77,15 @@ impl<L: Latent> LatentPageDecompressor<L> {
     // ANS_INTERLEAVING == 4.
     let src = reader.src;
     let mut stale_byte_idx = reader.stale_byte_idx;
-    let mut offset_bit_idx_and_bits_past_byte = reader.bits_past_byte;
+    let mut offset_bit_idx = 0;
+    let mut bits_past_byte = reader.bits_past_byte;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
     let infos = self.infos.as_slice();
     let ans_nodes = self.decoder.nodes.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
-      stale_byte_idx += offset_bit_idx_and_bits_past_byte as u16 as usize / 8;
-      offset_bit_idx_and_bits_past_byte &= 0xFFFF_0007;
+      stale_byte_idx += bits_past_byte as usize / 8;
+      bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
       // I hate that I have to do this with a macro, but it gives a serious
       // performance gain. If I use a [AnsState; 4] for the state_idxs instead
@@ -94,16 +95,13 @@ impl<L: Latent> LatentPageDecompressor<L> {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
-          let ans_val = (packed >> (offset_bit_idx_and_bits_past_byte as u16 as u32)) as AnsState
-            & ((1 << node.bits_to_read()) - 1);
+          let bits_to_read = node.bits_to_read();
+          let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
           let info = unsafe { infos.get_unchecked(node.symbol() as usize) };
-          self.state.set_scratch(
-            i,
-            offset_bit_idx_and_bits_past_byte >> 16,
-            node.offset_bits(),
-            info,
-          );
-          offset_bit_idx_and_bits_past_byte += node.offset_bits_and_bits_to_read;
+          let offset_bits = node.offset_bits();
+          self.state.set_scratch(i, offset_bit_idx, offset_bits, info);
+          offset_bit_idx += offset_bits;
+          bits_past_byte += bits_to_read;
           $state_idx = node.next_state_idx_base() + ans_val;
         };
       }
@@ -114,7 +112,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     }
 
     reader.stale_byte_idx = stale_byte_idx;
-    reader.bits_past_byte = offset_bit_idx_and_bits_past_byte as u16 as u32;
+    reader.bits_past_byte = bits_past_byte;
     self.state.ans_state_idxs = [state_idx_0, state_idx_1, state_idx_2, state_idx_3];
   }
 
