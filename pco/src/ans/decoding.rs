@@ -1,8 +1,6 @@
 use crate::ans::spec::Spec;
-use crate::ans::{AnsState, CompactAnsState, CompactSymbol};
+use crate::ans::AnsState;
 use crate::constants::Bitlen;
-use crate::data_types::Latent;
-use crate::metadata::Bin;
 
 // Using smaller types to reduce the memory footprint of Node. This improves
 // performance when the table gets large, likely due to fewer cache misses.
