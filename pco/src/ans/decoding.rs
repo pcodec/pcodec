@@ -5,26 +5,34 @@ use crate::constants::Bitlen;
 #[derive(Clone, Debug)]
 #[repr(align(8))]
 pub struct Node {
-  pub symbol_and_next_state_idx_base: u32,
-  pub offset_bits_and_bits_to_read: u32,
+  // pub symbol_and_next_state_idx_base: u32,
+  // pub offset_bits_and_bits_to_read: u32,
+  pub symbol: u16,
+  pub next_state_idx_base: u16,
+  pub offset_bits: u16,
+  pub bits_to_read: u16,
 }
 
 impl Node {
   #[inline]
   pub fn symbol(&self) -> Symbol {
-    self.symbol_and_next_state_idx_base >> 16
+    self.symbol as Symbol
+    // self.symbol_and_next_state_idx_base >> 16
   }
   #[inline]
   pub fn next_state_idx_base(&self) -> AnsState {
-    self.symbol_and_next_state_idx_base as u16 as u32
+    self.next_state_idx_base as AnsState
+    // self.symbol_and_next_state_idx_base as u16 as u32
   }
   #[inline]
   pub fn offset_bits(&self) -> Bitlen {
-    self.offset_bits_and_bits_to_read >> 16
+    self.offset_bits as Bitlen
+    // self.offset_bits_and_bits_to_read >> 16
   }
   #[inline]
   pub fn bits_to_read(&self) -> Bitlen {
-    self.offset_bits_and_bits_to_read as u16 as u32
+    self.bits_to_read as Bitlen
+    // self.offset_bits_and_bits_to_read as u16 as u32
   }
 }
 
@@ -46,13 +54,19 @@ impl Decoder {
         next_state_base *= 2;
         bits_to_read += 1;
       }
-      let symbol_and_next_state_idx_base =
-        (symbol << 16) + (next_state_base - table_size as AnsState);
-      let offset_bits_and_bits_to_read =
-        (bin_offset_bits.get(symbol as usize).cloned().unwrap_or(0) << 16) + bits_to_read;
+      let next_state_idx_base = next_state_base - table_size as AnsState;
+      // let symbol_and_next_state_idx_base =
+      //   (symbol << 16) + next_state_idx_base;
+      let offset_bits = bin_offset_bits.get(symbol as usize).cloned().unwrap_or(0);
+      // let offset_bits_and_bits_to_read =
+      //   (offset_bits << 16) + bits_to_read;
       nodes.push(Node {
-        symbol_and_next_state_idx_base,
-        offset_bits_and_bits_to_read,
+        symbol: symbol as u16,
+        next_state_idx_base: next_state_idx_base as u16,
+        offset_bits: offset_bits as u16,
+        bits_to_read: bits_to_read as u16,
+        // symbol_and_next_state_idx_base,
+        // offset_bits_and_bits_to_read,
       });
       symbol_x_s[symbol as usize] += 1;
     }
