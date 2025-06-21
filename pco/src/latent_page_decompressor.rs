@@ -9,23 +9,6 @@ use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
-// Default here is meaningless and should only be used to fill in empty
-// vectors.
-#[derive(Clone, Copy, Debug)]
-pub struct BinDecompressionInfo<L: Latent> {
-  pub lower: L,
-  pub offset_bits: Bitlen,
-}
-
-impl<L: Latent> BinDecompressionInfo<L> {
-  fn new(bin: &Bin<L>) -> Self {
-    Self {
-      lower: bin.lower,
-      offset_bits: bin.offset_bits,
-    }
-  }
-}
-
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
   // scratch needs no backup
@@ -40,11 +23,11 @@ struct State<L: Latent> {
 
 impl<L: Latent> State<L> {
   #[inline]
-  fn set_scratch(&mut self, i: usize, offset_bit_idx: Bitlen, info: &BinDecompressionInfo<L>) {
+  fn set_scratch(&mut self, i: usize, offset_bit_idx: Bitlen, offset_bits: Bitlen, lower: L) {
     unsafe {
       *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
-      *self.offset_bits_scratch.get_unchecked_mut(i) = info.offset_bits;
-      *self.lowers_scratch.get_unchecked_mut(i) = info.lower;
+      *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
+      *self.lowers_scratch.get_unchecked_mut(i) = lower;
     };
   }
 }
@@ -54,7 +37,7 @@ impl<L: Latent> State<L> {
 pub struct LatentPageDecompressor<L: Latent> {
   // known information about this latent variable
   u64s_per_offset: usize,
-  infos: Vec<BinDecompressionInfo<L>>,
+  bin_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
@@ -79,7 +62,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let infos = self.infos.as_slice();
+    let bin_lowers = self.bin_lowers.as_slice();
     let ans_nodes = self.decoder.nodes.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
@@ -93,12 +76,16 @@ impl<L: Latent> LatentPageDecompressor<L> {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
-          let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << node.bits_to_read) - 1);
-          let info = unsafe { infos.get_unchecked(node.symbol as usize) };
-          self.state.set_scratch(i, offset_bit_idx, info);
-          bits_past_byte += node.bits_to_read;
-          offset_bit_idx += info.offset_bits;
-          $state_idx = node.next_state_idx_base + ans_val;
+          let bits_to_read = node.bits_to_read as Bitlen;
+          let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
+          let lower = *unsafe { bin_lowers.get_unchecked(node.symbol as usize) };
+          let offset_bits = node.offset_bits as Bitlen;
+          self
+            .state
+            .set_scratch(i, offset_bit_idx, offset_bits, lower);
+          bits_past_byte += bits_to_read;
+          offset_bit_idx += offset_bits;
+          $state_idx = node.next_state_idx_base as AnsState + ans_val;
         };
       }
       handle_single_symbol!(0, state_idx_0);
@@ -127,12 +114,16 @@ impl<L: Latent> LatentPageDecompressor<L> {
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
       let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
-      let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << node.bits_to_read) - 1);
-      let info = &self.infos[node.symbol as usize];
-      self.state.set_scratch(i, offset_bit_idx, info);
-      bits_past_byte += node.bits_to_read;
-      offset_bit_idx += info.offset_bits;
-      state_idxs[j] = node.next_state_idx_base + ans_val;
+      let bits_to_read = node.bits_to_read as Bitlen;
+      let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
+      let lower = self.bin_lowers[node.symbol as usize];
+      let offset_bits = node.offset_bits as Bitlen;
+      self
+        .state
+        .set_scratch(i, offset_bit_idx, offset_bits, lower);
+      bits_past_byte += bits_to_read;
+      offset_bit_idx += offset_bits;
+      state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;
     }
 
     reader.stale_byte_idx = stale_byte_idx;
@@ -283,13 +274,11 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let u64s_per_offset = read_write_uint::calc_max_u64s(bins::max_offset_bits(bins));
-    let infos = bins
-      .iter()
-      .map(BinDecompressionInfo::new)
-      .collect::<Vec<_>>();
+    let bin_lowers = bins.iter().map(|bin| bin.lower).collect();
+    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let decoder = ans::Decoder::new(&ans_spec);
+    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
       DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
@@ -329,7 +318,7 @@ impl DynLatentPageDecompressor {
 
     let lpd = LatentPageDecompressor {
       u64s_per_offset,
-      infos,
+      bin_lowers,
       needs_ans,
       decoder,
       delta_encoding,

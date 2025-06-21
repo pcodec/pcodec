@@ -21,6 +21,7 @@ mod tests {
   use crate::bit_reader::BitReader;
   use crate::bit_writer::BitWriter;
   use crate::bits;
+  use crate::constants::Bitlen;
   use crate::errors::PcoResult;
 
   fn assert_recovers(spec: &Spec, symbols: Vec<Symbol>, expected_byte_len: usize) -> PcoResult<()> {
@@ -50,14 +51,14 @@ mod tests {
     // DECODE
     compressed.extend(&vec![0; 100]);
     let mut reader = BitReader::new(&compressed, expected_byte_len, 0);
-    let decoder = Decoder::new(spec);
+    let decoder = Decoder::new(spec, &vec![]);
     let mut decoded = Vec::new();
     let mut state_idx = final_state - table_size;
     for _ in 0..symbols.len() {
       let node = &decoder.nodes[state_idx as usize];
-      decoded.push(node.symbol);
-      state_idx =
-        node.next_state_idx_base + unsafe { reader.read_uint::<AnsState>(node.bits_to_read) };
+      decoded.push(node.symbol as Symbol);
+      state_idx = node.next_state_idx_base as AnsState
+        + unsafe { reader.read_uint::<AnsState>(node.bits_to_read as Bitlen) };
     }
 
     assert_eq!(decoded, symbols);
