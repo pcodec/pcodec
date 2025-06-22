@@ -1,14 +1,13 @@
 # Results
 
-All speeds and compressed sizes reported below are available in
+Below we compare speeds and compressed sizes on 3 real-world datasets.
+All these results are available in
 [the results CSV](./benchmark_results/mbp_m3_max_rust1_82.csv).
-The CSV also includes some codecs not visualized here.
+More results are visible in [the paper](https://arxiv.org/abs/2502.06112).
+All benchmarks reported here and in the paper can be easily run via
+[the CLI](../pco_cli/README.md#bench).
 
-## Real World
-
-Real world datasets are the best indicator of usefulness.
-We have compared against 3 datasets, all of which are readily available and
-accessible in download size:
+The 3 datasets we compare here are:
 
 * [Devin Smith's air quality data download](https://deephaven.io/wp-content/devinrsmith-air-quality.20220714.zstd.parquet)
   (15MB)
@@ -20,7 +19,7 @@ accessible in download size:
 
 | dataset     | uncompressed size | numeric data types |
 |-------------|-------------------|--------------------|
-| air quality | 59.7MB            | i32, i64           |
+| air quality | 59.7MB            | i16, i32, i64      |
 | taxi        | 2.14GB            | f64, i32, i64      |
 | r/place     | 4.19GB            | i32, i64           |
 
@@ -42,12 +41,12 @@ accessible in download size:
   >
 </p>
 
-These were again done on a single core of an M3 performance core.
+For these results, we used a single performance core of a Macbook Pro M3 Max.
 Only numerical columns were used.
 For Blosc, the SHUFFLE filter and the Zstd default of Zstd level 3 was used.
 For Parquet, the Parquet default of Zstd level 1 was used.
 
-## Synthetic
-
-You can also run a wide variety of synthetic benchmarks yourself using
-[the cli](../pco_cli/README.md#bench).
+Even at max compression levels, Zstd-based codecs don't perform much better.
+E.g. on the Taxi dataset, Parquet+Zstd at the max Zstd level of 22 and Blosc+Zstd
+at the max Blosc level of 9 get ratios of 5.32 and 2.85, respectively.
+In contrast, Pco gets 6.89 at level 8 and 6.98 at level 12.
