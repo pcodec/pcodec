@@ -19,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Override Rust Version
-        run: rustup override set $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select (.name == "pco") | .rust_version')
+        run: |
+          rustup override set $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select (.name == "pco") | .rust_version')
+          rustup component add clippy fmt
       - uses: actions/cache@v4
         with:
           path: |
