@@ -33,7 +33,7 @@ mod spdp;
 #[cfg(feature = "full_bench")]
 mod turbo_pfor;
 pub mod utils;
-#[cfg(feature = "full_bench")]
+#[cfg(feature = "unstable_bench")]
 mod vortex;
 mod zstd;
 
@@ -259,7 +259,7 @@ impl FromStr for CodecConfig {
       "spdp" => spdp::SpdpConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "tpfor" | "turbopfor" => turbo_pfor::TurboPforConfig::from_kv_args(&clap_kv_args),
-      #[cfg(feature = "full_bench")]
+      #[cfg(feature = "unstable_bench")]
       "vortex" => vortex::VortexConfig::from_kv_args(&clap_kv_args),
       "zstd" | "zstandard" => ZstdConfig::from_kv_args(&clap_kv_args),
       _ => {

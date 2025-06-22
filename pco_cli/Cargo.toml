@@ -48,4 +48,8 @@ zstd = "0.13"
 
 [features]
 audio = ["wav"]
-full_bench = ["blosc2-src", "brotli", "once_cell", "q_compress", "rayon", "spdp_sys", "tokio", "turbo_pfor_sys", "vortex"]
+full_bench = ["blosc2-src", "brotli", "once_cell", "q_compress", "rayon", "spdp_sys", "tokio", "turbo_pfor_sys"]
+# full_bench isn't actually full; here we add a 2nd tier for the troublesome
+# comparators that only build on nightly or in new Rust editions. These ones
+# only take effect if full_bench is also enabled.
+unstable_bench = ["vortex"]
