@@ -56,7 +56,7 @@ In contrast, Pco gets 6.89 at level 8 and 6.98 at level 12.
 ## FCBench
 
 Our harmonic average compression ratio on FCBench is the highest we are aware of: **1.956** at default compression level.
-Here are the results for indivudal columns:
+Here are the results for individual datasets:
 
 | dataset             | compression_ratio |
 | ------------------- | ----------------- |
@@ -96,4 +96,4 @@ Here are the results for indivudal columns:
 
 At max compression level, the overall harmonic average compression ratio rises to **1.972**.
 Note that many datasets in FCBench are row-oriented, and we have applied Pco to them as such, which Pco is not at all designed to do.
-Our result is still competitive in this case, but make sure to use Pco in a column-oriented fashion in the real world.
+Our results happen to still competitive, but make sure to use Pco in a column-oriented fashion in the real world.
