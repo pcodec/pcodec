@@ -58,7 +58,7 @@ In contrast, Pco gets 6.89 at level 8 and 6.98 at level 12.
 Our average compression ratio on FCBench is the highest we are aware of: **1.96**:
 
 │ dataset             │ compression_ratio │
-|─────────────────────|───────────────────|
+| ─────────────────── | ───────────────── |
 │ acs_wht_f32         │         1.5973241 │
 │ astro_mhd_f64       │         31.561527 │
 │ astro_pt_f64        │          1.485383 │
