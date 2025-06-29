@@ -55,7 +55,8 @@ In contrast, Pco gets 6.89 at level 8 and 6.98 at level 12.
 
 ## FCBench
 
-Our average compression ratio on FCBench is the highest we are aware of: **1.96**:
+Our harmonic average compression ratio on FCBench is the highest we are aware of: **1.956** at default compression level.
+Here are the results for indivudal columns:
 
 | dataset             | compression_ratio |
 | ------------------- | ----------------- |
@@ -92,3 +93,5 @@ Our average compression ratio on FCBench is the highest we are aware of: **1.96*
 | turbulence_f32      |          1.342402 |
 | wave_f32            |         2.9820905 |
 | wesad_chest_f64     |         4.5661974 |
+
+At max compression level, the overall harmonic average compression ratio rises to **1.972**.
