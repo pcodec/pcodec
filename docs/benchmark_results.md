@@ -95,3 +95,5 @@ Here are the results for indivudal columns:
 | wesad_chest_f64     |         4.5661974 |
 
 At max compression level, the overall harmonic average compression ratio rises to **1.972**.
+Note that many datasets in FCBench are row-oriented, and we have applied Pco to them as such, which Pco is not at all designed to do.
+Our result is still competitive in this case, but make sure to use Pco in a column-oriented fashion in the real world.
