@@ -27,6 +27,7 @@ mod codecs;
 pub mod handler;
 
 const DEFAULT_BINARY_DIR: &str = "data/binary";
+const RESULTS_N_FIELDS: usize = 6;
 // if this delta order is specified, use a dataset-specific order
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -291,23 +292,27 @@ fn update_results_csv(
         continue;
       }
 
-      let fields: Vec<&str> = line.split(',').take(5).collect::<Vec<&str>>();
+      let fields: Vec<&str> = line
+        .split(',')
+        .take(RESULTS_N_FIELDS)
+        .collect::<Vec<&str>>();
       if fields.len() == 1 && fields[0].is_empty() {
         // skip empty lines
         continue;
       }
-      let fields: [&str; 5] = fields.clone().try_into().map_err(|_| {
+      let fields: [&str; RESULTS_N_FIELDS] = fields.clone().try_into().map_err(|_| {
         anyhow!(
-          "existing results CSV row contained fewer than 5 fields: {:?}",
+          "existing results CSV row contained fewer than {} fields: {:?}",
+          RESULTS_N_FIELDS,
           fields
         )
       })?;
-      let [dataset, codec, compress_dt, decompress_dt, compressed_size] = fields;
+      let [dataset, codec, compress_dt, decompress_dt, compressed_size, uncompressed_size] = fields;
       let stat = BenchStat {
         compress_dt: Duration::from_secs_f32(compress_dt.parse()?),
         decompress_dt: Duration::from_secs_f32(decompress_dt.parse()?),
         compressed_size: compressed_size.parse()?,
-        uncompressed_size: 0, // we don't know, and it doesn't matter
+        uncompressed_size: uncompressed_size.parse()?, // we don't know, and it doesn't matter
       };
       lines.insert(
         (dataset.to_string(), codec.to_string()),
@@ -346,17 +351,19 @@ fn update_results_csv(
     lines.insert(key, bench_stat);
   }
 
-  let mut output_lines = vec!["input,codec,compress_dt,decompress_dt,compressed_size".to_string()];
+  let mut output_lines =
+    vec!["input,codec,compress_dt,decompress_dt,compressed_size,uncompressed_size".to_string()];
   let mut lines = lines.iter().collect::<Vec<_>>();
   lines.sort_unstable_by_key(|&(key, _)| key);
   for ((dataset, codec), stat) in lines {
     output_lines.push(format!(
-      "{},{},{},{},{}",
+      "{},{},{},{},{},{}",
       dataset,
       codec,
       stat.compress_dt.as_secs_f32(),
       stat.decompress_dt.as_secs_f32(),
       stat.compressed_size,
+      stat.uncompressed_size,
     ));
   }
   let output = output_lines.join("\n");
