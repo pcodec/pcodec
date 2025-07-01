@@ -217,7 +217,7 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
     }
   }
 
-  fn build(&mut self) -> io::Result<BitReader> {
+  fn build<'a>(&'a mut self) -> io::Result<BitReader<'a>> {
     // could make n_bytes configurably smaller if it matters for some reason
     let n_bytes_to_read = self.padding;
     if !self.reached_eof {
