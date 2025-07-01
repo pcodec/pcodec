@@ -9,9 +9,7 @@ const BUMPY_LOG_TABLE: [(f64, f64); BUMPY_MAX_K] = {
   let exp_bit = 1_u64 << 52;
   while k < BUMPY_MAX_K {
     let mem_repr_exp = exp_bit * (k + 1023 + 1) as u64;
-    res[k] = ((k + 2) as f64, unsafe {
-      std::mem::transmute::<u64, f64>(mem_repr_exp)
-    });
+    res[k] = ((k + 2) as f64, f64::from_bits(mem_repr_exp));
     k += 1;
   }
   res

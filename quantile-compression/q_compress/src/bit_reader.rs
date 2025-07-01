@@ -20,7 +20,6 @@ pub(crate) trait ReadableUint:
   + Shr<usize, Output = Self>
 {
   const ZERO: Self;
-  const MAX: Self;
   const BITS: usize;
 
   fn from_word(word: usize) -> Self;
@@ -28,7 +27,6 @@ pub(crate) trait ReadableUint:
 
 impl ReadableUint for usize {
   const ZERO: Self = 0;
-  const MAX: Self = 0;
   const BITS: usize = WORD_SIZE;
 
   fn from_word(word: usize) -> Self {
@@ -38,7 +36,6 @@ impl ReadableUint for usize {
 
 impl<U: UnsignedLike> ReadableUint for U {
   const ZERO: Self = <Self as UnsignedLike>::ZERO;
-  const MAX: Self = <Self as UnsignedLike>::MAX;
   const BITS: usize = <Self as UnsignedLike>::BITS;
 
   fn from_word(word: usize) -> Self {
