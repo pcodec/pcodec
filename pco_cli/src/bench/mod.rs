@@ -27,12 +27,16 @@ mod codecs;
 pub mod handler;
 
 const DEFAULT_BINARY_DIR: &str = "data/binary";
+const RESULTS_N_FIELDS: usize = 6;
 // if this delta order is specified, use a dataset-specific order
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Units {
+  /// (De)compression time and size
   Linear,
+  /// (De)compression speed and ratio
   Inverse,
+  /// All of (de)compression speed, time, size, and ratio
   All,
 }
 
@@ -88,12 +92,13 @@ pub struct BenchOpt {
   #[arg(long)]
   pub results_csv: Option<PathBuf>,
   /// What units to print the results table in.
-  /// Linear units are (de)compression time and size, whereas inverse units are
-  /// (de)compression speed and ratio.
   /// Does not affect the results CSV.
   #[arg(short, long, default_value = "linear")]
   pub units: Units,
-  /// Name of the input data to use in the --results-csv output.
+  /// Aggregate all columns or sub-datasets of the input data and use this
+  /// dataset name in the  --results-csv output.
+  /// If a results CSV is specified but this is unspecified, disaggregated stats
+  /// will be written to the CSV.
   /// If you're not writing the results to a CSV, ignore this.
   #[arg(long)]
   pub input_name: Option<String>,
@@ -267,15 +272,14 @@ fn handle_column(
 }
 
 fn update_results_csv(
-  aggregate_by_codec: &HashMap<String, BenchStat>,
+  disaggregated_stats: Vec<PrintStat>,
+  mut aggregated_stats: Vec<PrintStat>,
   opt: &BenchOpt,
 ) -> Result<()> {
   // do nothing if the user didn't provide a results CSV
   let Some(results_csv) = opt.results_csv.as_ref() else {
     return Ok(());
   };
-
-  let input_name = opt.input_name.as_ref().unwrap();
 
   let mut lines = if results_csv.exists() {
     // hacky split on commas, doesn't handle case when values contain weird characters
@@ -288,23 +292,27 @@ fn update_results_csv(
         continue;
       }
 
-      let fields: Vec<&str> = line.split(',').take(5).collect::<Vec<&str>>();
+      let fields: Vec<&str> = line
+        .split(',')
+        .take(RESULTS_N_FIELDS)
+        .collect::<Vec<&str>>();
       if fields.len() == 1 && fields[0].is_empty() {
         // skip empty lines
         continue;
       }
-      let fields: [&str; 5] = fields.clone().try_into().map_err(|_| {
+      let fields: [&str; RESULTS_N_FIELDS] = fields.clone().try_into().map_err(|_| {
         anyhow!(
-          "existing results CSV row contained fewer than 5 fields: {:?}",
+          "existing results CSV row contained fewer than {} fields: {:?}",
+          RESULTS_N_FIELDS,
           fields
         )
       })?;
-      let [dataset, codec, compress_dt, decompress_dt, compressed_size] = fields;
+      let [dataset, codec, compress_dt, decompress_dt, compressed_size, uncompressed_size] = fields;
       let stat = BenchStat {
         compress_dt: Duration::from_secs_f32(compress_dt.parse()?),
         decompress_dt: Duration::from_secs_f32(decompress_dt.parse()?),
         compressed_size: compressed_size.parse()?,
-        uncompressed_size: 0, // we don't know, and it doesn't matter
+        uncompressed_size: uncompressed_size.parse()?, // we don't know, and it doesn't matter
       };
       lines.insert(
         (dataset.to_string(), codec.to_string()),
@@ -316,31 +324,46 @@ fn update_results_csv(
     HashMap::new()
   };
 
-  for (codec, stat) in aggregate_by_codec.iter() {
-    let key = (input_name.to_string(), codec.to_string());
-    let mut stat = stat.clone();
+  let new_stats = if let Some(input_name) = &opt.input_name {
+    // use aggregate stats
+    for stat in &mut aggregated_stats {
+      stat.dataset = input_name.to_string();
+    }
+    aggregated_stats
+  } else {
+    disaggregated_stats
+  };
+
+  for stat in new_stats {
+    let mut bench_stat = stat.bench_stat;
+    let key = (
+      stat.dataset.to_string(),
+      stat.codec.to_string(),
+    );
     if let Some(existing_stat) = lines.get(&key) {
       if opt.iter_opt.no_compress {
-        stat.compress_dt = existing_stat.compress_dt;
+        bench_stat.compress_dt = existing_stat.compress_dt;
       }
       if opt.iter_opt.no_decompress {
-        stat.decompress_dt = existing_stat.decompress_dt;
+        bench_stat.decompress_dt = existing_stat.decompress_dt;
       }
     }
-    lines.insert(key, stat);
+    lines.insert(key, bench_stat);
   }
 
-  let mut output_lines = vec!["input,codec,compress_dt,decompress_dt,compressed_size".to_string()];
+  let mut output_lines =
+    vec!["input,codec,compress_dt,decompress_dt,compressed_size,uncompressed_size".to_string()];
   let mut lines = lines.iter().collect::<Vec<_>>();
   lines.sort_unstable_by_key(|&(key, _)| key);
   for ((dataset, codec), stat) in lines {
     output_lines.push(format!(
-      "{},{},{},{},{}",
+      "{},{},{},{},{},{}",
       dataset,
       codec,
       stat.compress_dt.as_secs_f32(),
       stat.decompress_dt.as_secs_f32(),
       stat.compressed_size,
+      stat.uncompressed_size,
     ));
   }
   let output = output_lines.join("\n");
@@ -349,39 +372,43 @@ fn update_results_csv(
   Ok(())
 }
 
-fn print_stats(mut stats: Vec<PrintStat>, opt: &BenchOpt) -> Result<()> {
-  if stats.is_empty() {
+fn print_stats(disaggregated_stats: Vec<PrintStat>, opt: &BenchOpt) -> Result<()> {
+  if disaggregated_stats.is_empty() {
     return Err(anyhow!(
       "No datasets found that match filters"
     ));
   }
 
   let mut aggregate_by_codec: HashMap<String, BenchStat> = HashMap::new();
-  for stat in &stats {
+  for stat in &disaggregated_stats {
     aggregate_by_codec
       .entry(stat.codec.clone())
       .or_default()
       .add_assign(stat.bench_stat.clone());
   }
-  stats.extend(opt.codecs.iter().map(|codec| {
-    let codec = codec.to_string();
-    let bench_stat = aggregate_by_codec.get(&codec).cloned().unwrap();
-    PrintStat::new("<sum>".to_string(), codec, bench_stat)
-  }));
+  let aggregated_stats = opt
+    .codecs
+    .iter()
+    .map(|codec| {
+      let codec = codec.to_string();
+      let bench_stat = aggregate_by_codec.get(&codec).cloned().unwrap();
+      PrintStat::new("<sum>".to_string(), codec, bench_stat)
+    })
+    .collect::<Vec<_>>();
+  let stats = vec![disaggregated_stats.clone(), aggregated_stats.clone()].concat();
   let mut table_builder = Table::builder(stats);
-  match opt.units {
-    Units::All => (),
-    Units::Linear => {
-      for _ in 0..3 {
-        // Removing columns takes place immediately, so we remove the 5th one 3
-        // times to delete columns 5, 6, 7.
-        table_builder.remove_column(5);
-      }
-    }
-    Units::Inverse => {
-      for _ in 0..3 {
-        table_builder.remove_column(2);
-      }
+  let unit_columns_to_keep: Vec<usize> = match opt.units {
+    // we expect these to be sorted
+    Units::All => (2..8).collect(),
+    Units::Linear => (2..5).collect(),
+    Units::Inverse => (5..8).collect(),
+  };
+  // Removing columns takes place immediately, so we go through in reverse order.
+  // This isn't efficient, but it doesn't need to be.
+  // First two cols are dataset and codec, so we keep those.
+  for col_idx in (2..table_builder.count_columns()).rev() {
+    if !unit_columns_to_keep.contains(&col_idx) {
+      table_builder.remove_column(col_idx);
     }
   }
   let table = table_builder
@@ -390,15 +417,10 @@ fn print_stats(mut stats: Vec<PrintStat>, opt: &BenchOpt) -> Result<()> {
     .with(Modify::new(Columns::new(2..)).with(Alignment::right()))
     .to_string();
   println!("{}", table);
-  update_results_csv(&aggregate_by_codec, opt)
+  update_results_csv(disaggregated_stats, aggregated_stats, opt)
 }
 
 pub fn bench(mut opt: BenchOpt) -> Result<()> {
-  if opt.results_csv.is_some() && opt.input_name.is_none() {
-    return Err(anyhow!(
-      "input-name must be specified when results-csv is"
-    ));
-  }
   if opt.threads.is_some() && !cfg!(feature = "full_bench") {
     return Err(anyhow!(
       "threads can only be specified when built with the full_bench feature"
