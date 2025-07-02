@@ -330,9 +330,10 @@ macro_rules! impl_float_number {
           Mode::Classic => true,
           Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            Self::from_latent_ordered(base_latent).is_normal()
+            let base = Self::from_latent_ordered(base_latent);
+            base.is_finite() && base.abs() > Self::ZERO
           }
-          Mode::FloatQuant(k) => k <= Self::PRECISION_BITS,
+          Mode::FloatQuant(k) => k > 0 && k <= Self::PRECISION_BITS,
           _ => false,
         }
       }
@@ -398,6 +399,7 @@ impl_float_number!(f16, u16, 1_u16 << 15, 9);
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::metadata::DynLatent;
 
   #[test]
   fn test_choose_mult_mode() {
@@ -405,6 +407,46 @@ mod tests {
     let nums = (0..1000).map(|i| (i as f64) * base).collect::<Vec<_>>();
     let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
     assert_eq!(mode, Mode::float_mult(base));
+    assert!(f64::mode_is_valid(mode))
+  }
+
+  #[test]
+  fn test_mode_validation() {
+    // CLASSIC
+    assert!(f32::mode_is_valid(Mode::Classic));
+
+    // FLOAT MULT
+    for base in [
+      0.777_f32,
+      0.000000000000000000000000000000000000003416741_f32,
+    ] {
+      assert!(
+        f32::mode_is_valid(Mode::float_mult(base)),
+        "{} was invalid",
+        base
+      );
+    }
+
+    for base in [0.0_f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+      assert!(
+        !f32::mode_is_valid(Mode::float_mult(base)),
+        "{} was valid",
+        base
+      )
+    }
+
+    // FLOAT QUANT
+    for k in [1, 22, 23] {
+      assert!(f32::mode_is_valid(Mode::FloatQuant(k)));
+    }
+    for k in [0, 24, 32] {
+      assert!(!f32::mode_is_valid(Mode::FloatQuant(k)));
+    }
+
+    // INT MULT
+    assert!(!f32::mode_is_valid(Mode::IntMult(
+      DynLatent::new(77_u32).unwrap()
+    )));
   }
 
   #[test]

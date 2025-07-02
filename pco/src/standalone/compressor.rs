@@ -1,12 +1,11 @@
-use std::io::Write;
-
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::PagingSpec;
-use crate::data_types::Number;
-use crate::errors::PcoResult;
+use crate::data_types::{Number, NumberType};
+use crate::errors::{PcoError, PcoResult};
 use crate::metadata::ChunkMeta;
 use crate::standalone::constants::*;
 use crate::{bits, wrapped, ChunkConfig};
+use std::io::Write;
 
 unsafe fn write_varint<W: Write>(n: u64, writer: &mut BitWriter<W>) {
   let power = if n == 0 { 1 } else { n.ilog2() + 1 };
@@ -45,11 +44,27 @@ unsafe fn write_varint<W: Write>(n: u64, writer: &mut BitWriter<W>) {
 pub struct FileCompressor {
   inner: wrapped::FileCompressor,
   n_hint: usize,
+  uniform_type: Option<NumberType>,
 }
 
 impl FileCompressor {
+  /// Optionally specify a hint for the count of numbers in this entire file.
+  ///
+  /// If set correctly, this can improve performance of decompressing the
+  /// entire file at once.
   pub fn with_n_hint(mut self, n: usize) -> Self {
     self.n_hint = n;
+    self
+  }
+
+  /// Optionally specify a [`NumberType`][crate::data_types::NumberType] that
+  /// all chunks in this file must share.
+  ///
+  /// This allows decompressors to know with certainty that all chunks will
+  /// share this number type and also allows for typed empty files, which are
+  /// otherwise impossible.
+  pub fn with_uniform_type(mut self, number_type: Option<NumberType>) -> Self {
+    self.uniform_type = number_type;
     self
   }
 
@@ -60,10 +75,27 @@ impl FileCompressor {
     let mut writer = BitWriter::new(dst, STANDALONE_HEADER_PADDING);
     writer.write_aligned_bytes(&MAGIC_HEADER)?;
     unsafe {
-      writer.write_usize(
-        CURRENT_STANDALONE_VERSION,
-        BITS_TO_ENCODE_STANDALONE_VERSION,
-      );
+      match self.uniform_type {
+        Some(number_type) => {
+          // Use new standalone v3 to encode this.
+          // This code path is only possible via `with_uniform_type`, which is
+          // new functionality.
+          writer.write_usize(
+            CURRENT_STANDALONE_VERSION,
+            BITS_TO_ENCODE_STANDALONE_VERSION,
+          );
+          writer.write_aligned_bytes(&[number_type as u8])?;
+        }
+        None => {
+          // no new functionality required, stick to v2 to avoid breaking
+          // people's code
+          // TODO in 1.0 get rid of this case and write a number type byte of 0
+          writer.write_usize(
+            PRE_UNIFORM_TYPE_STANDALONE_VERSION,
+            BITS_TO_ENCODE_STANDALONE_VERSION,
+          );
+        }
+      }
       write_varint(self.n_hint as u64, &mut writer);
     }
     writer.finish_byte();
@@ -84,12 +116,22 @@ impl FileCompressor {
     nums: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
+    let number_type = NumberType::from_descriminant(T::NUMBER_TYPE_BYTE).unwrap();
+    if let Some(uniform_type) = self.uniform_type {
+      if number_type != uniform_type {
+        return Err(PcoError::corruption(format!(
+          "number type {:?} does not match uniform type {:?}",
+          number_type, uniform_type,
+        )));
+      }
+    }
+
     let mut config = config.clone();
     config.paging_spec = PagingSpec::Exact(vec![nums.len()]);
 
     Ok(ChunkCompressor {
       inner: self.inner.chunk_compressor(nums, &config)?,
-      number_type_byte: T::NUMBER_TYPE_BYTE,
+      number_type,
     })
   }
 
@@ -108,7 +150,7 @@ impl FileCompressor {
 #[derive(Clone, Debug)]
 pub struct ChunkCompressor {
   inner: wrapped::ChunkCompressor,
-  number_type_byte: u8,
+  number_type: NumberType,
 }
 
 impl ChunkCompressor {
@@ -132,7 +174,7 @@ impl ChunkCompressor {
   /// Will return an error if the provided `Write` errors.
   pub fn write_chunk<W: Write>(&self, dst: W) -> PcoResult<W> {
     let mut writer = BitWriter::new(dst, STANDALONE_CHUNK_PREAMBLE_PADDING);
-    writer.write_aligned_bytes(&[self.number_type_byte])?;
+    writer.write_aligned_bytes(&[self.number_type as u8])?;
     let n = self.inner.n_per_page()[0];
     unsafe {
       writer.write_usize(n - 1, BITS_TO_ENCODE_N_ENTRIES);

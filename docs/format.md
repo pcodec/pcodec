@@ -6,7 +6,7 @@ All values encoded are unsigned integers.
 All bit packing (and thus integer encoding) is done in a little-endian fashion.
 Bit packing a component is completed by filling the rest of the byte with 0s.
 
-Let `dtype_size` be the data type's number of bits.
+Let `dtype_size` be the number type's number of bits.
 A "raw" value for a number is a `dtype_size` value that maps to the number
 via [its `from_unsigned` function](#Modes).
 
@@ -69,6 +69,9 @@ Each chunk meta consists of
 * [`extra_mode_bits` bits] for certain modes, extra data is parsed. See the
   mode-specific formulas below for how this is used, e.g. as the `mult` or `k`
   values.
+  The value encoded in these bits should be validated; namely, mult mode bases
+  should be finite and nonzero, quant mode must have `0 < k <= MANTISSA_BITS`,
+  int modes cannot apply to floats, and vice versa.
 * [4 bits] `delta_encoding`, using this table:
 
   | value | delta encoding | n latent variables | `extra_delta_bits` |
@@ -134,17 +137,42 @@ It consists of
 
 * [32 bits] magic header (ASCII for "pco!")
 * [8 bits] standalone version
+* [8 bits] either a uniform number type which all following chunks must share,
+  or 0.
 * [6 bits] 1 less than `n_hint_log2`
-* [`n_hint_log2` bits] the total count of numbers in the file, if known;
+* [`n_hint_log2` bits] `n_hint`, the total count of numbers in the file, if known;
   0 otherwise
 * [0-7 bits] 0s until byte-aligned
 * a wrapped header
 * per chunk,
-  * [8 bits] a byte for the data type
+  * [8 bits] the number type
   * [24 bits] 1 less than `chunk_n`, the count of numbers in the chunk
   * a wrapped chunk metadata
   * a wrapped page of `chunk_n` numbers
 * [8 bits] a magic termination byte (0).
+
+So far, these standalone versions exist:
+
+| format version | first Rust version | deviations from next format version                                      |
+|----------------|--------------------|--------------------------------------------------------------------------|
+| 0              | 0.0.0              | -                                                                        |
+| 1              | 0.1.0              | standalone version was implicit and equaled wrapped version, no `n_hint` |
+| 2              | 0.1.1              | uniform number type unsupported                                          |
+| 3              | 0.4.5              | -                                                                        |
+
+As well as these number type 1-byte representations:
+
+| number type | byte |
+|-------------|------|
+| f16         | 9 |
+| f32         | 5 |
+| f64         | 6 |
+| i16         | 8 |
+| i32         | 3 |
+| i64         | 4 |
+| u16         | 7 |
+| u32         | 1 |
+| u64         | 2 |
 
 ## Processing Formulas
 
@@ -195,7 +223,7 @@ Let `MID` be the middle value for the latent type (e.g. 2^31 for `u32`).
 
 Here ULP refers to [unit in the last place](https://en.wikipedia.org/wiki/Unit_in_the_last_place).
 
-Each data type has an order-preserving bijection to an unsigned data type.
+Each number type has an order-preserving bijection to an unsigned latent type.
 For instance, floats have their first bit toggled, and the rest of their bits
 toggled if the float was originally negative:
 

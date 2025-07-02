@@ -49,10 +49,7 @@ pub trait TurboPforable: Sized {
   unsafe fn decode(src: &mut [u8], n: usize, dst: &mut [Self]);
 }
 
-#[cfg(feature = "full_bench")]
-pub trait PcoNumber:
-  Number + Parquetable + QCompressable + TurboPforable + vortex::dtype::NativePType
-{
+pub trait Arrowable: Sized {
   const ARROW_DTYPE: DataType;
 
   type Arrow: ArrowPrimitiveType;
@@ -61,17 +58,18 @@ pub trait PcoNumber:
   fn make_num_vec(nums: Vec<Self>) -> NumVec;
   fn arrow_native_to_bytes(x: <Self::Arrow as ArrowPrimitiveType>::Native) -> Vec<u8>;
 }
+
+#[cfg(all(feature = "full_bench", feature = "unstable_bench"))]
+pub trait PcoNumber:
+  Number + Arrowable + Parquetable + QCompressable + TurboPforable + vortex::dtype::NativePType
+{
+}
+
+#[cfg(all(feature = "full_bench", not(feature = "unstable_bench")))]
+pub trait PcoNumber: Number + Arrowable + Parquetable + QCompressable + TurboPforable {}
 
 #[cfg(not(feature = "full_bench"))]
-pub trait PcoNumber: Number + Parquetable {
-  const ARROW_DTYPE: DataType;
-
-  type Arrow: ArrowPrimitiveType;
-
-  fn to_arrow_native(self) -> <Self::Arrow as ArrowPrimitiveType>::Native;
-  fn make_num_vec(nums: Vec<Self>) -> NumVec;
-  fn arrow_native_to_bytes(x: <Self::Arrow as ArrowPrimitiveType>::Native) -> Vec<u8>;
-}
+pub trait PcoNumber: Number + Arrowable + Parquetable {}
 
 pub trait ArrowNumber: ArrowPrimitiveType {
   type Pco: PcoNumber;
@@ -116,7 +114,7 @@ macro_rules! trivial {
       }
     }
 
-    impl PcoNumber for $t {
+    impl Arrowable for $t {
       const ARROW_DTYPE: DataType = <$p as ArrowPrimitiveType>::DATA_TYPE;
 
       type Arrow = $p;
@@ -133,6 +131,8 @@ macro_rules! trivial {
         x.to_le_bytes().to_vec()
       }
     }
+
+    impl PcoNumber for $t {}
 
     impl ArrowNumber for $p {
       type Pco = $t;
@@ -281,7 +281,7 @@ impl QCompressable for f16 {
   }
 }
 
-impl PcoNumber for f16 {
+impl Arrowable for f16 {
   const ARROW_DTYPE: DataType = arrow_dtypes::Float16Type::DATA_TYPE;
 
   type Arrow = arrow_dtypes::Float16Type;
@@ -298,6 +298,8 @@ impl PcoNumber for f16 {
     x.to_le_bytes().to_vec()
   }
 }
+
+impl PcoNumber for f16 {}
 
 trivial!(f32, F32, arrow_dtypes::Float32Type);
 trivial!(f64, F64, arrow_dtypes::Float64Type);

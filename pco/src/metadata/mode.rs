@@ -1,7 +1,7 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::constants::{Bitlen, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K};
-use crate::data_types::{Float, LatentType};
+use crate::data_types::{Float, Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::dyn_latent::DynLatent;
@@ -160,6 +160,10 @@ impl Mode {
 
   pub(crate) fn float_mult<F: Float>(base: F) -> Self {
     FloatMult(DynLatent::new(base.to_latent_ordered()).unwrap())
+  }
+
+  pub(crate) fn int_mult<L: Latent>(base: L) -> Self {
+    IntMult(DynLatent::new(base).unwrap())
   }
 
   pub(crate) fn exact_bit_size(&self) -> Bitlen {

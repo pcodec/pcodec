@@ -37,7 +37,7 @@ for harder, underspecified problems.
 
 From a venv with `maturin` installed, and from `pco_python/`, run
 `maturin develop` to recompile and install the python package into your venv.
-Then you can run `pytest --doctest-glob=*.md`.
+Then you can run `pytest --doctest-glob='*.md'`.
 
 ## Java
 

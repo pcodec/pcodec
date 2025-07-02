@@ -8,8 +8,9 @@ use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{FileDecompressor, MaybeChunkDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
-// TODO in 0.4 make this generic to Write and make all compress methods
+// TODO in 1.0 make this generic to Write and make all compress methods
 // accepting a Write return the number of bytes written?
+// TODO in 1.0 set a uniform number type for the file
 /// Takes in a slice of numbers and an exact configuration and writes compressed
 /// bytes to the destination, retuning the number of bytes written.
 ///
@@ -157,16 +158,8 @@ pub fn simpler_compress<T: Number>(nums: &[T], compression_level: usize) -> PcoR
 /// Will return an error if there are any compatibility, corruption,
 /// or insufficient data issues.
 pub fn simple_decompress<T: Number>(src: &[u8]) -> PcoResult<Vec<T>> {
-  let (file_decompressor, mut src) = FileDecompressor::new(src)?;
-
-  let mut res = Vec::with_capacity(file_decompressor.n_hint());
-  while let MaybeChunkDecompressor::Some(mut chunk_decompressor) =
-    file_decompressor.chunk_decompressor(src)?
-  {
-    chunk_decompressor.decompress_remaining_extend(&mut res)?;
-    src = chunk_decompressor.into_src();
-  }
-  Ok(res)
+  let (file_decompressor, src) = FileDecompressor::new(src)?;
+  file_decompressor.simple_decompress(src)
 }
 
 #[cfg(test)]

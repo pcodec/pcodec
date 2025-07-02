@@ -21,11 +21,7 @@ macro_rules! impl_signed {
       }
 
       fn mode_is_valid(mode: Mode) -> bool {
-        match mode {
-          Mode::Classic => true,
-          Mode::IntMult(_) => true,
-          _ => false,
-        }
+        unsigneds::mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
         nums: &[Self],
