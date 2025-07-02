@@ -142,16 +142,20 @@ fn get_binary_field(path: &Path) -> Result<Option<Field>> {
     .unwrap()
     .to_str()
     .expect("somehow not unicode");
-  let mut split = no_ext.split('_');
-  let invalid_filename = || {
-    anyhow!(
-      "filename must be of the format <DTYPE>_<NAME>, but was {:?}",
-      path
-    )
+  let split = no_ext.split('_').collect::<Vec<_>>();
+  let (name, dtype) = match (
+    parse::arrow_dtype(split[0]),
+    parse::arrow_dtype(split.last().unwrap()),
+  ) {
+    (Ok(dtype), _) => (split[1..].join("_"), dtype),
+    (Err(_), Ok(dtype)) => (split[..split.len() - 1].join("_"), dtype),
+    _ => {
+      return Err(anyhow!(
+        "filename must be of the format <DTYPE>_<NAME> or <NAME>_<DTYPE>, but was {:?}",
+        path
+      ))
+    }
   };
-  let dtype_str = split.next().ok_or_else(invalid_filename)?;
-  let dtype = parse::arrow_dtype(dtype_str)?;
-  let name = split.collect::<Vec<_>>().join("_");
   Ok(Some(Field::new(name, dtype, false)))
 }
 
