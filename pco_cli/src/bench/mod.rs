@@ -395,7 +395,7 @@ fn print_stats(disaggregated_stats: Vec<PrintStat>, opt: &BenchOpt) -> Result<()
       PrintStat::new("<sum>".to_string(), codec, bench_stat)
     })
     .collect::<Vec<_>>();
-  let stats = vec![disaggregated_stats.clone(), aggregated_stats.clone()].concat();
+  let stats = [disaggregated_stats.clone(), aggregated_stats.clone()].concat();
   let mut table_builder = Table::builder(stats);
   let unit_columns_to_keep: Vec<usize> = match opt.units {
     // we expect these to be sorted
