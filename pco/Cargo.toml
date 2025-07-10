@@ -14,6 +14,7 @@ repository = "https://github.com/pcodec/pcodec"
 rust-version = "1.81.0"
 
 [dependencies]
+aligned = "0.4.2"
 better_io = { version = "0.1.0", path = "../better_io" }
 dtype_dispatch = { version = "0.1.0", path = "../dtype_dispatch" }
 half = { version = "2.0.0", features = ["std"] }
