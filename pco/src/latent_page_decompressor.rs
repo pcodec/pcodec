@@ -140,32 +140,25 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (dst, (&offset_bits, &offset_bits_csum)) in dst.iter_mut().zip(
-      state
-        .offset_bits_scratch
-        .iter()
-        .zip(state.offset_bits_csum_scratch.iter()),
+    for (dst, (&offset_bits, (&offset_bits_csum, &lower))) in dst.iter_mut().zip(
+      state.offset_bits_scratch.iter().zip(
+        state
+          .offset_bits_csum_scratch
+          .iter()
+          .zip(state.lowers_scratch.iter()),
+      ),
     ) {
       let bit_idx = base_bit_idx + offset_bits_csum as usize;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx as Bitlen % 8;
-      *dst = bit_reader::read_uint_at::<L, MAX_U64S>(src, byte_idx, bits_past_byte, offset_bits);
+      *dst = bit_reader::read_uint_at::<L, MAX_U64S>(src, byte_idx, bits_past_byte, offset_bits)
+        .wrapping_add(lower);
     }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[dst.len() - 1] as usize
       + state.offset_bits_scratch[dst.len() - 1] as usize;
     reader.stale_byte_idx = final_bit_idx / 8;
     reader.bits_past_byte = final_bit_idx as Bitlen % 8;
-  }
-
-  #[inline(never)]
-  fn add_lowers(&self, dst: &mut [L]) {
-    for (&lower, dst) in self.state.lowers_scratch[0..dst.len()]
-      .iter()
-      .zip(dst.iter_mut())
-    {
-      *dst = dst.wrapping_add(lower);
-    }
   }
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
@@ -201,8 +194,6 @@ impl<L: Latent> LatentPageDecompressor<L> {
         self.u64s_per_offset
       ),
     }
-
-    self.add_lowers(dst);
   }
 
   pub unsafe fn decompress_batch(
