@@ -182,10 +182,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     // this assertion saves some unnecessary specializations in the compiled assembly
     assert!(self.u64s_per_offset <= read_write_uint::calc_max_u64s(L::BITS));
     match self.u64s_per_offset {
-      0 => {
-        dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
-        return;
-      }
+      0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
       1 => self.decompress_offsets::<1>(reader, dst),
       2 => self.decompress_offsets::<2>(reader, dst),
       3 => self.decompress_offsets::<3>(reader, dst),
