@@ -57,7 +57,11 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_U64S: usize>(
     byte_idx += 8;
   }
 
-  bits::lowest_bits(res, n)
+  if MAX_U64S * 64 <= U::BITS as usize {
+    bits::lowest_bits_fast(res, n)
+  } else {
+    bits::lowest_bits(res, n)
+  }
 }
 
 pub struct BitReader<'a> {
