@@ -10,6 +10,10 @@ use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
+// Struct to enforce alignment of the scratch arrays to 64 bytes. This can
+// improve performance for SIMD operations. The primary goal here is to avoid
+// regression by ensuring that the arrays stay "well-aligned", even if the
+// surrounding code is changed.
 #[derive(Clone, Debug)]
 #[repr(align(64))]
 struct ScratchArray<L: Latent>([L; FULL_BATCH_N]);
