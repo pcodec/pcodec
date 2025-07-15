@@ -1,6 +1,5 @@
 use std::fmt::Debug;
-
-use aligned::{Aligned, A64};
+use std::ops::{Deref, DerefMut};
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
@@ -12,11 +11,27 @@ use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
 #[derive(Clone, Debug)]
+#[repr(align(64))]
+struct ScratchArray<L: Latent>([L; FULL_BATCH_N]);
+
+impl<L: Latent> Deref for ScratchArray<L> {
+  type Target = [L; FULL_BATCH_N];
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+impl<L: Latent> DerefMut for ScratchArray<L> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
+
+#[derive(Clone, Debug)]
 struct State<L: Latent> {
   // scratch needs no backup
-  offset_bits_csum_scratch: Aligned<A64, [Bitlen; FULL_BATCH_N]>,
-  offset_bits_scratch: Aligned<A64, [Bitlen; FULL_BATCH_N]>,
-  lowers_scratch: Aligned<A64, [L; FULL_BATCH_N]>,
+  offset_bits_csum_scratch: ScratchArray<u32>,
+  offset_bits_scratch: ScratchArray<u32>,
+  lowers_scratch: ScratchArray<L>,
 
   ans_state_idxs: [AnsState; ANS_INTERLEAVING],
   delta_state: Vec<L>,
@@ -290,9 +305,9 @@ impl DynLatentPageDecompressor {
     };
 
     let mut state = State {
-      offset_bits_csum_scratch: Aligned([0; FULL_BATCH_N]),
-      offset_bits_scratch: Aligned([0; FULL_BATCH_N]),
-      lowers_scratch: Aligned([L::ZERO; FULL_BATCH_N]),
+      offset_bits_csum_scratch: ScratchArray([0; FULL_BATCH_N]),
+      offset_bits_scratch: ScratchArray([0; FULL_BATCH_N]),
+      lowers_scratch: ScratchArray([L::ZERO; FULL_BATCH_N]),
       ans_state_idxs: ans_final_state_idxs,
       delta_state: working_delta_state,
       delta_state_pos,
