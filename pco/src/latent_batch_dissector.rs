@@ -20,6 +20,8 @@ pub struct LatentBatchDissector<'a, L: Latent> {
 
 impl<'a, L: Latent> LatentBatchDissector<'a, L> {
   pub fn new(table: &'a CompressionTable<L>, encoder: &'a ans::Encoder) -> Self {
+    // We initialize the scratch buffer for bin lowers carefully to enable
+    // a shortcut when there's only one bin.
     let default_lower = table
       .infos
       .first()
@@ -100,7 +102,8 @@ impl<'a, L: Latent> LatentBatchDissector<'a, L> {
     ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
   ) {
     if self.encoder.size_log() == 0 {
-      // trivial case: there's only one symbol
+      // trivial case: there's only one symbol. ANS values and states don't
+      // matter.
       ans_bits.fill(0);
       return;
     }
