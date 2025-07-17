@@ -30,3 +30,9 @@ impl<L: Latent> From<Vec<BinCompressionInfo<L>>> for CompressionTable<L> {
     }
   }
 }
+
+impl<L: Latent> CompressionTable<L> {
+  pub fn is_trivial(&self) -> bool {
+    self.infos.len() <= 1
+  }
+}
