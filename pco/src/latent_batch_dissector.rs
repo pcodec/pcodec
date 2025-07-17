@@ -20,10 +20,15 @@ pub struct LatentBatchDissector<'a, L: Latent> {
 
 impl<'a, L: Latent> LatentBatchDissector<'a, L> {
   pub fn new(table: &'a CompressionTable<L>, encoder: &'a ans::Encoder) -> Self {
+    let default_lower = table
+      .infos
+      .first()
+      .map(|info| info.lower)
+      .unwrap_or(L::ZERO);
     Self {
       table,
       encoder,
-      lower_scratch: [L::ZERO; FULL_BATCH_N],
+      lower_scratch: [default_lower; FULL_BATCH_N],
       symbol_scratch: [0; FULL_BATCH_N],
     }
   }
@@ -42,16 +47,33 @@ impl<'a, L: Latent> LatentBatchDissector<'a, L> {
       }
     }
 
-    let max_idx = self.table.infos.len().saturating_sub(1);
-    search_idxs
-      .iter_mut()
-      .for_each(|search_idx| *search_idx = min(*search_idx, max_idx));
+    let n_bins = self.table.infos.len();
+    if n_bins < 1 << self.table.search_size_log {
+      // We worked with a balanced binary tree with missing leaves filled, so it
+      // might have overshot some bin indices.
+      search_idxs
+        .iter_mut()
+        .for_each(|search_idx| *search_idx = min(*search_idx, n_bins - 1));
+    }
 
     search_idxs
   }
 
   #[inline(never)]
   fn dissect_bins(&mut self, search_idxs: &[usize], dst_offset_bits: &mut [Bitlen]) {
+    if self.table.is_trivial() {
+      // trivial case: there's at most one bin. We've prepopulated the scratch
+      // buffers with the correct values in this case.
+      let default_offset_bits = self
+        .table
+        .infos
+        .first()
+        .map(|info| info.offset_bits)
+        .unwrap_or(0);
+      dst_offset_bits.fill(default_offset_bits);
+      return;
+    }
+
     for (i, &search_idx) in search_idxs.iter().enumerate() {
       let info = &self.table.infos[search_idx];
       self.lower_scratch[i] = info.lower;
@@ -77,6 +99,12 @@ impl<'a, L: Latent> LatentBatchDissector<'a, L> {
     ans_bits: &mut [Bitlen],
     ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
   ) {
+    if self.encoder.size_log() == 0 {
+      // trivial case: there's only one symbol
+      ans_bits.fill(0);
+      return;
+    }
+
     let final_base_i = (ans_vals.len() / ANS_INTERLEAVING) * ANS_INTERLEAVING;
     let final_j = ans_vals.len() % ANS_INTERLEAVING;
 
