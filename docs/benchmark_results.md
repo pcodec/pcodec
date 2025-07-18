@@ -10,7 +10,7 @@ All benchmarks reported here and in the paper can be easily run via
 
 The 3 datasets we display here are:
 
-* [Devin Smith's air quality data download](https://deephaven.io/wp-content/devinrsmith-air-quality.20220714.zstd.parquet)
+* [Devin Smith's air quality data download](https://pcodec-public.s3.amazonaws.com/devinrsmith-air-quality.20220714.zstd.parquet)
   (15MB)
 * [NYC taxi data (2023-04 high volume for hire)](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) (469MB)
 * Reddit r/place 2022 data
