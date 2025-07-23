@@ -22,6 +22,8 @@ impl<'a, L: Latent> LatentBatchDissector<'a, L> {
   pub fn new(table: &'a CompressionTable<L>, encoder: &'a ans::Encoder) -> Self {
     // We initialize the scratch buffer for bin lowers carefully to enable
     // a shortcut when there's only one bin.
+    // For symbol scratch we initialize to zeros, which also happens to be
+    // correct when there's only one bin.
     let default_lower = table
       .infos
       .first()
