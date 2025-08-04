@@ -24,6 +24,7 @@ brotli = { version = "7.0.0", optional = true }
 bytes = "1.4.0"
 clap = { version = "4.5.3", features = ["derive"] }
 half = { version = "2.1.0", features = ["std"] }
+hound = { version = "3.5.1", optional = true }
 indicatif = "0.17.8"
 once_cell = { version = "1.21.3", optional = true }
 parquet = { version = "54.3.1", features = [
@@ -43,11 +44,10 @@ serde = { version = "1.0.197", features = ["derive"] }
 tokio = { version = "1.44.2", features = ["rt-multi-thread"], optional = true }
 turbo_pfor_sys = { version = "0.1.3", optional = true }
 vortex = { version = "0.28.0", features = ["files"], optional = true }
-wav = { version = "1.0.0", optional = true }
 zstd = "0.13"
 
 [features]
-audio = ["wav"]
+audio = ["hound"]
 full_bench = ["blosc2-src", "brotli", "once_cell", "q_compress", "rayon", "spdp_sys", "tokio", "turbo_pfor_sys"]
 # full_bench isn't actually full; here we add a 2nd tier for the troublesome
 # comparators that only build on nightly or in new Rust editions. These ones
