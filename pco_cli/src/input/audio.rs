@@ -1,23 +1,22 @@
-use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use arrow::array::{ArrayRef, Float32Array, Int16Array, Int32Array, UInt16Array};
+use arrow::array::{ArrayRef, Float32Array, Int16Array, Int32Array};
 use arrow::datatypes::{DataType, Field, Schema};
-use wav::BitDepth;
+use hound::{SampleFormat, WavReader};
 
 pub fn get_wav_schema(path: &Path) -> Result<Schema> {
   // this is excessively slow, but easy for now
-  let mut file = File::open(path)?;
-  let (header, _) = wav::read(&mut file)?;
-  let dtype = match (header.audio_format, header.bits_per_sample) {
-    (wav::WAV_FORMAT_PCM, 8 | 16) => Ok(DataType::Int16),
-    (wav::WAV_FORMAT_PCM, 24 | 32) => Ok(DataType::Int32),
-    (wav::WAV_FORMAT_IEEE_FLOAT, 32) => Ok(DataType::Float32),
+  let reader = WavReader::open(path)?;
+  let header = reader.spec();
+  let dtype = match (header.sample_format, header.bits_per_sample) {
+    (SampleFormat::Int, 8 | 16) => Ok(DataType::Int16),
+    (SampleFormat::Int, 24 | 32) => Ok(DataType::Int32),
+    (SampleFormat::Float, 32) => Ok(DataType::Float32),
     _ => Err(anyhow!(
-      "audio format {} with {} bits per sample not supported",
-      header.audio_format,
+      "audio format {:?} with {} bits per sample not supported",
+      header.sample_format,
       header.bits_per_sample
     )),
   }?;
@@ -27,7 +26,7 @@ pub fn get_wav_schema(path: &Path) -> Result<Schema> {
     .to_str()
     .expect("somehow not unicode");
 
-  let fields: Vec<Field> = (0..header.channel_count)
+  let fields: Vec<Field> = (0..header.channels)
     .map(|i| {
       Field::new(
         format!("{}_channel_{}", name, i),
@@ -68,35 +67,29 @@ fn filter_to_channel<T>(data: Vec<T>, channel_idx: usize, channel_count: u16) ->
 
 impl WavColumnReader {
   fn get_array(&self) -> Result<ArrayRef> {
-    let mut inp_file = File::open(&self.path)?;
-    let (header, data) = wav::read(&mut inp_file)?;
+    let mut reader = WavReader::open(&self.path)?;
+    let header = reader.spec();
 
     macro_rules! make_channel_array {
-      ($data:ident, $array_type:ty) => {
+      ($reader:ident, $t:ty, $array_type:ty) => {{
+        let data = reader.samples::<$t>().collect::<Result<Vec<_>, _>>()?;
         Arc::new(<$array_type>::from(filter_to_channel(
-          $data,
+          data,
           self.channel_idx,
-          header.channel_count,
+          header.channels,
         )))
-      };
+      }};
     }
 
-    let array: ArrayRef = match data {
-      BitDepth::Eight(u8s) => {
-        let u16s = u8s.into_iter().map(|x| x as u16).collect::<Vec<_>>();
-        make_channel_array!(u16s, UInt16Array)
-      }
-      BitDepth::Sixteen(i16s) => make_channel_array!(i16s, Int16Array),
-      BitDepth::TwentyFour(i32s) => make_channel_array!(i32s, Int32Array),
-      BitDepth::ThirtyTwoFloat(f32s) => make_channel_array!(f32s, Float32Array),
-      BitDepth::Empty => {
-        if self.dtype == DataType::Int32 {
-          Arc::new(Int32Array::from(Vec::<i32>::new()))
-        } else if self.dtype == DataType::Float32 {
-          Arc::new(Float32Array::from(Vec::<f32>::new()))
-        } else {
-          Arc::new(Int16Array::from(Vec::<i16>::new()))
-        }
+    let array: ArrayRef = match self.dtype {
+      DataType::Int16 => make_channel_array!(reader, i16, Int16Array),
+      DataType::Int32 => make_channel_array!(reader, i32, Int32Array),
+      DataType::Float32 => make_channel_array!(reader, f32, Float32Array),
+      _ => {
+        return Err(anyhow!(
+          "Unsupported data type: {:?}",
+          self.dtype
+        ))
       }
     };
     Ok(array)
