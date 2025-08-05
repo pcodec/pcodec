@@ -1,0 +1,17 @@
+[package]
+name = "pco_media"
+version = "0.1.0"
+edition = "2021"
+
+authors = ["mwlon <m.w.loncaric@gmail.com>"]
+categories = ["compression", "encoding"]
+description = "Good compression for audiovisual data"
+include = ["src/**/*.rs", "Cargo.toml", "README.md"]
+keywords = ["compression", "audio", "image"]
+license = "Apache-2.0"
+repository = "https://github.com/pcodec/pcodec"
+rust-version = "1.81.0"
+
+[dependencies]
+nalgebra = "0.34.0"
+pco = { version = "0.4", path = "../pco" }
