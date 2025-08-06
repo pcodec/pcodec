@@ -3,11 +3,6 @@ use pco::{ChunkConfig, ModeSpec, PagingSpec};
 
 type Real = f32;
 
-struct Pca {
-  svd: nalgebra::SVD<Real, Dyn, Dyn>,
-  means: RowOVector<Real, Dyn>,
-}
-
 pub struct AudioInput {
   // data is laid out like interleaved (n_items x n_streams) array
   data: Vec<i32>,
@@ -20,22 +15,47 @@ impl AudioInput {
   }
 }
 
-// Our approach here is to reduce rendancy in audio channels by running PCA on a
-// subsample of the data.
-// Then for the full data, each useful principal component will be stored by
-// Pco, and each stream may get its own adjustment Pco array.
-struct StreamRepresentation {
-  has_adjustments: bool,
-}
-
+// Our approach here:
+// For the nth stream, residualize out based on a weighted sum of the 0th
+// through (n-1)st stream, then store just the residuals. The weights come from
+// a linear regression and reduce the variance of each stream, while allowing us
+// to exactly compute the nth stream given just the residuals of streams 0
+// through n. We essentially compute each weight column via linear regression.
+//
+// You might think that PCA would be the natural tool for the job here, but
+// variance reduction is vastly different from entropy reduction. Example: say
+// we have some correlated random normal-ish integer streams with covar matrix
+// 1000 900
+// 900  1000
+// Option 1: just store each stream.
+//   Each one would take about log2(sqrt(1000)) for a total of 10 bits.
+// Option 2: residualize the second stream using the first.
+//   The first one would take the full log2(sqrt(1000)), leaving just 100
+//   unexplained variance for the first for another log2(sqrt(100)) = 3.3 bits,
+//   totalling 8.3 bits.
+// Option 3: store a residual for each variable and one principal component.
+//   The principal component would explain 950 of each variance, taking
+//   about log2(sqrt(1900)) = 5.4 bits to store. Each adjustment would require
+//   about log2(sqrt(50)) = 2.8 bits to store, so in total we'd use 11.0 bits.
+//   We do badly because we store 3 sequences instead of 2, despite them being
+//   "simpler" covariance-wise. And we couldn't get away with storing all
+//   principal components and no residuals, since the purely float arithmetic
+//   might not be lossless. If we could magically do that, this would take a
+//   total of 8.7 bits.
 struct Representation {
-  u_matrix: DMatrix<Real>,
-  singular_values: nalgebra::DVector<Real>,
-  means: RowOVector<Real, Dyn>,
-  streams: Vec<StreamRepresentation>,
+  weights: DMatrix<Real>,
+  biases: RowOVector<Real, Dyn>,
 }
 
 impl AudioInput {
+  fn matrix(&self) -> DMatrix<i32> {
+    DMatrix::from_row_iterator(
+      self.len(),
+      self.n_streams,
+      self.data.iter().copied(),
+    )
+  }
+
   fn calc_subsample(&self) -> Self {
     let mut subsampled_data = Vec::new();
 
@@ -50,117 +70,57 @@ impl AudioInput {
     }
   }
 
-  fn calc_pca(&self) -> Pca {
-    let n_items = self.len();
-    let mut matrix = DMatrix::from_row_iterator(
-      n_items,
-      self.n_streams,
-      self.data.iter().map(|&x| x as Real),
-    );
-    println!("matrix shape {:?}", matrix.shape());
-    let means = matrix.row_mean();
-    matrix.row_iter_mut().for_each(|mut row| row -= &means);
-    println!("means {:?}", means);
-    let covariance = (matrix.transpose() * &matrix) / (n_items - 1) as Real;
-    println!("covar {:?}", covariance);
+  fn choose_representation(&self) -> Representation {
+    let exact_matrix = self.matrix();
+    let mut matrix = exact_matrix.map(|x| x as Real);
+    let biases = matrix.row_mean();
+    matrix.row_iter_mut().for_each(|mut row| row -= &biases);
 
-    let svd = covariance.svd(true, true);
-    println!("u {:?}", svd.u);
-    println!("singular values {:?}", svd.singular_values);
-    Pca { svd, means }
-  }
+    // Compute full covariance matrix (scaled by a factor of n-1)
+    let full_cov = matrix.transpose() * &matrix;
 
-  fn choose_representation(&self, pca: Pca) -> Representation {
-    let threshold = 1.0 / self.n_streams as Real;
-    let singular_values = &pca.svd.singular_values;
-    let total_variance: Real = singular_values.iter().map(|s| s * s).sum();
+    // Initialize weights matrix - each column i contains regression coefficients
+    // to predict stream i using streams 0..i-1 as independent variables
+    let mut weights = DMatrix::zeros(self.n_streams, self.n_streams);
 
-    let n_components = singular_values
-      .iter()
-      .take_while(|&&sigma| (sigma * sigma) / total_variance >= threshold)
-      .count();
-    println!("taking {} pcs", n_components);
+    // For each stream i, find the best linear regression coefficients
+    // using streams 0..i-1 as independent variables
+    for i in 1..self.n_streams {
+      // Slice the precomputed covariance matrix
+      let xtx = full_cov.view((0, 0), (i, i));
+      let xty = full_cov.view((0, i), (i, 1));
 
-    let u = pca.svd.u.as_ref().unwrap();
-    let u_matrix = u.columns(0, n_components).into_owned();
-    let singular_values = singular_values.rows(0, n_components).into_owned();
-    println!(
-      "sub u, values: {:?} {:?}",
-      u_matrix, singular_values
-    );
+      // Solve for regression coefficients
+      if let Some(beta) = xtx.try_inverse() {
+        let coefficients = beta * xty;
 
-    let streams = (0..self.n_streams)
-      .map(|_| StreamRepresentation {
-        has_adjustments: true,
-      })
-      .collect();
-
-    Representation {
-      u_matrix,
-      singular_values,
-      means: pca.means,
-      streams,
+        for j in 0..i {
+          weights[(j, i)] = coefficients[j];
+        }
+      }
     }
+    println!("weights={:?}", weights);
+
+    Representation { weights, biases }
   }
 
   fn calc_arrays(&self, representation: Representation) -> Vec<Vec<i32>> {
-    let n_items = self.len();
-    let original_matrix = DMatrix::from_row_iterator(
-      n_items,
-      self.n_streams,
-      self.data.iter().copied(),
-    );
-
-    let mut matrix = original_matrix.map(|x| x as Real);
+    let original_matrix = self.matrix();
+    let matrix = original_matrix.map(|x| x as Real);
     println!("orig var {:?}", matrix.variance());
-    matrix
+    let mut prediction = matrix * representation.weights;
+    prediction
       .row_iter_mut()
-      .for_each(|mut row| row -= &representation.means);
-    println!("mean sub var {:?}", matrix.variance());
-    let principal_components = &matrix * &representation.u_matrix;
-    println!(
-      "pc var {:?} (shape={:?})",
-      principal_components.variance(),
-      principal_components.shape(),
-    );
-    let pc_quantized = principal_components.map(|x| x as i32);
-    println!(
-      "pc quantized var {:?}",
-      pc_quantized.map(|x| x as Real).variance()
-    );
-
-    let mut reconstructed = pc_quantized.map(|x| x as Real) * representation.u_matrix.transpose();
-    println!("reconstructed var {:?}", matrix.variance());
-    reconstructed
-      .row_iter_mut()
-      .for_each(|mut row| row += &representation.means);
-    let reconstructed_quantized = reconstructed.map(|x| x as i32);
-    println!(
-      "reconstructed quantized var {:?}",
-      matrix.variance()
-    );
-
-    let residuals = &original_matrix - &reconstructed_quantized;
+      .for_each(|mut row| row += &representation.biases);
+    let residuals = original_matrix - prediction.map(|x| x.round() as i32);
     println!(
       "residual var {:?}",
       residuals.map(|x| x as Real).variance()
     );
-
-    let mut arrays = Vec::new();
-
-    // Add principal component arrays
-    for col in pc_quantized.column_iter() {
-      arrays.push(col.iter().copied().collect());
-    }
-
-    // Add adjustment arrays for streams that have adjustments
-    for (stream_idx, stream) in representation.streams.iter().enumerate() {
-      if stream.has_adjustments {
-        arrays.push(residuals.column(stream_idx).iter().copied().collect());
-      }
-    }
-
-    arrays
+    residuals
+      .column_iter()
+      .map(|c| c.iter().copied().collect())
+      .collect()
   }
 }
 
@@ -187,8 +147,7 @@ pub fn compress_audio(input: AudioInput) -> Vec<u8> {
 
     // Process the chunk through PCA and compression
     let subsample = chunk_input.calc_subsample();
-    let pca = subsample.calc_pca();
-    let representation = subsample.choose_representation(pca);
+    let representation = subsample.choose_representation();
     let arrays = chunk_input.calc_arrays(representation);
 
     let chunk_config = ChunkConfig::default()
@@ -198,6 +157,7 @@ pub fn compress_audio(input: AudioInput) -> Vec<u8> {
     // Compress each array in the chunk and collect into the main buffer
     for array in arrays {
       let compressed_array = pco::standalone::simple_compress(&array, &chunk_config).unwrap();
+      println!("compressed size {}", compressed_array.len());
       compressed_data.extend(compressed_array);
     }
   }
@@ -211,8 +171,10 @@ mod tests {
 
   #[test]
   fn test_compress_wav() {
-    let mut reader =
-      hound::WavReader::open("../data/musdb18hq/Young Griffo - Pennies.wav").unwrap();
+    let mut reader = hound::WavReader::open(
+      "../data/musdb18hq/A Classic Education - NightOwl.wav", // "../data/musdb18hq/Young Griffo - Pennies.wav"
+    )
+    .unwrap();
     let spec = reader.spec();
 
     let samples: Vec<i32> = reader
