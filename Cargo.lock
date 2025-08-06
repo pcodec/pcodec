@@ -2208,6 +2208,7 @@ dependencies = [
 name = "pco_media"
 version = "0.1.0"
 dependencies = [
+ "hound",
  "nalgebra",
  "pco",
 ]

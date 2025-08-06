@@ -15,3 +15,6 @@ rust-version = "1.81.0"
 [dependencies]
 nalgebra = "0.34.0"
 pco = { version = "0.4", path = "../pco" }
+
+[dev-dependencies]
+hound = "3.5"
