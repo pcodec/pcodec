@@ -33,8 +33,8 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
   // scratch needs no backup
-  offset_bits_csum_scratch: ScratchArray<u32>,
-  offset_bits_scratch: ScratchArray<u32>,
+  offset_bits_csum_scratch: ScratchArray<Bitlen>,
+  offset_bits_scratch: ScratchArray<Bitlen>,
   lowers_scratch: ScratchArray<L>,
 
   ans_state_idxs: [AnsState; ANS_INTERLEAVING],
