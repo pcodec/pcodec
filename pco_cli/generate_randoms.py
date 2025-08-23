@@ -219,7 +219,7 @@ def near_linear():
 # millisecond timestamps compressed as microseconds
 @datagen("timestamp_micros")
 def millis():
-    return 10**3 * (1640995200000 + np.random.randint(0, 10**9, size=n))
+    return 10**3 * (1640995200000 + np.random.randint(0, 10**9, size=n, dtype=np.int64))
 
 
 # integers compressed as floats
