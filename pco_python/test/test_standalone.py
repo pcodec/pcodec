@@ -173,8 +173,10 @@ def test_decompress_without_n_hint():
 
 
 def test_multidimensional():
-    nums = np.random.normal(size=(10, 11))
-    with pytest.raises(TypeError, match="cannot be converted"):
+    nums = np.random.normal(size=[10, 11])
+    with pytest.raises(
+        TypeError, match="2D float64 numpy array could not be cast to 1D"
+    ):
         standalone.simple_compress(nums, ChunkConfig())
 
 

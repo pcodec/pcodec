@@ -67,7 +67,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        simple_compress_generic(py, nums.downcast::<PyArray1<T>>()?, &config)
+        simple_compress_generic(py, utils::downcast_to_flat::<T>(nums)?, &config)
       }
     )
   }
@@ -96,7 +96,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        simple_decompress_into_generic(py, compressed, dst.downcast::<PyArray1<T>>()?)
+        simple_decompress_into_generic(py, compressed, utils::downcast_to_flat::<T>(dst)?)
       }
     )
   }

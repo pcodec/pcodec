@@ -74,7 +74,7 @@ impl PyFc {
   fn chunk_compressor(
     &self,
     py: Python,
-    nums: Bound<PyUntypedArray>,
+    nums: &Bound<PyUntypedArray>,
     config: &PyChunkConfig,
   ) -> PyResult<PyCc> {
     let config = config.try_into()?;
@@ -82,7 +82,7 @@ impl PyFc {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        let cc = self.chunk_compressor_generic::<T>(py, nums.downcast::<PyArray1<T>>()?, &config)?;
+        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(&nums)?, &config)?;
         Ok(PyCc(cc))
       }
     )
