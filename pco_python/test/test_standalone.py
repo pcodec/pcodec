@@ -173,12 +173,12 @@ def test_decompress_without_n_hint():
 
 
 def test_multidimensional():
-    nums = np.random.normal(size=[10, 11])
+    nums = np.random.normal(size=(10, 11))
     with pytest.raises(TypeError, match="cannot be converted"):
         standalone.simple_compress(nums, ChunkConfig())
 
 
 def test_non_contiguous():
-    nums = np.random.normal(size=[20])[::2]
+    nums = np.random.normal(size=20)[::2]
     with pytest.raises(TypeError, match="not contiguous"):
         standalone.simple_compress(nums, ChunkConfig())
