@@ -170,3 +170,15 @@ def test_decompress_without_n_hint():
         compressed = f.read()
 
     assert len(standalone.simple_decompress(compressed)) == 2000
+
+
+def test_multidimensional():
+    nums = np.random.normal(size=[10, 11])
+    with pytest.raises(TypeError, match="cannot be converted"):
+        standalone.simple_compress(nums, ChunkConfig())
+
+
+def test_non_contiguous():
+    nums = np.random.normal(size=[20])[::2]
+    with pytest.raises(TypeError, match="not contiguous"):
+        standalone.simple_compress(nums, ChunkConfig())
