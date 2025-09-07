@@ -1,8 +1,27 @@
-use numpy::{PyArrayDescr, PyArrayDescrMethods};
-use pco::data_types::NumberType;
+use std::any;
+
+use numpy::{
+  Element, PyArray1, PyArrayDescr, PyArrayDescrMethods, PyUntypedArray, PyUntypedArrayMethods,
+};
+use pco::data_types::{Number, NumberType};
 use pco::errors::PcoError;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
+use pyo3::prelude::*;
 use pyo3::{Bound, PyErr, PyResult, Python};
+
+pub fn downcast_to_flat<'a, T: Number + Element>(
+  arr: &'a Bound<PyUntypedArray>,
+) -> PyResult<&'a Bound<'a, PyArray1<T>>> {
+  let res = arr.downcast::<PyArray1<T>>().map_err(|_e| {
+    PyTypeError::new_err(format!(
+      "{}D {} numpy array could not be cast to 1D {} array",
+      arr.shape().len(),
+      arr.dtype().to_string(),
+      any::type_name::<T>(),
+    ))
+  })?;
+  Ok(res)
+}
 
 pub fn core_dtype_from_str(s: &str) -> PyResult<NumberType> {
   match s.to_uppercase().as_str() {

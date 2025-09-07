@@ -47,9 +47,9 @@ fn simple_decompress_into_generic<T: Number + Element>(
 pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   /// Compresses an array into a standalone format.
   ///
-  /// :param nums: numpy array to compress. This may have any shape.
-  ///   However, it must be contiguous, and only the following data types are
-  ///   supported: float16, float32, float64, int16, int32, int64, uint16, uint32, uint64.
+  /// :param nums: numpy array to compress. This must be 1D, contiguous, and
+  ///   only the following data types are supported: float16, float32, float64,
+  ///   int16, int32, int64, uint16, uint32, uint64.
   /// :param config: a ChunkConfig object containing compression level and
   ///   other settings.
   ///
@@ -67,7 +67,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        simple_compress_generic(py, nums.downcast::<PyArray1<T>>()?, &config)
+        simple_compress_generic(py, utils::downcast_to_flat::<T>(nums)?, &config)
       }
     )
   }
@@ -76,8 +76,8 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   /// Decompresses pcodec compressed bytes into a pre-existing array.
   ///
   /// :param compressed: a bytes object a full standalone file of compressed data.
-  /// :param dst: a numpy array to fill with the decompressed values. May have
-  ///   any shape, but must be contiguous.
+  /// :param dst: a numpy array to fill with the decompressed values. Must be
+  ///   both 1D and contiguous.
   ///
   /// :returns: progress, an object with a count of elements written and
   ///   whether the compressed data was finished. If dst is shorter than the
@@ -96,7 +96,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        simple_decompress_into_generic(py, compressed, dst.downcast::<PyArray1<T>>()?)
+        simple_decompress_into_generic(py, compressed, utils::downcast_to_flat::<T>(dst)?)
       }
     )
   }
