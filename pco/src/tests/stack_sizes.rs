@@ -25,7 +25,7 @@ fn test_stack_sizes() {
   // decompression
   assert_eq!(
     mem::size_of::<LatentPageDecompressor<u64>>(),
-    4248
+    4288
   );
   assert_eq!(
     mem::size_of::<DynLatentPageDecompressor>(),
