@@ -159,7 +159,7 @@ impl<'a> BitReader<'a> {
             n,
           )
         }
-      },
+      }
       8 => read_uint_at::<U, 8>(
         self.src,
         self.stale_byte_idx,
