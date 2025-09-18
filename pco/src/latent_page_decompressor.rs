@@ -214,19 +214,11 @@ impl<L: Latent> LatentPageDecompressor<L> {
         dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
         return;
       }
-      4 => {
-        if L::BITS <= 32 {
-          // only decompress 4-byte offsets if the latent type is 32 bits or smaller
-          self.decompress_offsets::<4>(reader, dst);
-        } else {
-          self.decompress_offsets::<8>(reader, dst);
-        }
-      }
+      4 => self.decompress_offsets::<4>(reader, dst),
       8 => self.decompress_offsets::<8>(reader, dst),
       16 => self.decompress_offsets::<16>(reader, dst),
-      24 => self.decompress_offsets::<24>(reader, dst),
       _ => panic!(
-        "[LatentBatchDecompressor] data type too large (bytes {} > 24)",
+        "[LatentBatchDecompressor] unsupported read width: {}",
         self.bytes_per_offset
       ),
     }

@@ -58,19 +58,22 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   //    handled the 2nd u64, the most we'll ever need to shift by is
   //    U::BITS - 8, which is safe.
 
-  let res = if MAX_BYTES < 8 {
-    U::from_u32(u32_at(src, byte_idx) >> bits_past_byte)
-  } else {
-    let mut res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
-    let mut processed = min(n, 56 - bits_past_byte);
-    byte_idx += 7;
+  let res = match MAX_BYTES {
+    4 => U::from_u32(u32_at(src, byte_idx) >> bits_past_byte),
+    8 => U::from_u64(u64_at(src, byte_idx) >> bits_past_byte),
+    16 => {
+      let mut res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
+      let mut processed = min(n, 56 - bits_past_byte);
+      byte_idx += 7;
 
-    for _ in (0..MAX_BYTES - 8).step_by(8) {
-      res |= U::from_u64(u64_at(src, byte_idx)) << processed;
-      processed += 64;
-      byte_idx += 8;
+      for _ in (0..MAX_BYTES - 8).step_by(8) {
+        res |= U::from_u64(u64_at(src, byte_idx)) << processed;
+        processed += 64;
+        byte_idx += 8;
+      }
+      res
     }
-    res
+    _ => unreachable!("invalid max bytes: {}", MAX_BYTES),
   };
 
   if MAX_BYTES * 8 <= U::BITS as usize {
@@ -142,24 +145,12 @@ impl<'a> BitReader<'a> {
   pub unsafe fn read_uint<U: ReadWriteUint>(&mut self, n: Bitlen) -> U {
     self.refill();
     let res = match U::MAX_BYTES {
-      4 => {
-        if U::BITS <= 32 {
-          // only decompress 4-byte offsets if the latent type is 32 bits or smaller
-          read_uint_at::<U, 4>(
-            self.src,
-            self.stale_byte_idx,
-            self.bits_past_byte,
-            n,
-          )
-        } else {
-          read_uint_at::<U, 8>(
-            self.src,
-            self.stale_byte_idx,
-            self.bits_past_byte,
-            n,
-          )
-        }
-      }
+      4 => read_uint_at::<U, 4>(
+        self.src,
+        self.stale_byte_idx,
+        self.bits_past_byte,
+        n,
+      ),
       8 => read_uint_at::<U, 8>(
         self.src,
         self.stale_byte_idx,
@@ -172,15 +163,9 @@ impl<'a> BitReader<'a> {
         self.bits_past_byte,
         n,
       ),
-      24 => read_uint_at::<U, 24>(
-        self.src,
-        self.stale_byte_idx,
-        self.bits_past_byte,
-        n,
-      ),
       0 => panic!("[BitReader] data type cannot have 0 bits"),
       _ => panic!(
-        "[BitReader] data type too large (bytes {} > 24)",
+        "[BitReader] unsupported max bytes: {}",
         U::MAX_BYTES
       ),
     };
