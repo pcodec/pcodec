@@ -116,10 +116,8 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     bit_reader::ensure_buf_read_capacity(&mut src, PERFORMANT_BUF_READ_CAPACITY);
     let mut reader_builder = BitReaderBuilder::new(src, PAGE_PADDING, 0);
 
-    // println!("A {}", PAGE_PADDING);
     let page_meta =
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
-    // println!("B");
 
     let mode = chunk_meta.mode;
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
@@ -127,7 +125,6 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
     let secondary_scratch = make_latent_scratch(latent_decompressors.secondary.as_ref());
 
-    // println!("C");
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
       n,
