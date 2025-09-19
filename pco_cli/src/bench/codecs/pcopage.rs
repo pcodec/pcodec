@@ -65,8 +65,7 @@ impl CodecInternal for PaginatedPcoConfig {
       dst.reserve(additional_size_est);
       dst.extend((n_pages as u32).to_le_bytes());
       cc.write_chunk_meta(&mut dst).unwrap();
-      for page_i in 0..n_pages {
-        let page_n = n_per_page[page_i];
+      for (page_i, page_n) in n_per_page.into_iter().enumerate() {
         dst.extend((page_n as u32).to_le_bytes());
         cc.write_page(page_i, &mut dst).unwrap();
       }
