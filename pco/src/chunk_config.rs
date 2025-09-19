@@ -169,7 +169,7 @@ impl Default for PagingSpec {
 }
 
 impl PagingSpec {
-  pub(crate) fn n_per_page(&self, n: usize) -> PcoResult<Vec<usize>> {
+  pub fn n_per_page(&self, n: usize) -> PcoResult<Vec<usize>> {
     let n_per_page = match self {
       // You might think it would be beneficial to do either of these:
       // * greedily fill pages since compressed chunk size seems like a concave
