@@ -6,9 +6,7 @@ use crate::bench::codecs::CodecInternal;
 use crate::dtypes::PcoNumber;
 
 // This is designed to be a dumb format that just tests Pco's pagination
-// capabilities and performance. It isn't super optimized; in particular, it
-// isn't aware of the uncompressed sizes of pages or chunks, so it repeatedly
-// allocates instead of doing so once upfront.
+// capabilities and performance. It isn't stable.
 #[derive(Clone, Debug, Parser)]
 pub struct PaginatedPcoConfig {
   #[arg(long, default_value_t = pco::DEFAULT_COMPRESSION_LEVEL)]
