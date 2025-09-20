@@ -17,7 +17,3 @@ exclude = [
   # conflicting dependencies and not worth upgrading
   "quantile-compression/q_compress_cli"
 ]
-
-[patch.crates-io]
-pco = { path = "./pco" }
-better_io = { path = "./better_io" }

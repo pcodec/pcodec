@@ -640,6 +640,12 @@ name = "better_io"
 version = "0.1.0"
 
 [[package]]
+name = "better_io"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92fde17f91e7ba10b2a07f8dff29530b77144894bc6ae850fbc66e1276af0d28"
+
+[[package]]
 name = "bindgen"
 version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -931,7 +937,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "libc",
- "pco",
+ "pco 0.4.6",
 ]
 
 [[package]]
@@ -1032,6 +1038,12 @@ dependencies = [
 [[package]]
 name = "dtype_dispatch"
 version = "0.1.1"
+
+[[package]]
+name = "dtype_dispatch"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3a5ccdfd6c5e7e2fea9c5cf256f2a08216047fab19c621c3da64e9ae4a1462d"
 
 [[package]]
 name = "dyn-hash"
@@ -2359,10 +2371,22 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 name = "pco"
 version = "0.4.6"
 dependencies = [
- "better_io",
- "dtype_dispatch",
+ "better_io 0.1.0",
+ "dtype_dispatch 0.1.1",
  "half",
  "rand 0.8.5",
+ "rand_xoshiro",
+]
+
+[[package]]
+name = "pco"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab068b64f2c6f074cbdcafc80ebd83a27da92a3848deba2fabc21eba6691fc65"
+dependencies = [
+ "better_io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dtype_dispatch 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "half",
  "rand_xoshiro",
 ]
 
@@ -2372,7 +2396,7 @@ version = "0.4.3"
 dependencies = [
  "anyhow",
  "arrow",
- "better_io",
+ "better_io 0.1.0",
  "blosc2-src",
  "brotli",
  "bytes",
@@ -2382,7 +2406,7 @@ dependencies = [
  "indicatif",
  "once_cell",
  "parquet",
- "pco",
+ "pco 0.4.6",
  "q_compress",
  "rayon",
  "serde",
@@ -2402,7 +2426,7 @@ version = "0.1.0"
 dependencies = [
  "half",
  "jni",
- "pco",
+ "pco 0.4.6",
 ]
 
 [[package]]
@@ -2411,7 +2435,7 @@ version = "0.3.5"
 dependencies = [
  "half",
  "numpy",
- "pco",
+ "pco 0.4.6",
  "pyo3",
 ]
 
@@ -3870,7 +3894,7 @@ dependencies = [
  "oneshot",
  "parking_lot",
  "paste",
- "pco",
+ "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "pin-project-lite",
  "prost",
  "rustc-hash 2.1.1",
@@ -3921,7 +3945,7 @@ name = "vortex-pco"
 version = "0.1.0"
 source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
 dependencies = [
- "pco",
+ "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost",
  "vortex-array",
  "vortex-buffer",
