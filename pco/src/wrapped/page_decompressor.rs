@@ -255,7 +255,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   /// of numbers remaining in the page.
   pub fn decompress(&mut self, num_dst: &mut [T]) -> PcoResult<Progress> {
     let n_remaining = self.inner.n_remaining();
-    if num_dst.len() % FULL_BATCH_N != 0 && num_dst.len() < n_remaining {
+    if !num_dst.len().is_multiple_of(FULL_BATCH_N) && num_dst.len() < n_remaining {
       return Err(PcoError::invalid_argument(format!(
         "num_dst's length must either be a multiple of {} or be \
          at least the count of numbers remaining ({} < {})",
