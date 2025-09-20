@@ -1,7 +1,10 @@
 //! For crate-level documentation, see either
 //! <https://crates.io/crates/q_compress> or
 //! <https://github.com/mwlon/pcodec/tree/main/quantile-compression/q_compress>.
+
+// We do not expect to maintain q_compress for lints or clippy.
 #![allow(clippy::all)]
+#![allow(warnings)]
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

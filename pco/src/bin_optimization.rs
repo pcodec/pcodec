@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::ans::Symbol;
 use crate::bits;
 use crate::compression_intermediates::BinCompressionInfo;
@@ -21,7 +19,7 @@ const TRIVIAL_OFFSET_SPEEDUP_WORTH_IN_BITS_PER_NUM: f32 = 0.1;
 fn log2_approx(x: f32) -> f32 {
   const Z: f32 = 0.674; // cutoff for local approximation in [z, 2z]
   const SIGNIF_MASK: u32 = 0x7FFFFF;
-  const Z_SIGNIF: u32 = unsafe { mem::transmute::<f32, u32>(Z) } & SIGNIF_MASK;
+  const Z_SIGNIF: u32 = Z.to_bits() & SIGNIF_MASK;
   const B: f32 = 2.0 / Z;
   const C: f32 = -B / (6.0 * Z);
   const A: f32 = -B - C;
