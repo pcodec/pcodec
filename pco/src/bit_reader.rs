@@ -59,16 +59,9 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   //    U::BITS - 8, which is safe.
 
   let res = match MAX_BYTES {
-    4 => {
-      if U::BITS <= 32 {
-        read_u32_at(src, byte_idx, bits_past_byte)
-      } else if U::BITS <= 64 {
-        read_u64_at(src, byte_idx, bits_past_byte)
-      } else {
-        unreachable!("invalid U::BITS: {}", U::BITS);
-      }
-    }
-    8 => read_u64_at(src, byte_idx, bits_past_byte),
+    // using u32 reads is only beneficial for latents up to 32 bits
+    4 if U::BITS <= 32 => read_u32_at(src, byte_idx, bits_past_byte),
+    4 | 8 => read_u64_at(src, byte_idx, bits_past_byte),
     16 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid max bytes: {}", MAX_BYTES),
   };
@@ -97,10 +90,9 @@ unsafe fn read_u64x2_at<U: ReadWriteUint>(
   bits_past_byte: Bitlen,
   n: Bitlen,
 ) -> U {
-  let mut res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
+  let res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
   let processed = min(n, 56 - bits_past_byte);
-  res |= U::from_u64(u64_at(src, byte_idx + 7)) << processed;
-  res
+  res | (U::from_u64(u64_at(src, byte_idx + 7)) << processed)
 }
 
 pub struct BitReader<'a> {
