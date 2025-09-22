@@ -30,7 +30,7 @@ pub unsafe fn u32_at(src: &[u8], byte_idx: usize) -> u32 {
 #[inline]
 pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   src: &[u8],
-  mut byte_idx: usize,
+  byte_idx: usize,
   bits_past_byte: Bitlen,
   n: Bitlen,
 ) -> U {
@@ -61,26 +61,15 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   let res = match MAX_BYTES {
     4 => {
       if U::BITS <= 32 {
-        U::from_u32(u32_at(src, byte_idx) >> bits_past_byte)
+        read_u32_at(src, byte_idx, bits_past_byte)
       } else if U::BITS <= 64 {
-        U::from_u64(u64_at(src, byte_idx) >> bits_past_byte)
+        read_u64_at(src, byte_idx, bits_past_byte)
       } else {
         unreachable!("invalid U::BITS: {}", U::BITS);
       }
     }
-    8 => U::from_u64(u64_at(src, byte_idx) >> bits_past_byte),
-    16 => {
-      let mut res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
-      let mut processed = min(n, 56 - bits_past_byte);
-      byte_idx += 7;
-
-      for _ in (0..MAX_BYTES - 8).step_by(8) {
-        res |= U::from_u64(u64_at(src, byte_idx)) << processed;
-        processed += 64;
-        byte_idx += 8;
-      }
-      res
-    }
+    8 => read_u64_at(src, byte_idx, bits_past_byte),
+    16 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid max bytes: {}", MAX_BYTES),
   };
 
@@ -89,6 +78,29 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   } else {
     bits::lowest_bits(res, n)
   }
+}
+
+#[inline]
+unsafe fn read_u32_at<U: ReadWriteUint>(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen) -> U {
+  U::from_u32(u32_at(src, byte_idx) >> bits_past_byte)
+}
+
+#[inline]
+unsafe fn read_u64_at<U: ReadWriteUint>(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen) -> U {
+  U::from_u64(u64_at(src, byte_idx) >> bits_past_byte)
+}
+
+#[inline]
+unsafe fn read_u64x2_at<U: ReadWriteUint>(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> U {
+  let mut res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
+  let processed = min(n, 56 - bits_past_byte);
+  res |= U::from_u64(u64_at(src, byte_idx + 7)) << processed;
+  res
 }
 
 pub struct BitReader<'a> {
