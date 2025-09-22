@@ -70,7 +70,7 @@ impl<W: Write> BitWriter<W> {
   }
 
   fn check_aligned(&self) -> PcoResult<()> {
-    if self.bits_past_byte % 8 != 0 {
+    if !self.bits_past_byte.is_multiple_of(8) {
       return Err(PcoError::invalid_argument(format!(
         "cannot write aligned bytes to unaligned writer ({} bits past byte)",
         self.bits_past_byte,

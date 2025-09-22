@@ -82,7 +82,7 @@ impl PyFc {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(&nums)?, &config)?;
+        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(nums)?, &config)?;
         Ok(PyCc(cc))
       }
     )

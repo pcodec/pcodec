@@ -23,7 +23,7 @@ pub struct Spec {
 // * 5 -> [0, 0.2, 0.4, 0.6, 0.8]
 fn choose_stride(table_size: Weight) -> Weight {
   let mut res = (3 * table_size) / 5;
-  if res % 2 == 0 {
+  if res.is_multiple_of(2) {
     res += 1;
   }
   res
