@@ -28,6 +28,12 @@ pub unsafe fn u32_at(src: &[u8], byte_idx: usize) -> u32 {
 }
 
 #[inline]
+pub unsafe fn u16_at(src: &[u8], byte_idx: usize) -> u16 {
+  let raw_bytes = *(src.as_ptr().add(byte_idx) as *const [u8; 2]);
+  u16::from_le_bytes(raw_bytes)
+}
+
+#[inline]
 pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   src: &[u8],
   byte_idx: usize,
@@ -60,6 +66,7 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
 
   let res = match MAX_BYTES {
     // using u32 reads is only beneficial for latents up to 32 bits
+    2 => read_u16_at(src, byte_idx, bits_past_byte),
     4 => read_u32_at(src, byte_idx, bits_past_byte),
     8 => read_u64_at(src, byte_idx, bits_past_byte),
     16 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
@@ -71,6 +78,11 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
   } else {
     bits::lowest_bits(res, n)
   }
+}
+
+#[inline]
+unsafe fn read_u16_at<U: ReadWriteUint>(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen) -> U {
+  U::from_u16(u16_at(src, byte_idx) >> bits_past_byte)
 }
 
 #[inline]
@@ -157,6 +169,12 @@ impl<'a> BitReader<'a> {
   pub unsafe fn read_uint<U: ReadWriteUint>(&mut self, n: Bitlen) -> U {
     self.refill();
     let res = match U::MAX_BYTES {
+      2 => read_uint_at::<U, 2>(
+        self.src,
+        self.stale_byte_idx,
+        self.bits_past_byte,
+        n,
+      ),
       4 => read_uint_at::<U, 4>(
         self.src,
         self.stale_byte_idx,
