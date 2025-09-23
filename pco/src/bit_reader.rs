@@ -60,8 +60,8 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
 
   let res = match MAX_BYTES {
     // using u32 reads is only beneficial for latents up to 32 bits
-    4 if U::BITS <= 32 => read_u32_at(src, byte_idx, bits_past_byte),
-    4 | 8 => read_u64_at(src, byte_idx, bits_past_byte),
+    4 => read_u32_at(src, byte_idx, bits_past_byte),
+    8 => read_u64_at(src, byte_idx, bits_past_byte),
     16 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid max bytes: {}", MAX_BYTES),
   };

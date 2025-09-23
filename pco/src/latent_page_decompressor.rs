@@ -214,8 +214,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
         dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
         return;
       }
-      4 => self.decompress_offsets::<4>(reader, dst),
-      8 => self.decompress_offsets::<8>(reader, dst),
+      4 if L::BITS <= 32 => self.decompress_offsets::<4>(reader, dst),
+      4 | 8 => self.decompress_offsets::<8>(reader, dst),
       16 => self.decompress_offsets::<16>(reader, dst),
       _ => panic!(
         "[LatentBatchDecompressor] unsupported read width: {}",
