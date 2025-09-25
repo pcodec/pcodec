@@ -28,45 +28,42 @@ pub unsafe fn u32_at(src: &[u8], byte_idx: usize) -> u32 {
 }
 
 #[inline]
-pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_BYTES: usize>(
+pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   src: &[u8],
   byte_idx: usize,
   bits_past_byte: Bitlen,
   n: Bitlen,
 ) -> U {
   // Q: Why is this fast?
-  // A: The 0..MAX_BYTES can be unrolled at compile time, allowing really
-  // fast SIMD stuff at least in the MAX_BYTES<=8 (most common) case.
+  // A: The compiler removes branching allowing for fast SIMD.
   //
   // Q: Why does this work?
-  // A: We set MAX_BYTES so that,
-  //    0  to 25  bit reads -> 1 u32
-  //    25 to 57  bit reads -> 1 u64
-  //    58 to 113 bit reads -> 2 u64's
-  //    113 to 128 bit reads -> 3 u64's
-  //    During the 1st u64 (prior to the loop), we read all bytes from the
-  //    current u64. Due to our bit packing, up to the first 7 of these may
-  //    be useless, so we can read up to (64 - 7) = 57 bits safely from a
-  //    single u64. We right shift by only up to 7 bits, which is safe.
+  // A: We set READ_BYTES so that,
+  //    0  to 25  bit reads -> 4 bytes (1 u32)
+  //    26 to 57  bit reads -> 8 bytes (1 u64)
+  //    58 to 113 bit reads -> 16 bytes (2 u64's)
+  //    For the 1st u64, we read all bytes from the current u64. Due to our bit
+  //    packing, up to the first 7 of these may be useless, so we can read up
+  //    to (64 - 7) = 57 bits safely from a single u64. We right shift by only
+  //    up to 7 bits, which is safe.
   //
   //    For the 2nd u64, we skip only 7 bytes forward. This will overlap with
   //    the 1st u64 by 1 byte, which seems useless, but allows us to avoid one
   //    nasty case: left shifting by U::BITS (a panic). This could happen e.g.
   //    with 64-bit reads when we start out byte-aligned (bits_past_byte=0).
   //
-  //    For the 3rd u64 and onward, we skip 8 bytes forward. Due to how we
-  //    handled the 2nd u64, the most we'll ever need to shift by is
-  //    U::BITS - 8, which is safe.
+  //    For the 3rd u64 and onward (currently not implemented), we skip 8 bytes
+  //    forward. Due to how we handled the 2nd u64, the most we'll ever need to
+  //    shift by is U::BITS - 8, which is safe.
 
-  let res = match MAX_BYTES {
-    // using u32 reads is only beneficial for latents up to 32 bits
+  let res = match READ_BYTES {
     4 => read_u32_at(src, byte_idx, bits_past_byte),
     8 => read_u64_at(src, byte_idx, bits_past_byte),
     16 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
-    _ => unreachable!("invalid max bytes: {}", MAX_BYTES),
+    _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   };
 
-  if MAX_BYTES * 8 <= U::BITS as usize {
+  if READ_BYTES * 8 <= U::BITS as usize {
     bits::lowest_bits_fast(res, n)
   } else {
     bits::lowest_bits(res, n)
@@ -175,8 +172,8 @@ impl<'a> BitReader<'a> {
         self.bits_past_byte,
         n,
       ),
-      0 => panic!("[BitReader] data type cannot have 0 bits"),
-      _ => panic!(
+      0 => unreachable!("[BitReader] data type cannot have 0 bits"),
+      _ => unreachable!(
         "[BitReader] unsupported max bytes: {}",
         U::MAX_BYTES
       ),
