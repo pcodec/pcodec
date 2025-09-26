@@ -20,20 +20,6 @@ pub const fn calc_max_bytes(precision: Bitlen) -> usize {
   }
 }
 
-// this applies to reading and also works for byte-aligned precisions
-pub const fn calc_max_u64s(precision: Bitlen) -> usize {
-  // See bit_reader::read_uint_at for an explanation of these thresholds.
-  if precision == 0 {
-    0
-  } else if precision <= 57 {
-    1
-  } else if precision <= 113 {
-    2
-  } else {
-    3
-  }
-}
-
 pub const fn calc_max_u64s_for_writing(precision: Bitlen) -> usize {
   // We need to be slightly more conservative during writing
   // due to how write_short_uints is implemented.
@@ -63,7 +49,7 @@ pub trait ReadWriteUint:
 {
   const ONE: Self;
   const BITS: Bitlen;
-  const MAX_U64S: usize = calc_max_u64s(Self::BITS);
+  const MAX_U64S: usize = calc_max_u64s_for_writing(Self::BITS);
   const MAX_BYTES: usize = calc_max_bytes(Self::BITS);
 
   fn from_u32(x: u32) -> Self;
