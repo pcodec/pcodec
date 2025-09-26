@@ -172,7 +172,6 @@ impl<'a> BitReader<'a> {
         self.bits_past_byte,
         n,
       ),
-      0 => unreachable!("[BitReader] data type cannot have 0 bits"),
       _ => unreachable!(
         "[BitReader] unsupported max bytes: {}",
         U::MAX_BYTES
