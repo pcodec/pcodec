@@ -86,9 +86,9 @@ unsafe fn read_u64x2_at<U: ReadWriteUint>(
   byte_idx: usize,
   bits_past_byte: Bitlen,
 ) -> U {
-  let res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
+  let first_word = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
   let processed = 56 - bits_past_byte;
-  res | (U::from_u64(u64_at(src, byte_idx + 7)) << processed)
+  first_word | (U::from_u64(u64_at(src, byte_idx + 7)) << processed)
 }
 
 pub struct BitReader<'a> {
