@@ -59,7 +59,7 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   let res = match READ_BYTES {
     4 => read_u32_at(src, byte_idx, bits_past_byte),
     8 => read_u64_at(src, byte_idx, bits_past_byte),
-    16 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
+    16 => read_u64x2_at(src, byte_idx, bits_past_byte),
     _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   };
 
@@ -85,10 +85,9 @@ unsafe fn read_u64x2_at<U: ReadWriteUint>(
   src: &[u8],
   byte_idx: usize,
   bits_past_byte: Bitlen,
-  n: Bitlen,
 ) -> U {
   let res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
-  let processed = min(n, 56 - bits_past_byte);
+  let processed = 56 - bits_past_byte;
   res | (U::from_u64(u64_at(src, byte_idx + 7)) << processed)
 }
 
