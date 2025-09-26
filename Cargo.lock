@@ -3476,8 +3476,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vortex"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07f87dbcf3ea568c10ee254b9a5d6aee1283ef831fa898ca2705b7306c52f5e5"
 dependencies = [
  "vortex-alp",
  "vortex-array",
@@ -3513,8 +3514,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-alp"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0786312fb694d1d05104700627e1cc9698452b4103a431a74bb9861641f8b832"
 dependencies = [
  "itertools 0.14.0",
  "num-traits",
@@ -3532,8 +3534,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-array"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9a14b31dc2681195c11f3c138ac86d29a5ecc8901416b2384225cb8ab1136f6"
 dependencies = [
  "arcref",
  "arrow-arith 56.1.0",
@@ -3544,9 +3547,9 @@ dependencies = [
  "arrow-schema 56.1.0",
  "arrow-select 56.1.0",
  "arrow-string 56.1.0",
+ "async-trait",
  "bitvec",
  "cfg-if",
- "dyn-hash",
  "enum-iterator",
  "flatbuffers 25.2.10",
  "futures",
@@ -3567,19 +3570,22 @@ dependencies = [
  "serde",
  "simdutf8",
  "static_assertions",
+ "termtree",
  "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
  "vortex-mask",
+ "vortex-metrics",
  "vortex-scalar",
  "vortex-utils",
 ]
 
 [[package]]
 name = "vortex-btrblocks"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1002e8af05fe3bf32d57f89b28b222e74bcc2db4fa755e67618c69120f20cf7c"
 dependencies = [
  "arrow-buffer 56.1.0",
  "getrandom 0.3.3",
@@ -3609,8 +3615,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-buffer"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6de68f5c9799886ece9da8b41866aa428c6ed75ee7944a81e5ad2be09faf1d98"
 dependencies = [
  "arrow-buffer 56.1.0",
  "bytes",
@@ -3622,8 +3629,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-bytebool"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4385b3fc69a2565d0592574a703a03f40832917c0f61b53102c14e48e040deb"
 dependencies = [
  "arrow-buffer 56.1.0",
  "num-traits",
@@ -3637,8 +3645,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-datetime-parts"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75b7d961c76496dc8b7dce1e28b45678b374edf9fe54afcadc52abdc55b295f5"
 dependencies = [
  "num-traits",
  "prost",
@@ -3652,8 +3661,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-decimal-byte-parts"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "906fc70ec7b9c6b9f9e8d517709dcac6d48592ccc14f28149f519f0fc1afe993"
 dependencies = [
  "num-traits",
  "prost",
@@ -3667,8 +3677,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-dict"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6e4b451cd602f81103ccfedb6f02c156a087c10c7c1ce23a9ced0861fe0afa6"
 dependencies = [
  "arrow-array 56.1.0",
  "arrow-buffer 56.1.0",
@@ -3686,8 +3697,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-dtype"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d90cfb741ac2712ffeafe93a2f3c277b091be6724408dd50dfb399407a02d14"
 dependencies = [
  "arrow-schema 56.1.0",
  "flatbuffers 25.2.10",
@@ -3708,8 +3720,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-error"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "212f048b5d5cfa74a6bb884e5de367cc2e3584e6224fe907ffa4e9e75a25921b"
 dependencies = [
  "arrow-schema 56.1.0",
  "flatbuffers 25.2.10",
@@ -3721,11 +3734,14 @@ dependencies = [
 
 [[package]]
 name = "vortex-expr"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "487bc0f84b6eee6eeaa168a4e566405ba9c4b2866c4df020934ff873734fb120"
 dependencies = [
  "arcref",
+ "async-trait",
  "dyn-hash",
+ "futures",
  "itertools 0.14.0",
  "parking_lot",
  "paste",
@@ -3743,8 +3759,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-fastlanes"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8ff93259195161ffba1327ef640a7939dc9a46caed090302bcec7031bdd3d35"
 dependencies = [
  "arrayref",
  "arrow-buffer 56.1.0",
@@ -3765,8 +3782,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-file"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db90678b3594e2ff746809a1a9aba955a25f25b9d62cc93f06e931d459c23e89"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3808,8 +3826,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-flatbuffers"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9efa2e313f85f7e4088b8099b55f99566da554666b73b30292e674243bc86242"
 dependencies = [
  "flatbuffers 25.2.10",
  "vortex-buffer",
@@ -3817,9 +3836,11 @@ dependencies = [
 
 [[package]]
 name = "vortex-fsst"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7923e957a64508affea0e8ea51d09d1e2db9077e9482b69500d87ee04e84d712"
 dependencies = [
+ "async-trait",
  "fsst-rs",
  "prost",
  "vortex-array",
@@ -3832,8 +3853,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-io"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8352f56440d9e9b6cc99ed7094a4b7fe66422f1760b75833ab38ea670c13822d"
 dependencies = [
  "async-compat",
  "async-stream",
@@ -3859,8 +3881,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-ipc"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f63fffe5e6bd26e3b68dc9a98477fc6fdc892076416fcc21bd34c00a56f00b8f"
 dependencies = [
  "bytes",
  "flatbuffers 25.2.10",
@@ -3876,8 +3899,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-layout"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba83e4f11de309aad5ba0e172d0da3a59b75f163619cd26f73ecf9355172d13c"
 dependencies = [
  "arcref",
  "arrow-buffer 56.1.0",
@@ -3922,8 +3946,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-mask"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf26d4c28b1fde2a9f7e9972ae45d01c12216dbc05ee81e6c619aa69df57cfe1"
 dependencies = [
  "arrow-buffer 56.1.0",
  "itertools 0.14.0",
@@ -3932,8 +3957,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-metrics"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5683b78c53f06b024168258583149b9dfd3dc27c799e6c4ec9b89dbf66b1bf79"
 dependencies = [
  "getrandom 0.3.3",
  "parking_lot",
@@ -3942,8 +3968,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-pco"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9313c2c58af7c605680917d908f2a7df4591a2e018489da4a9489273e456527b"
 dependencies = [
  "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost",
@@ -3957,8 +3984,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-proto"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5a56c48b1a6039c59c639a3123d3747d73666974452014cb1e33e5502d5a487"
 dependencies = [
  "prost",
  "prost-types",
@@ -3966,8 +3994,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-runend"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30518e8c63dc1a2f020ec45e1d3fbd0069d1d66825c9049b293b42c224293a1f"
 dependencies = [
  "arrow-array 56.1.0",
  "arrow-buffer 56.1.0",
@@ -3984,8 +4013,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-scalar"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2da1d8c350e97fc0f4aa7240fc17959e82046baa6584930510090d07320688c"
 dependencies = [
  "arrow-array 56.1.0",
  "arrow-buffer 56.1.0",
@@ -4003,8 +4033,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-scan"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d44ac099f26aa0eeb0b69154b27c4ddd59cd644ede01423349a853c32afbd184"
 dependencies = [
  "arrow-array 56.1.0",
  "arrow-schema 56.1.0",
@@ -4030,8 +4061,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-sequence"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cef5b5480b8d463d44f88069ba27f19eb56efecc5a696e926feb053d09f97d5"
 dependencies = [
  "num-traits",
  "prost",
@@ -4047,8 +4079,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-sparse"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac023181a757edd4dea8520f88668a7e0ccb0841e27e48b6f3044d3c4bc727a2"
 dependencies = [
  "itertools 0.14.0",
  "num-traits",
@@ -4063,8 +4096,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-utils"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d40fff894e5ff5108ca2cdaf8b0728e07ea65eac8acc5a7570e0232a2f35fb78"
 dependencies = [
  "dashmap",
  "hashbrown 0.16.0",
@@ -4072,8 +4106,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-zigzag"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa7bea8198f7fd5d3ea2c13af768df0a655a0ad6ecaf1421d2e072ee7efde330"
 dependencies = [
  "vortex-array",
  "vortex-buffer",
@@ -4086,8 +4121,9 @@ dependencies = [
 
 [[package]]
 name = "vortex-zstd"
-version = "0.1.0"
-source = "git+https://github.com/vortex-data/vortex#75b99c17e8798673097cce843126b61c09ae7396"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e81360eec4d1bede3ee284d8305702f65f68cb4af217cbe591c75172d9f46193"
 dependencies = [
  "itertools 0.14.0",
  "prost",
