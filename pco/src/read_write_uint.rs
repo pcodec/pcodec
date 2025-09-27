@@ -13,10 +13,8 @@ pub const fn calc_max_bytes(precision: Bitlen) -> usize {
     4
   } else if precision <= 57 {
     8
-  } else if precision <= 113 {
-    16
   } else {
-    24
+    9
   }
 }
 

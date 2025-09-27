@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::io;
 
 use better_io::BetterBufRead;
@@ -56,28 +55,40 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   //    forward. Due to how we handled the 2nd u64, the most we'll ever need to
   //    shift by is U::BITS - 8, which is safe.
 
-  let res = match READ_BYTES {
-    4 => read_u32_at(src, byte_idx, bits_past_byte),
-    8 => read_u64_at(src, byte_idx, bits_past_byte),
-    16 => read_u64x2_at(src, byte_idx, bits_past_byte),
+  match READ_BYTES {
+    4 => read_u32_at(src, byte_idx, bits_past_byte, n),
+    8 => read_u64_at(src, byte_idx, bits_past_byte, n),
+    9 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid read bytes: {}", READ_BYTES),
-  };
-
-  if READ_BYTES * 8 <= U::BITS as usize {
-    bits::lowest_bits_fast(res, n)
-  } else {
-    bits::lowest_bits(res, n)
   }
 }
 
 #[inline]
-unsafe fn read_u32_at<U: ReadWriteUint>(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen) -> U {
-  U::from_u32(u32_at(src, byte_idx) >> bits_past_byte)
+unsafe fn read_u32_at<U: ReadWriteUint>(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> U {
+  debug_assert!(n <= 25);
+  U::from_u32(bits::lowest_bits_fast(
+    u32_at(src, byte_idx) >> bits_past_byte,
+    n,
+  ))
 }
 
 #[inline]
-unsafe fn read_u64_at<U: ReadWriteUint>(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen) -> U {
-  U::from_u64(u64_at(src, byte_idx) >> bits_past_byte)
+unsafe fn read_u64_at<U: ReadWriteUint>(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> U {
+  debug_assert!(n <= 57);
+  U::from_u64(bits::lowest_bits_fast(
+    u64_at(src, byte_idx) >> bits_past_byte,
+    n,
+  ))
 }
 
 #[inline]
@@ -85,10 +96,17 @@ unsafe fn read_u64x2_at<U: ReadWriteUint>(
   src: &[u8],
   byte_idx: usize,
   bits_past_byte: Bitlen,
+  n: Bitlen,
 ) -> U {
-  let first_word = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
-  let processed = 56 - bits_past_byte;
-  first_word | (U::from_u64(u64_at(src, byte_idx + 7)) << processed)
+  // if we decide to support more than 64 bit reads, we need to change this
+  debug_assert!(n <= 64);
+  let first_word = u64_at(src, byte_idx) >> bits_past_byte;
+  let processed = 8 - bits_past_byte;
+  let second_word = u64_at(src, byte_idx + 1) << processed;
+  U::from_u64(bits::lowest_bits(
+    first_word | second_word,
+    n,
+  ))
 }
 
 pub struct BitReader<'a> {
@@ -165,7 +183,7 @@ impl<'a> BitReader<'a> {
         self.bits_past_byte,
         n,
       ),
-      16 => read_uint_at::<U, 16>(
+      9 => read_uint_at::<U, 9>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
