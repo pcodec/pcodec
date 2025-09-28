@@ -212,11 +212,11 @@ impl<L: Latent> LatentPageDecompressor<L> {
     if self.bytes_per_offset == 0 {
       dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
       return;
-    } else if self.bytes_per_offset <= 4 && L::BITS <= 32 {
+    } else if self.bytes_per_offset <= 4 {
       self.decompress_offsets::<4>(reader, dst);
-    } else if self.bytes_per_offset <= 8 && L::BITS <= 64 {
+    } else if self.bytes_per_offset <= 8 {
       self.decompress_offsets::<8>(reader, dst);
-    } else if self.bytes_per_offset <= 9 && L::BITS <= 64 {
+    } else if self.bytes_per_offset <= 9 {
       self.decompress_offsets::<9>(reader, dst);
     } else {
       panic!(
