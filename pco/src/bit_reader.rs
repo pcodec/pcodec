@@ -58,7 +58,7 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   match READ_BYTES {
     4 => read_u32_at(src, byte_idx, bits_past_byte, n),
     8 => read_u64_at(src, byte_idx, bits_past_byte, n),
-    9 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
+    15 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   }
 }
@@ -99,10 +99,10 @@ unsafe fn read_u64x2_at<U: ReadWriteUint>(
   n: Bitlen,
 ) -> U {
   // if we decide to support more than 64 bit reads, we need to change this
-  debug_assert!(n <= 64);
+  debug_assert!(n <= 113);
   let first_word = u64_at(src, byte_idx) >> bits_past_byte;
-  let processed = 8 - bits_past_byte;
-  let second_word = u64_at(src, byte_idx + 1) << processed;
+  let processed = 56 - bits_past_byte;
+  let second_word = u64_at(src, byte_idx + 7) << processed;
   U::from_u64(bits::lowest_bits(
     first_word | second_word,
     n,
@@ -183,7 +183,7 @@ impl<'a> BitReader<'a> {
         self.bits_past_byte,
         n,
       ),
-      9 => read_uint_at::<U, 9>(
+      9 => read_uint_at::<U, 15>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,

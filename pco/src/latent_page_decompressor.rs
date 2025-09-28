@@ -217,7 +217,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     } else if self.bytes_per_offset <= 8 {
       self.decompress_offsets::<8>(reader, dst);
     } else if self.bytes_per_offset <= 9 {
-      self.decompress_offsets::<9>(reader, dst);
+      self.decompress_offsets::<15>(reader, dst);
     } else {
       panic!(
         "[LatentBatchDecompressor] unsupported read width: {}",
