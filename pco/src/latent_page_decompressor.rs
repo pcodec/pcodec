@@ -209,20 +209,18 @@ impl<L: Latent> LatentPageDecompressor<L> {
 
     // this assertion saves some unnecessary specializations in the compiled assembly
     assert!(self.bytes_per_offset <= read_write_uint::calc_max_bytes(L::BITS));
-    if self.bytes_per_offset == 0 {
-      dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
-      return;
-    } else if self.bytes_per_offset <= 4 {
-      self.decompress_offsets::<4>(reader, dst);
-    } else if self.bytes_per_offset <= 8 {
-      self.decompress_offsets::<8>(reader, dst);
-    } else if self.bytes_per_offset <= 9 {
-      self.decompress_offsets::<15>(reader, dst);
-    } else {
-      panic!(
+    match self.bytes_per_offset {
+      0 => {
+        dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
+        return;
+      }
+      4 => self.decompress_offsets::<4>(reader, dst),
+      8 => self.decompress_offsets::<8>(reader, dst),
+      9 => self.decompress_offsets::<15>(reader, dst),
+      _ => panic!(
         "[LatentBatchDecompressor] unsupported read width: {}",
         self.bytes_per_offset
-      );
+      ),
     }
 
     self.add_lowers(dst);
