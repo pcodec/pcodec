@@ -40,7 +40,7 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   // A: We set READ_BYTES so that,
   //    0  to 25  bit reads -> 4 bytes (1 u32)
   //    26 to 57  bit reads -> 8 bytes (1 u64)
-  //    58 to 113 bit reads -> 16 bytes (2 u64's)
+  //    58 to 113 bit reads -> 15 bytes (almost 2 u64's)
   //    For the 1st u64, we read all bytes from the current u64. Due to our bit
   //    packing, up to the first 7 of these may be useless, so we can read up
   //    to (64 - 7) = 57 bits safely from a single u64. We right shift by only
@@ -58,7 +58,7 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   match READ_BYTES {
     4 => read_u32_at(src, byte_idx, bits_past_byte, n),
     8 => read_u64_at(src, byte_idx, bits_past_byte, n),
-    15 => read_u64x2_at(src, byte_idx, bits_past_byte, n),
+    15 => read_almost_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   }
 }
@@ -92,13 +92,12 @@ unsafe fn read_u64_at<U: ReadWriteUint>(
 }
 
 #[inline]
-unsafe fn read_u64x2_at<U: ReadWriteUint>(
+unsafe fn read_almost_u64x2_at<U: ReadWriteUint>(
   src: &[u8],
   byte_idx: usize,
   bits_past_byte: Bitlen,
   n: Bitlen,
 ) -> U {
-  // if we decide to support more than 64 bit reads, we need to change this
   debug_assert!(n <= 113);
   let first_word = u64_at(src, byte_idx) >> bits_past_byte;
   let processed = 56 - bits_past_byte;
