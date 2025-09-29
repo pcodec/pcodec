@@ -153,7 +153,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
   }
 
   #[inline(never)]
-  unsafe fn decompress_offsets<const MAX_BYTES: usize>(
+  unsafe fn decompress_offsets<const READ_BYTES: usize>(
     &mut self,
     reader: &mut BitReader,
     dst: &mut [L],
@@ -170,7 +170,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
       let bit_idx = base_bit_idx + offset_bits_csum as usize;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx as Bitlen % 8;
-      *dst = bit_reader::read_uint_at::<L, MAX_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
+      *dst = bit_reader::read_uint_at::<L, READ_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
     }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[dst.len() - 1] as usize
