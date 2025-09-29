@@ -207,19 +207,30 @@ impl<L: Latent> LatentPageDecompressor<L> {
       }
     }
 
-    // this assertion saves some unnecessary specializations in the compiled assembly
-    assert!(self.bytes_per_offset <= read_write_uint::calc_max_bytes(L::BITS));
+    // We want to read the offsets for each latent type as fast as possible.
+    // Depending on the number of bits per offset, we can read them in
+    // different chunk sizes. We use the smallest chunk size that can hold
+    // the maximum possible offset.
+    // The matching is intentionally a bit weird verbosely to make it clear
+    // how different latent types are handled.
     match self.bytes_per_offset {
+      // all
       0 => {
         dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
         return;
       }
-      4 => self.decompress_offsets::<4>(reader, dst),
-      8 => self.decompress_offsets::<8>(reader, dst),
-      9 => self.decompress_offsets::<15>(reader, dst),
+      // u16
+      1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, dst),
+      // u32
+      1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, dst),
+      5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, dst),
+      // u64
+      1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, dst),
+      9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
-        "[LatentBatchDecompressor] unsupported read width: {}",
-        self.bytes_per_offset
+        "[LatentBatchDecompressor] {} byte read not supported for {}-bit Latents",
+        self.bytes_per_offset,
+        L::BITS
       ),
     }
 

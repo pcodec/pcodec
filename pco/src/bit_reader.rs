@@ -170,19 +170,19 @@ impl<'a> BitReader<'a> {
   pub unsafe fn read_uint<U: ReadWriteUint>(&mut self, n: Bitlen) -> U {
     self.refill();
     let res = match U::MAX_BYTES {
-      4 => read_uint_at::<U, 4>(
+      1..=4 => read_uint_at::<U, 4>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
         n,
       ),
-      8 => read_uint_at::<U, 8>(
+      5..=8 => read_uint_at::<U, 8>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
         n,
       ),
-      9 => read_uint_at::<U, 15>(
+      9..=15 => read_uint_at::<U, 15>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,

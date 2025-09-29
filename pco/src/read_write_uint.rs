@@ -9,12 +9,8 @@ pub const fn calc_max_bytes(precision: Bitlen) -> usize {
   // See bit_reader::read_uint_at for an explanation of these thresholds.
   if precision == 0 {
     0
-  } else if precision <= 25 {
-    4
-  } else if precision <= 57 {
-    8
   } else {
-    9
+    ((precision + 14) / 8) as usize
   }
 }
 
