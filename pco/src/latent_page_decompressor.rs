@@ -211,8 +211,10 @@ impl<L: Latent> LatentPageDecompressor<L> {
     // Depending on the number of bits per offset, we can read them in
     // different chunk sizes. We use the smallest chunk size that can hold
     // the maximum possible offset.
-    // The matching is intentionally a bit weird verbosely to make it clear
-    // how different latent types are handled.
+    // The matching is intentionally verbose to make it clear how different
+    // latent types are handled.
+    // Note: Providing a 2 byte read appears to degrade performance for 16-bit
+    // latents.
     match self.bytes_per_offset {
       // all
       0 => {
