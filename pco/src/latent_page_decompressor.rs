@@ -161,16 +161,26 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (dst, (&offset_bits, &offset_bits_csum)) in dst.iter_mut().zip(
-      state
-        .offset_bits_scratch
-        .iter()
-        .zip(state.offset_bits_csum_scratch.iter()),
+    for (dst, (&offset_bits, (&offset_bits_csum, &lower))) in dst.iter_mut().zip(
+      state.offset_bits_scratch.iter().zip(
+        state
+          .offset_bits_csum_scratch
+          .iter()
+          .zip(state.lowers_scratch.iter()),
+      ),
     ) {
       let bit_idx = base_bit_idx + offset_bits_csum as usize;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx as Bitlen % 8;
-      *dst = bit_reader::read_uint_at::<L, READ_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
+      let res =
+        bit_reader::read_uint_at::<L, READ_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
+
+      // On aarch64, lowers are added outside this loop for better SIMD; otherwise, add here.
+      *dst = if cfg!(target_arch = "aarch64") {
+        res
+      } else {
+        res.wrapping_add(lower)
+      };
     }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[dst.len() - 1] as usize
@@ -181,10 +191,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
 
   #[inline(never)]
   fn add_lowers(&self, dst: &mut [L]) {
-    for (&lower, dst) in self.state.lowers_scratch[0..dst.len()]
-      .iter()
-      .zip(dst.iter_mut())
-    {
+    for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
       *dst = dst.wrapping_add(lower);
     }
   }
@@ -236,7 +243,10 @@ impl<L: Latent> LatentPageDecompressor<L> {
       ),
     }
 
-    self.add_lowers(dst);
+    // On aarch64, lower is added outside decompress_offsets loop for better SIMD.
+    if cfg!(target_arch = "aarch64") {
+      self.add_lowers(dst);
+    }
   }
 
   pub unsafe fn decompress_batch(
