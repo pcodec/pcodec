@@ -60,7 +60,7 @@ pub struct LatentPageDecompressor<L: Latent> {
   bytes_per_offset: usize,
   bin_lowers: Vec<L>,
   needs_ans: bool,
-  decoder: ans::Decoder,
+  decoder: ans::Decoder<L>,
   delta_encoding: DeltaEncoding,
   pub maybe_constant_value: Option<L>,
 
@@ -99,7 +99,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
           let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = *unsafe { bin_lowers.get_unchecked(node.symbol as usize) };
+          let lower = node.lower;
           let offset_bits = node.offset_bits as Bitlen;
           self
             .state
@@ -137,7 +137,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
       let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = self.bin_lowers[node.symbol as usize];
+      let lower = node.lower;
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state
@@ -308,11 +308,11 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
-    let bin_lowers = bins.iter().map(|bin| bin.lower).collect();
+    let bin_lowers = bins.iter().map(|bin| bin.lower).collect::<Vec<_>>();
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
+    let decoder = ans::Decoder::<L>::new(&ans_spec, &bin_offset_bits, &bin_lowers);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
       DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
