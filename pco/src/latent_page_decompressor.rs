@@ -57,7 +57,7 @@ impl<L: Latent> State<L> {
 #[derive(Clone, Debug)]
 pub struct LatentPageDecompressor<L: Latent> {
   // known information about this latent variable
-  u64s_per_offset: usize,
+  bytes_per_offset: usize,
   bin_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
@@ -153,7 +153,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
   }
 
   #[inline(never)]
-  unsafe fn decompress_offsets<const MAX_U64S: usize>(
+  unsafe fn decompress_offsets<const READ_BYTES: usize>(
     &mut self,
     reader: &mut BitReader,
     dst: &mut [L],
@@ -170,7 +170,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
       let bit_idx = base_bit_idx + offset_bits_csum as usize;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx as Bitlen % 8;
-      *dst = bit_reader::read_uint_at::<L, MAX_U64S>(src, byte_idx, bits_past_byte, offset_bits);
+      *dst = bit_reader::read_uint_at::<L, READ_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
     }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[dst.len() - 1] as usize
@@ -207,19 +207,32 @@ impl<L: Latent> LatentPageDecompressor<L> {
       }
     }
 
-    // this assertion saves some unnecessary specializations in the compiled assembly
-    assert!(self.u64s_per_offset <= read_write_uint::calc_max_u64s(L::BITS));
-    match self.u64s_per_offset {
+    // We want to read the offsets for each latent type as fast as possible.
+    // Depending on the number of bits per offset, we can read them in
+    // different chunk sizes. We use the smallest chunk size that can hold
+    // the maximum possible offset.
+    // The matching is intentionally verbose to make it clear how different
+    // latent types are handled.
+    // Note: Providing a 2 byte read appears to degrade performance for 16-bit
+    // latents.
+    match self.bytes_per_offset {
+      // all
       0 => {
         dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
         return;
       }
-      1 => self.decompress_offsets::<1>(reader, dst),
-      2 => self.decompress_offsets::<2>(reader, dst),
-      3 => self.decompress_offsets::<3>(reader, dst),
+      // u16
+      1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, dst),
+      // u32
+      1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, dst),
+      5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, dst),
+      // u64
+      1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, dst),
+      9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
-        "[LatentBatchDecompressor] data type too large (extra u64's {} > 2)",
-        self.u64s_per_offset
+        "[LatentBatchDecompressor] {} byte read not supported for {}-bit Latents",
+        self.bytes_per_offset,
+        L::BITS
       ),
     }
 
@@ -294,7 +307,7 @@ impl DynLatentPageDecompressor {
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
-    let u64s_per_offset = read_write_uint::calc_max_u64s(bins::max_offset_bits(bins));
+    let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
     let bin_lowers = bins.iter().map(|bin| bin.lower).collect();
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
@@ -338,7 +351,7 @@ impl DynLatentPageDecompressor {
       };
 
     let lpd = LatentPageDecompressor {
-      u64s_per_offset,
+      bytes_per_offset,
       bin_lowers,
       needs_ans,
       decoder,

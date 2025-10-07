@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::io;
 
 use better_io::BetterBufRead;
@@ -18,50 +17,92 @@ pub unsafe fn u64_at(src: &[u8], byte_idx: usize) -> u64 {
   u64::from_le_bytes(raw_bytes)
 }
 
+// Q: Why is there also a u32 version?
+// A: This allows for better use of SIMD bandwidth when reading smaller latent
+//    types compared to the u64 version.
 #[inline]
-pub unsafe fn read_uint_at<U: ReadWriteUint, const MAX_U64S: usize>(
+pub unsafe fn u32_at(src: &[u8], byte_idx: usize) -> u32 {
+  let raw_bytes = *(src.as_ptr().add(byte_idx) as *const [u8; 4]);
+  u32::from_le_bytes(raw_bytes)
+}
+
+#[inline]
+pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   src: &[u8],
-  mut byte_idx: usize,
+  byte_idx: usize,
   bits_past_byte: Bitlen,
   n: Bitlen,
 ) -> U {
   // Q: Why is this fast?
-  // A: The 0..MAX_U64S can be unrolled at compile time, allowing really
-  // fast SIMD stuff at least in the MAX_U64S=1 (most common) case.
+  // A: The compiler removes branching allowing for fast SIMD.
   //
   // Q: Why does this work?
-  // A: We set MAX_U64S so that,
-  //    0  to 57  bit reads -> 1 u64
-  //    58 to 113 bit reads -> 2 u64's
-  //    113 to 128 bit reads -> 3 u64's
-  //    During the 1st u64 (prior to the loop), we read all bytes from the
-  //    current u64. Due to our bit packing, up to the first 7 of these may
-  //    be useless, so we can read up to (64 - 7) = 57 bits safely from a
-  //    single u64. We right shift by only up to 7 bits, which is safe.
+  // A: We set READ_BYTES so that,
+  //    0  to 25  bit reads -> 4 bytes (1 u32)
+  //    26 to 57  bit reads -> 8 bytes (1 u64)
+  //    58 to 113 bit reads -> 15 bytes (almost 2 u64's)
+  //    For the 1st u64, we read all bytes from the current u64. Due to our bit
+  //    packing, up to the first 7 of these may be useless, so we can read up
+  //    to (64 - 7) = 57 bits safely from a single u64. We right shift by only
+  //    up to 7 bits, which is safe.
   //
   //    For the 2nd u64, we skip only 7 bytes forward. This will overlap with
   //    the 1st u64 by 1 byte, which seems useless, but allows us to avoid one
   //    nasty case: left shifting by U::BITS (a panic). This could happen e.g.
   //    with 64-bit reads when we start out byte-aligned (bits_past_byte=0).
   //
-  //    For the 3rd u64 and onward, we skip 8 bytes forward. Due to how we
-  //    handled the 2nd u64, the most we'll ever need to shift by is
-  //    U::BITS - 8, which is safe.
-  let mut res = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
-  let mut processed = min(n, 56 - bits_past_byte);
-  byte_idx += 7;
+  //    For the 3rd u64 and onward (currently not implemented), we skip 8 bytes
+  //    forward. Due to how we handled the 2nd u64, the most we'll ever need to
+  //    shift by is U::BITS - 8, which is safe.
 
-  for _ in 0..MAX_U64S - 1 {
-    res |= U::from_u64(u64_at(src, byte_idx)) << processed;
-    processed += 64;
-    byte_idx += 8;
+  match READ_BYTES {
+    4 => read_u32_at(src, byte_idx, bits_past_byte, n),
+    8 => read_u64_at(src, byte_idx, bits_past_byte, n),
+    15 => read_almost_u64x2_at(src, byte_idx, bits_past_byte, n),
+    _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   }
+}
 
-  if MAX_U64S * 64 <= U::BITS as usize {
-    bits::lowest_bits_fast(res, n)
-  } else {
-    bits::lowest_bits(res, n)
-  }
+#[inline]
+unsafe fn read_u32_at<U: ReadWriteUint>(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> U {
+  debug_assert!(n <= 25);
+  U::from_u32(bits::lowest_bits_fast(
+    u32_at(src, byte_idx) >> bits_past_byte,
+    n,
+  ))
+}
+
+#[inline]
+unsafe fn read_u64_at<U: ReadWriteUint>(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> U {
+  debug_assert!(n <= 57);
+  U::from_u64(bits::lowest_bits_fast(
+    u64_at(src, byte_idx) >> bits_past_byte,
+    n,
+  ))
+}
+
+#[inline]
+unsafe fn read_almost_u64x2_at<U: ReadWriteUint>(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> U {
+  debug_assert!(n <= 113);
+  let first_word = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
+  let processed = 56 - bits_past_byte;
+  let second_word = U::from_u64(u64_at(src, byte_idx + 7)) << processed;
+  bits::lowest_bits(first_word | second_word, n)
 }
 
 pub struct BitReader<'a> {
@@ -125,29 +166,28 @@ impl<'a> BitReader<'a> {
 
   pub unsafe fn read_uint<U: ReadWriteUint>(&mut self, n: Bitlen) -> U {
     self.refill();
-    let res = match U::MAX_U64S {
-      1 => read_uint_at::<U, 1>(
+    let res = match U::MAX_BYTES {
+      1..=4 => read_uint_at::<U, 4>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
         n,
       ),
-      2 => read_uint_at::<U, 2>(
+      5..=8 => read_uint_at::<U, 8>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
         n,
       ),
-      3 => read_uint_at::<U, 3>(
+      9..=15 => read_uint_at::<U, 15>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
         n,
       ),
-      0 => panic!("[BitReader] data type cannot have 0 bits"),
-      _ => panic!(
-        "[BitReader] data type too large (extra u64's {} > 2)",
-        U::MAX_U64S
+      _ => unreachable!(
+        "[BitReader] unsupported max bytes: {}",
+        U::MAX_BYTES
       ),
     };
     self.consume(n);
