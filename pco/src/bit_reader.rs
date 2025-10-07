@@ -99,13 +99,10 @@ unsafe fn read_almost_u64x2_at<U: ReadWriteUint>(
   n: Bitlen,
 ) -> U {
   debug_assert!(n <= 113);
-  let first_word = u64_at(src, byte_idx) >> bits_past_byte;
+  let first_word = U::from_u64(u64_at(src, byte_idx) >> bits_past_byte);
   let processed = 56 - bits_past_byte;
-  let second_word = u64_at(src, byte_idx + 7) << processed;
-  U::from_u64(bits::lowest_bits(
-    first_word | second_word,
-    n,
-  ))
+  let second_word = U::from_u64(u64_at(src, byte_idx + 7)) << processed;
+  bits::lowest_bits(first_word | second_word, n)
 }
 
 pub struct BitReader<'a> {
