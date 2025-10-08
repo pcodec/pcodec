@@ -172,14 +172,14 @@ impl<L: Latent> LatentPageDecompressor<L> {
       let bit_idx = base_bit_idx + offset_bits_csum as usize;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx as Bitlen % 8;
-      let res =
+      let latent_minus_lower =
         bit_reader::read_uint_at::<L, READ_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
 
       // On aarch64, lowers are added outside this loop for better SIMD; otherwise, add here.
       *dst = if cfg!(target_arch = "aarch64") {
-        res
+        latent_minus_lower
       } else {
-        res.wrapping_add(lower)
+        latent_minus_lower.wrapping_add(lower)
       };
     }
     let final_bit_idx = base_bit_idx
