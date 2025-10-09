@@ -1,4 +1,4 @@
-use crate::bench::codecs::{utils, CodecInternal};
+use crate::bench::codecs::CodecInternal;
 use crate::dtypes::PcoNumber;
 use clap::Parser;
 
