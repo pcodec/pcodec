@@ -862,6 +862,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
+name = "cmake"
+version = "0.1.54"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7caa3f9de89ddbe2c607f4101924c5abec803763ae9534e4f4d7d8f84aa81f0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2409,6 +2418,7 @@ dependencies = [
  "pco 0.4.6",
  "q_compress",
  "rayon",
+ "rust-openzl",
  "serde",
  "snap",
  "spdp_sys",
@@ -2852,6 +2862,28 @@ name = "regex-syntax"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caf4aa5b0f434c91fe5c7f1ecb6a5ece2130b02ad2a590589dda5146df959001"
+
+[[package]]
+name = "rust-openzl"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8a14133dcd44c9c8d4765ce53ce84e552c03764cd81f8e000a124b59f48b0e"
+dependencies = [
+ "rust-openzl-sys",
+ "thiserror",
+]
+
+[[package]]
+name = "rust-openzl-sys"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7916a3b1ecbb25c25fccd088eebd14c1254d11ac8a3ece51a08fd1994c128f19"
+dependencies = [
+ "bindgen",
+ "cc",
+ "cmake",
+ "libc",
+]
 
 [[package]]
 name = "rustc-demangle"
