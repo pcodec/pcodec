@@ -5,14 +5,14 @@ use crate::metadata::Bin;
 
 // Using smaller types to reduce the memory footprint of Node. This improves
 // performance when the table gets large, likely due to fewer cache misses.
-// All these values fit within u16 cleanly and some fit within u8:
+// All these values fit either within u16 or u8 cleanly:
 // * next_state_idx_base < 2^16 since we encode ANS table size log2 with 4 bits
 // * offset_bits <= the largest number size, currently 64 bits
 // * bits_to_read <= 16, the max ANS table size log2.
 //
-// Also note that we include the bin's offset_bits in the struct, even though it
-// isn't a part of ANS coding; it just fits. We still have to look up the bin's
-// lower bound from a separate table.  This is another performance hack.
+// Also note that we include the bin's offset_bits in the struct and replace
+// the symbol with the lower bound, even though it isn't a part of ANS coding;
+// it just fits. This is another performance hack.
 #[derive(Clone, Debug)]
 #[repr(align(8))]
 pub struct Node<L: Latent> {
