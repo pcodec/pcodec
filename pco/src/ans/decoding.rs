@@ -39,14 +39,10 @@ impl<L: Latent> Decoder<L> {
       let next_state_base = next_state_base << bits_to_read;
       // In a degenerate case there are 0 bins, but the tANS table always has at
       // least one node, so we handle that by using 0 offset bits.
-      let default_bin = Bin {
-        weight: 0,
-        lower: L::ZERO,
-        offset_bits: 0,
+      let (offset_bits, lower) = match bins.get(symbol as usize) {
+        Some(bin) => (bin.offset_bits, bin.lower),
+        None => (0, L::ZERO),
       };
-      let bin = bins.get(symbol as usize).unwrap_or(&default_bin);
-      let offset_bits = bin.offset_bits;
-      let lower = bin.lower;
       nodes.push(Node {
         lower,
         next_state_idx_base: (next_state_base - table_size as AnsState) as u16,
