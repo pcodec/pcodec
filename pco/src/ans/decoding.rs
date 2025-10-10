@@ -5,8 +5,7 @@ use crate::data_types::Latent;
 
 // Using smaller types to reduce the memory footprint of Node. This improves
 // performance when the table gets large, likely due to fewer cache misses.
-// All these values fit within u16 cleanly:
-// * symbol < 2^15 since we encode n_bins with 15 bits
+// All these values fit within u16 cleanly and some fit within u8:
 // * next_state_idx_base < 2^16 since we encode ANS table size log2 with 4 bits
 // * offset_bits <= the largest number size, currently 64 bits
 // * bits_to_read <= 16, the max ANS table size log2.
@@ -15,11 +14,12 @@ use crate::data_types::Latent;
 // isn't a part of ANS coding; it just fits. We still have to look up the bin's
 // lower bound from a separate table.  This is another performance hack.
 #[derive(Clone, Debug)]
+#[repr(align(8))]
 pub struct Node<L: Latent> {
   pub lower: L,
   pub next_state_idx_base: u16,
-  pub offset_bits: u16,
-  pub bits_to_read: u16,
+  pub offset_bits: u8,
+  pub bits_to_read: u8,
 }
 
 #[derive(Clone, Debug)]
@@ -44,8 +44,8 @@ impl<L: Latent> Decoder<L> {
       nodes.push(Node {
         lower,
         next_state_idx_base: (next_state_base - table_size as AnsState) as u16,
-        offset_bits: offset_bits as u16,
-        bits_to_read: bits_to_read as u16,
+        offset_bits: offset_bits as u8,
+        bits_to_read: bits_to_read as u8,
       });
       symbol_x_s[symbol as usize] += 1;
     }
