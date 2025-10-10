@@ -97,7 +97,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
           let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = node.lower;
+          let lower = unsafe { *self.decoder.lowers.get_unchecked($state_idx as usize) };
           let offset_bits = node.offset_bits as Bitlen;
           self
             .state
@@ -129,13 +129,14 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut state_idxs = self.state.ans_state_idxs;
     for i in 0..batch_n {
       let j = i % ANS_INTERLEAVING;
+      let state_idx = state_idxs[j] as usize;
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
+      let node = unsafe { self.decoder.nodes.get_unchecked(state_idx) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = node.lower;
+      let lower = unsafe { *self.decoder.lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state

@@ -14,9 +14,7 @@ use crate::metadata::Bin;
 // the symbol with the lower bound, even though it isn't a part of ANS coding;
 // it just fits. This is another performance hack.
 #[derive(Clone, Debug)]
-#[repr(align(8))]
-pub struct Node<L: Latent> {
-  pub lower: L,
+pub struct Node {
   pub next_state_idx_base: u16,
   pub offset_bits: u8,
   pub bits_to_read: u8,
@@ -24,13 +22,15 @@ pub struct Node<L: Latent> {
 
 #[derive(Clone, Debug)]
 pub struct Decoder<L: Latent> {
-  pub nodes: Vec<Node<L>>,
+  pub nodes: Vec<Node>,
+  pub lowers: Vec<L>,
 }
 
 impl<L: Latent> Decoder<L> {
   pub fn new(spec: &Spec, bins: &[Bin<L>]) -> Self {
     let table_size = spec.table_size();
     let mut nodes = Vec::with_capacity(table_size);
+    let mut lowers = Vec::with_capacity(table_size);
     // x_s from Jarek Duda's paper
     let mut symbol_x_s = spec.symbol_weights.clone();
     for &symbol in &spec.state_symbols {
@@ -44,14 +44,14 @@ impl<L: Latent> Decoder<L> {
         None => (0, L::ZERO),
       };
       nodes.push(Node {
-        lower,
         next_state_idx_base: (next_state_base - table_size as AnsState) as u16,
         offset_bits: offset_bits as u8,
         bits_to_read: bits_to_read as u8,
       });
       symbol_x_s[symbol as usize] += 1;
+      lowers.push(lower);
     }
 
-    Self { nodes }
+    Self { nodes, lowers }
   }
 }
