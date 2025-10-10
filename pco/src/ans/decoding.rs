@@ -1,7 +1,7 @@
 use crate::ans::spec::Spec;
 use crate::ans::AnsState;
-use crate::constants::Bitlen;
 use crate::data_types::Latent;
+use crate::metadata::Bin;
 
 // Using smaller types to reduce the memory footprint of Node. This improves
 // performance when the table gets large, likely due to fewer cache misses.
@@ -28,7 +28,7 @@ pub struct Decoder<L: Latent> {
 }
 
 impl<L: Latent> Decoder<L> {
-  pub fn new(spec: &Spec, bin_offset_bits: &[Bitlen], bin_lowers: &[L]) -> Self {
+  pub fn new(spec: &Spec, bins: &[Bin<L>]) -> Self {
     let table_size = spec.table_size();
     let mut nodes = Vec::with_capacity(table_size);
     // x_s from Jarek Duda's paper
@@ -39,8 +39,14 @@ impl<L: Latent> Decoder<L> {
       let next_state_base = next_state_base << bits_to_read;
       // In a degenerate case there are 0 bins, but the tANS table always has at
       // least one node, so we handle that by using 0 offset bits.
-      let offset_bits = bin_offset_bits.get(symbol as usize).cloned().unwrap_or(0);
-      let lower = bin_lowers.get(symbol as usize).cloned().unwrap_or(L::ZERO);
+      let default_bin = Bin {
+        weight: 0,
+        lower: L::ZERO,
+        offset_bits: 0,
+      };
+      let bin = bins.get(symbol as usize).unwrap_or(&default_bin);
+      let offset_bits = bin.offset_bits;
+      let lower = bin.lower;
       nodes.push(Node {
         lower,
         next_state_idx_base: (next_state_base - table_size as AnsState) as u16,

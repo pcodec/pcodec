@@ -58,7 +58,6 @@ impl<L: Latent> State<L> {
 pub struct LatentPageDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
-  bin_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder<L>,
   delta_encoding: DeltaEncoding,
@@ -83,7 +82,6 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let bin_lowers = self.bin_lowers.as_slice();
     let ans_nodes = self.decoder.nodes.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
@@ -308,11 +306,9 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
-    let bin_lowers = bins.iter().map(|bin| bin.lower).collect::<Vec<_>>();
-    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let decoder = ans::Decoder::<L>::new(&ans_spec, &bin_offset_bits, &bin_lowers);
+    let decoder = ans::Decoder::<L>::new(&ans_spec, &bins);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
       DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
@@ -352,7 +348,6 @@ impl DynLatentPageDecompressor {
 
     let lpd = LatentPageDecompressor {
       bytes_per_offset,
-      bin_lowers,
       needs_ans,
       decoder,
       delta_encoding,
