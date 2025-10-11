@@ -83,6 +83,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
     let ans_nodes = self.decoder.nodes.as_slice();
+    let lowers = self.decoder.lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -97,7 +98,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
           let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = unsafe { *self.decoder.lowers.get_unchecked($state_idx as usize) };
+          let lower = unsafe { *lowers.get_unchecked($state_idx as usize) };
           let offset_bits = node.offset_bits as Bitlen;
           self
             .state
