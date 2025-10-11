@@ -9,9 +9,8 @@ use crate::constants::Bitlen;
 // * offset_bits <= the largest number size, currently 64 bits
 // * bits_to_read <= 16, the max ANS table size log2.
 //
-// Also note that we include the bin's offset_bits in the struct and replace
-// the symbol with the lower bound, even though it isn't a part of ANS coding;
-// it just fits. This is another performance hack.
+// Also note that we include the bin's offset_bits in the struct, even though it
+// isn't a part of ANS coding; it just fits. This is another performance hack.
 #[derive(Clone, Debug)]
 pub struct Node {
   pub next_state_idx_base: u16,
