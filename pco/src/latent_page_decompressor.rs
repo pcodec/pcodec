@@ -58,8 +58,9 @@ impl<L: Latent> State<L> {
 pub struct LatentPageDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
+  state_lowers: Vec<L>,
   needs_ans: bool,
-  decoder: ans::Decoder<L>,
+  decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
   pub maybe_constant_value: Option<L>,
 
@@ -83,7 +84,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
     let ans_nodes = self.decoder.nodes.as_slice();
-    let lowers = self.decoder.lowers.as_slice();
+    let lowers = self.state_lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -137,7 +138,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
       let node = unsafe { self.decoder.nodes.get_unchecked(state_idx) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = unsafe { *self.decoder.lowers.get_unchecked(state_idx) };
+      let lower = unsafe { *self.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state
@@ -308,9 +309,15 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
+    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let decoder = ans::Decoder::<L>::new(&ans_spec, &bins);
+    let state_lowers = ans_spec
+      .state_symbols
+      .iter()
+      .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
+      .collect();
+    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
       DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
@@ -350,6 +357,7 @@ impl DynLatentPageDecompressor {
 
     let lpd = LatentPageDecompressor {
       bytes_per_offset,
+      state_lowers,
       needs_ans,
       decoder,
       delta_encoding,
