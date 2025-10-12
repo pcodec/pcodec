@@ -44,7 +44,8 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   //
   // Q: Why does this work?
   // A: We set READ_BYTES so that,
-  //    0  to 25  bit reads -> 4 bytes (1 u32)
+  //    0  to 9  bit reads -> 4 bytes (1 u32)
+  //    10 to 25  bit reads -> 4 bytes (1 u32)
   //    26 to 57  bit reads -> 8 bytes (1 u64)
   //    58 to 113 bit reads -> 15 bytes (almost 2 u64's)
   //    For the 1st u64, we read all bytes from the current u64. Due to our bit
