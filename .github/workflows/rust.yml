@@ -22,12 +22,8 @@ jobs:
         run: |
           rustup override set $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select (.name == "pco") | .rust_version')
           rustup component add clippy rustfmt
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.8.1
       - name: Test
         run: cargo test
       - name: Clippy
