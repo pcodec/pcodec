@@ -221,6 +221,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
         dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
         return;
       }
+      // u8
+      1..=2 if L::BITS == 8 => self.decompress_offsets::<2>(reader, dst),
       // u16
       1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, dst),
       // u32
