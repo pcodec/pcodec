@@ -5,16 +5,12 @@ use crate::constants::Bitlen;
 use crate::data_types::Latent;
 
 // this applies to reading and also works for byte-aligned precisions
-pub const fn calc_max_u64s(precision: Bitlen) -> usize {
+pub const fn calc_max_bytes(precision: Bitlen) -> usize {
   // See bit_reader::read_uint_at for an explanation of these thresholds.
   if precision == 0 {
     0
-  } else if precision <= 57 {
-    1
-  } else if precision <= 113 {
-    2
   } else {
-    3
+    ((precision + 14) / 8) as usize
   }
 }
 
@@ -47,8 +43,10 @@ pub trait ReadWriteUint:
 {
   const ONE: Self;
   const BITS: Bitlen;
-  const MAX_U64S: usize = calc_max_u64s(Self::BITS);
+  const MAX_U64S: usize = calc_max_u64s_for_writing(Self::BITS);
+  const MAX_BYTES: usize = calc_max_bytes(Self::BITS);
 
+  fn from_u32(x: u32) -> Self;
   fn from_u64(x: u64) -> Self;
   fn to_u64(self) -> u64;
 }
@@ -56,6 +54,11 @@ pub trait ReadWriteUint:
 impl ReadWriteUint for usize {
   const ONE: Self = 1;
   const BITS: Bitlen = usize::BITS;
+
+  #[inline]
+  fn from_u32(x: u32) -> Self {
+    x as Self
+  }
 
   #[inline]
   fn from_u64(x: u64) -> Self {
@@ -71,6 +74,11 @@ impl ReadWriteUint for usize {
 impl<L: Latent> ReadWriteUint for L {
   const ONE: Self = <Self as Latent>::ONE;
   const BITS: Bitlen = <Self as Latent>::BITS;
+
+  #[inline]
+  fn from_u32(x: u32) -> Self {
+    <Self as Latent>::from_u32(x)
+  }
 
   #[inline]
   fn from_u64(x: u64) -> Self {

@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 use crate::bench::codecs::parquet::ParquetConfig;
+use crate::bench::codecs::pcopage::PaginatedPcoConfig;
 use crate::bench::codecs::snappy::SnappyConfig;
 use crate::bench::codecs::zstd::ZstdConfig;
 use crate::bench::IterOpt;
@@ -23,8 +24,11 @@ use clap::{CommandFactory, FromArgMatches};
 mod blosc;
 #[cfg(feature = "full_bench")]
 mod brotli;
+#[cfg(feature = "full_bench")]
+mod openzl;
 mod parquet;
 mod pco;
+mod pcopage;
 #[cfg(feature = "full_bench")]
 mod qco;
 mod snappy;
@@ -250,8 +254,11 @@ impl FromStr for CodecConfig {
       "blosc" | "blosc2" => blosc::BloscConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "brotli" => brotli::BrotliConfig::from_kv_args(&clap_kv_args),
+      #[cfg(feature = "full_bench")]
+      "openzl" => openzl::OpenZlConfig::from_kv_args(&clap_kv_args),
       "parquet" => ParquetConfig::from_kv_args(&clap_kv_args),
       "pco" | "pcodec" => ChunkConfigOpt::from_kv_args(&clap_kv_args),
+      "pcopage" => PaginatedPcoConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "qco" | "q_compress" => qco::QcoConfig::from_kv_args(&clap_kv_args),
       "snap" | "snappy" => SnappyConfig::from_kv_args(&clap_kv_args),

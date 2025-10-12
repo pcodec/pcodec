@@ -53,6 +53,11 @@ macro_rules! impl_latent {
       const BITS: Bitlen = Self::BITS as Bitlen;
 
       #[inline]
+      fn from_u32(x: u32) -> Self {
+        x as Self
+      }
+
+      #[inline]
       fn from_u64(x: u64) -> Self {
         x as Self
       }

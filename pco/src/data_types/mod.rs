@@ -117,13 +117,17 @@ pub trait Latent:
   const MAX: Self;
   const BITS: Bitlen;
 
-  /// Converts a `usize` into this type. Panics if the conversion is
+  /// Converts a `u32` into this type. Panics if the conversion is
+  /// impossible.
+  fn from_u32(x: u32) -> Self;
+
+  /// Converts a `u64` into this type. Panics if the conversion is
   /// impossible.
   fn from_u64(x: u64) -> Self;
 
   fn leading_zeros(self) -> Bitlen;
 
-  /// Converts the latent to a usize, truncating higher bits if necessary.
+  /// Converts the latent to a `u64`, truncating higher bits if necessary.
   fn to_u64(self) -> u64;
 
   fn wrapping_add(self, other: Self) -> Self;

@@ -16,7 +16,7 @@ pub fn downcast_to_flat<'a, T: Number + Element>(
     PyTypeError::new_err(format!(
       "{}D {} numpy array could not be cast to 1D {} array",
       arr.shape().len(),
-      arr.dtype().to_string(),
+      arr.dtype(),
       any::type_name::<T>(),
     ))
   })?;

@@ -54,7 +54,7 @@ macro_rules! impl_signed {
       }
       #[inline]
       fn transmute_to_latent(self) -> Self::L {
-        unsafe { mem::transmute(self) }
+        self.cast_unsigned()
       }
     }
   };
