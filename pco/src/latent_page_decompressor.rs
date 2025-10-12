@@ -58,7 +58,7 @@ impl<L: Latent> State<L> {
 pub struct LatentPageDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
-  bin_lowers: Vec<L>,
+  state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
@@ -83,8 +83,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let bin_lowers = self.bin_lowers.as_slice();
     let ans_nodes = self.decoder.nodes.as_slice();
+    let lowers = self.state_lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -99,7 +99,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
           let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = *unsafe { bin_lowers.get_unchecked(node.symbol as usize) };
+          let lower = unsafe { *lowers.get_unchecked($state_idx as usize) };
           let offset_bits = node.offset_bits as Bitlen;
           self
             .state
@@ -131,13 +131,14 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut state_idxs = self.state.ans_state_idxs;
     for i in 0..batch_n {
       let j = i % ANS_INTERLEAVING;
+      let state_idx = state_idxs[j] as usize;
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
+      let node = unsafe { self.decoder.nodes.get_unchecked(state_idx) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = self.bin_lowers[node.symbol as usize];
+      let lower = unsafe { *self.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state
@@ -308,10 +309,14 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
-    let bin_lowers = bins.iter().map(|bin| bin.lower).collect();
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
+    let state_lowers = ans_spec
+      .state_symbols
+      .iter()
+      .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
+      .collect();
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
@@ -352,7 +357,7 @@ impl DynLatentPageDecompressor {
 
     let lpd = LatentPageDecompressor {
       bytes_per_offset,
-      bin_lowers,
+      state_lowers,
       needs_ans,
       decoder,
       delta_encoding,
