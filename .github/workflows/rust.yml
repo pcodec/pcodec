@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.8.1
-      - name: Override Rust Version
         run: |
           rustup override set $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select (.name == "pco") | .rust_version')
           rustup component add clippy rustfmt
+        uses: Swatinem/rust-cache@v2.8.1
+      - name: Override Rust Version
       - name: Install cross
         run: cargo install cross --locked
       - name: Test
