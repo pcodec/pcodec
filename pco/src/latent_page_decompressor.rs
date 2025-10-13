@@ -191,12 +191,12 @@ impl<L: Latent> LatentPageDecompressor<L> {
       + state.offset_bits_scratch[dst.len() - 1] as usize;
     reader.stale_byte_idx = final_bit_idx / 8;
     reader.bits_past_byte = final_bit_idx as Bitlen % 8;
-  }
 
-  #[inline(never)]
-  fn add_lowers(&self, dst: &mut [L]) {
-    for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
-      *dst = dst.wrapping_add(lower);
+    // On aarch64, lower is added outside decompress_offsets loop for better SIMD.
+    if cfg!(target_arch = "aarch64") {
+      for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
+        *dst = dst.wrapping_add(lower);
+      }
     }
   }
 
@@ -228,10 +228,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
     // latents.
     match self.bytes_per_offset {
       // all
-      0 => {
-        dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
-        return;
-      }
+      0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
+
       // u16
       1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, dst),
       // u32
@@ -245,11 +243,6 @@ impl<L: Latent> LatentPageDecompressor<L> {
         self.bytes_per_offset,
         L::BITS
       ),
-    }
-
-    // On aarch64, lower is added outside decompress_offsets loop for better SIMD.
-    if cfg!(target_arch = "aarch64") {
-      self.add_lowers(dst);
     }
   }
 
