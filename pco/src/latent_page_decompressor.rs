@@ -194,9 +194,14 @@ impl<L: Latent> LatentPageDecompressor<L> {
 
     // On aarch64, lower is added outside decompress_offsets loop for better SIMD.
     if cfg!(target_arch = "aarch64") {
-      for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
-        *dst = dst.wrapping_add(lower);
-      }
+      self.add_lowers(dst);
+    }
+  }
+
+  #[inline(never)]
+  fn add_lowers(&self, dst: &mut [L]) {
+    for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
+      *dst = dst.wrapping_add(lower);
     }
   }
 
