@@ -24,6 +24,8 @@ use clap::{CommandFactory, FromArgMatches};
 mod blosc;
 #[cfg(feature = "full_bench")]
 mod brotli;
+#[cfg(feature = "full_bench")]
+mod openzl;
 mod parquet;
 mod pco;
 mod pcopage;
@@ -252,6 +254,8 @@ impl FromStr for CodecConfig {
       "blosc" | "blosc2" => blosc::BloscConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "brotli" => brotli::BrotliConfig::from_kv_args(&clap_kv_args),
+      #[cfg(feature = "full_bench")]
+      "openzl" => openzl::OpenZlConfig::from_kv_args(&clap_kv_args),
       "parquet" => ParquetConfig::from_kv_args(&clap_kv_args),
       "pco" | "pcodec" => ChunkConfigOpt::from_kv_args(&clap_kv_args),
       "pcopage" => PaginatedPcoConfig::from_kv_args(&clap_kv_args),
