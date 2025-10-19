@@ -946,7 +946,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "libc",
- "pco 0.4.6",
+ "pco 0.4.7",
 ]
 
 [[package]]
@@ -2379,23 +2379,23 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 [[package]]
 name = "pco"
 version = "0.4.6"
-dependencies = [
- "better_io 0.1.0",
- "dtype_dispatch 0.1.1",
- "half",
- "rand 0.8.5",
- "rand_xoshiro",
-]
-
-[[package]]
-name = "pco"
-version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab068b64f2c6f074cbdcafc80ebd83a27da92a3848deba2fabc21eba6691fc65"
 dependencies = [
  "better_io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dtype_dispatch 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "half",
+ "rand_xoshiro",
+]
+
+[[package]]
+name = "pco"
+version = "0.4.7"
+dependencies = [
+ "better_io 0.1.0",
+ "dtype_dispatch 0.1.1",
+ "half",
+ "rand 0.8.5",
  "rand_xoshiro",
 ]
 
@@ -2415,7 +2415,7 @@ dependencies = [
  "indicatif",
  "once_cell",
  "parquet",
- "pco 0.4.6",
+ "pco 0.4.7",
  "q_compress",
  "rayon",
  "rust-openzl",
@@ -2436,7 +2436,7 @@ version = "0.1.0"
 dependencies = [
  "half",
  "jni",
- "pco 0.4.6",
+ "pco 0.4.7",
 ]
 
 [[package]]
@@ -2445,7 +2445,7 @@ version = "0.3.5"
 dependencies = [
  "half",
  "numpy",
- "pco 0.4.6",
+ "pco 0.4.7",
  "pyo3",
 ]
 
@@ -3950,7 +3950,7 @@ dependencies = [
  "oneshot",
  "parking_lot",
  "paste",
- "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pco 0.4.6",
  "pin-project-lite",
  "prost",
  "rustc-hash 2.1.1",
@@ -4004,7 +4004,7 @@ version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9313c2c58af7c605680917d908f2a7df4591a2e018489da4a9489273e456527b"
 dependencies = [
- "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pco 0.4.6",
  "prost",
  "vortex-array",
  "vortex-buffer",
