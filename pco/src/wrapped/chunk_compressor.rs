@@ -317,6 +317,8 @@ fn new_candidate_w_split_and_delta_encoding(
     delta_encoding,
     per_latent_var: var_metas,
   };
+  meta.validate_delta_encoding()?;
+
   let chunk_compressor = ChunkCompressor {
     meta,
     latent_chunk_compressors,

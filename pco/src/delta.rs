@@ -76,14 +76,14 @@ pub(crate) fn decode_consecutive_in_place<L: Latent>(delta_moments: &mut [L], la
 // * brute force: just try the most recent few latents
 // * repeating: try the most recent lookbacks we actually used
 // * hash: look up similar values by hash
-const PROPOSED_LOOKBACKS: usize = 16;
+const PROPOSED_LOOKBACKS: usize = 13;
 const BRUTE_LOOKBACKS: usize = 6;
 const REPEATING_LOOKBACKS: usize = 4;
 // To help locate similar latents for lookback encoding, we hash each latent at
 // different "coarsenesses" and write them into a vector. e.g. a coarseness
 // of 8 means that (l >> 8) gets hashed, so we can lookup recent values by
 // quotient by 256.
-const COARSENESSES: [Bitlen; 2] = [0, 8];
+const COARSENESSES: [Bitlen; 1] = [0]; //, 8];
 
 fn lookback_hash_lookup(
   l: u64,
@@ -133,30 +133,42 @@ fn find_best_lookback<L: Latent>(
   proposed_lookbacks: &[usize; PROPOSED_LOOKBACKS],
   lookback_counts: &mut [u32],
 ) -> usize {
-  let mut best_goodness = 0;
-  let mut best_lookback: usize = 0;
   for &lookback in proposed_lookbacks {
-    let (lookback_count, other) = unsafe {
-      (
-        *lookback_counts.get_unchecked(lookback - 1),
-        *latents.get_unchecked(i - lookback),
-      )
-    };
-    let lookback_goodness = Bitlen::BITS - lookback_count.leading_zeros();
-    let delta = L::min(l.wrapping_sub(other), other.wrapping_sub(l));
-    let delta_goodness = delta.leading_zeros();
-    let goodness = lookback_goodness + delta_goodness;
-    if goodness > best_goodness {
-      best_goodness = goodness;
-      best_lookback = lookback;
+    if lookback > 0 && latents[i - lookback] == l {
+      return lookback;
     }
   }
-  best_lookback
+  0
+  // let mut best_goodness = 0;
+  // let mut best_lookback: usize = 0;
+  // for &lookback in proposed_lookbacks {
+  //   let (lookback_count, other) = unsafe {
+  //     let other = if lookback == 0 {
+  //       L::ZERO
+  //     } else {
+  //       *latents.get_unchecked(i - lookback)
+  //     };
+  //     (
+  //       *lookback_counts.get_unchecked(lookback),
+  //       other,
+  //     )
+  //   };
+  //   let lookback_goodness = Bitlen::BITS - lookback_count.leading_zeros();
+  //   let delta = L::min(l.wrapping_sub(other), other.wrapping_sub(l));
+  //   let delta_goodness = delta.leading_zeros();
+  //   let goodness = lookback_goodness + delta_goodness;
+  //   if goodness > best_goodness {
+  //     best_goodness = goodness;
+  //     best_lookback = lookback;
+  //   }
+  // }
+  // best_lookback
 }
 
 #[inline(never)]
 fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Vec<DeltaLookback> {
   let state_n = config.state_n();
+  // return vec![0; latents.len() - state_n];
 
   if latents.len() <= state_n {
     return vec![];
@@ -170,17 +182,17 @@ fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Ve
     "we do not support tiny windows during compression"
   );
 
-  let mut lookback_counts = vec![1_u32; cmp::min(window_n, latents.len())];
+  let mut lookback_counts = vec![1_u32; cmp::min(window_n + 1, latents.len())];
   let mut lookbacks = vec![MaybeUninit::uninit(); latents.len() - state_n];
   let mut idx_hash_table = vec![0_usize; COARSENESSES.len() * hash_table_n];
-  let mut proposed_lookbacks = array::from_fn::<_, PROPOSED_LOOKBACKS, _>(|i| (i + 1).min(state_n));
-  let mut best_lookback = 1;
+  let mut proposed_lookbacks = array::from_fn::<_, PROPOSED_LOOKBACKS, _>(|i| i.min(state_n));
+  let mut best_lookback = 0;
   let mut repeating_lookback_idx: usize = 0;
   for i in state_n..latents.len() {
     let l = latents[i];
 
-    let new_brute_lookback = i.min(PROPOSED_LOOKBACKS);
-    proposed_lookbacks[new_brute_lookback - 1] = new_brute_lookback;
+    let new_brute_lookback = i.min(BRUTE_LOOKBACKS - 1);
+    proposed_lookbacks[new_brute_lookback] = new_brute_lookback;
 
     lookback_hash_lookup(
       l.to_u64(),
@@ -203,8 +215,15 @@ fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Ve
     proposed_lookbacks[BRUTE_LOOKBACKS + (repeating_lookback_idx) % REPEATING_LOOKBACKS] =
       new_best_lookback;
     best_lookback = new_best_lookback;
+    // println!(
+    //   "{} {:?} -> {}",
+    //   l, proposed_lookbacks, best_lookback
+    // );
+    // if i == 50 {
+    //   panic!();
+    // }
     lookbacks[i - state_n] = MaybeUninit::new(best_lookback as DeltaLookback);
-    lookback_counts[best_lookback - 1] += 1;
+    lookback_counts[best_lookback] += 1;
   }
 
   unsafe { mem::transmute::<Vec<MaybeUninit<DeltaLookback>>, Vec<DeltaLookback>>(lookbacks) }
@@ -225,7 +244,9 @@ fn encode_with_lookbacks_in_place<L: Latent>(
   // TODO make this fast
   for i in (real_state_n..latents.len()).rev() {
     let lookback = lookbacks[i - state_n] as usize;
-    latents[i] = latents[i].wrapping_sub(latents[i - lookback])
+    if lookback > 0 {
+      latents[i] = latents[i].wrapping_sub(latents[i - lookback]);
+    }
   }
 
   let mut state = vec![L::ZERO; state_n];
@@ -285,8 +306,12 @@ pub fn decode_with_lookbacks_in_place<L: Latent>(
       1
     };
     unsafe {
-      *window_buffer.get_unchecked_mut(pos) =
-        latent.wrapping_add(*window_buffer.get_unchecked(pos - lookback));
+      let relative_to = if lookback == 0 {
+        L::ZERO
+      } else {
+        *window_buffer.get_unchecked(pos - lookback)
+      };
+      *window_buffer.get_unchecked_mut(pos) = latent.wrapping_add(relative_to);
     }
   }
 

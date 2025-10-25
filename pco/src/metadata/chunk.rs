@@ -57,12 +57,10 @@ impl ChunkMeta {
       (DeltaEncoding::Lookback(config), Some(latent_var)) => {
         let window_n = config.window_n() as DeltaLookback;
         let bins = latent_var.bins.downcast_ref::<DeltaLookback>().unwrap();
-        let maybe_corrupt_bin = bins
-          .iter()
-          .find(|bin| bin.lower < 1 || bin.lower > window_n);
+        let maybe_corrupt_bin = bins.iter().find(|bin| bin.lower > window_n);
         if let Some(corrupt_bin) = maybe_corrupt_bin {
           Err(PcoError::corruption(format!(
-            "delta lookback bin had invalid lower bound of {} outside window [1, {}]",
+            "delta lookback bin had invalid lower bound of {} greater than {}",
             corrupt_bin.lower, window_n
           )))
         } else {

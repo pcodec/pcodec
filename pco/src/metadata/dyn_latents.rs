@@ -20,7 +20,7 @@ impl DynLatents {
   pub(crate) fn bit_size(&self) -> usize {
     match_latent_enum!(
       self,
-      DynLatents<T>(inner) => { inner.len() * T::BITS as usize}
+      DynLatents<T>(inner) => { inner.len() * T::BITS as usize }
     )
   }
 
