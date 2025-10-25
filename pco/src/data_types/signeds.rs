@@ -45,6 +45,9 @@ macro_rules! impl_signed {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             int_mult_utils::join_latents(base, primary, secondary)
           }
+          Mode::Dict(dict) => {
+            unsigneds::join_dict(primary, dict);
+          }
           _ => unreachable!("impossible mode for signed ints"),
         }
       }

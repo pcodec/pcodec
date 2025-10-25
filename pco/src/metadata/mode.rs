@@ -6,7 +6,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::dyn_latent::DynLatent;
 use crate::metadata::format_version::FormatVersion;
-use crate::metadata::Mode::*;
+use crate::metadata::{DynLatents, Mode::*};
 use std::fmt::Debug;
 use std::io::Write;
 
@@ -76,6 +76,7 @@ pub enum Mode {
   /// Formula: `num = from_bits(quantums << k + adjustment)`
   /// (warning: this formula is especially simplified)
   FloatQuant(Bitlen),
+  Dict(DynLatents),
 }
 
 impl Mode {
@@ -113,6 +114,14 @@ impl Mode {
         let k = reader.read_bitlen(BITS_TO_ENCODE_QUANTIZE_K);
         FloatQuant(k)
       }
+      4 => {
+        let n_unique = reader.read_usize(24);
+        let dict = match_latent_enum!(
+          latent_type,
+          LatentType<L> => { DynLatents::read_uncompressed_from::<L>(reader, n_unique) }
+        );
+        Dict(dict)
+      }
       value => {
         return Err(PcoError::corruption(format!(
           "unknown mode value {}",
@@ -127,8 +136,9 @@ impl Mode {
     let mode_value = match self {
       Classic => 0,
       IntMult(_) => 1,
-      FloatMult { .. } => 2,
-      FloatQuant { .. } => 3,
+      FloatMult(_) => 2,
+      FloatQuant(_) => 3,
+      Dict(_) => 4,
     };
     writer.write_bitlen(mode_value, BITS_TO_ENCODE_MODE_VARIANT);
     match self {
@@ -142,18 +152,22 @@ impl Mode {
       &FloatQuant(k) => {
         writer.write_uint(k, BITS_TO_ENCODE_QUANTIZE_K);
       }
+      Dict(dict) => {
+        writer.write_usize(dict.len(), 24);
+        dict.write_uncompressed_to(writer);
+      }
     };
   }
 
   pub(crate) fn primary_latent_type(&self, number_latent_type: LatentType) -> LatentType {
     match self {
-      Classic | FloatMult(_) | FloatQuant(_) | IntMult(_) => number_latent_type,
+      Classic | FloatMult(_) | FloatQuant(_) | IntMult(_) | Dict(_) => number_latent_type,
     }
   }
 
   pub(crate) fn secondary_latent_type(&self, number_latent_type: LatentType) -> Option<LatentType> {
     match self {
-      Classic => None,
+      Classic | Dict(_) => None,
       FloatMult(_) | FloatQuant(_) | IntMult(_) => Some(number_latent_type),
     }
   }
@@ -171,6 +185,7 @@ impl Mode {
       Classic => 0,
       IntMult(base) | FloatMult(base) => base.bits(),
       FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K,
+      Dict(dict) => 24 + dict.bit_size() as Bitlen,
     };
     BITS_TO_ENCODE_MODE_VARIANT + payload_bits
   }

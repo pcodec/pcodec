@@ -17,6 +17,13 @@ impl DynLatents {
     )
   }
 
+  pub(crate) fn bit_size(&self) -> usize {
+    match_latent_enum!(
+      self,
+      DynLatents<T>(inner) => { inner.len() * T::BITS as usize}
+    )
+  }
+
   pub(crate) unsafe fn read_uncompressed_from<L: Latent>(
     reader: &mut BitReader,
     len: usize,
