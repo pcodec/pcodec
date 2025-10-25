@@ -26,6 +26,7 @@ pub fn mode_spec(s: &str) -> anyhow::Result<ModeSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => ModeSpec::Auto,
     "classic" => ModeSpec::Classic,
+    "dict" => ModeSpec::TryDict,
     other => {
       let mut parts = other.split('@');
       let name = parts.next().unwrap();

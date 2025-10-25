@@ -64,7 +64,7 @@ fn choose_mode_and_split_latents<F: Float>(
       Mode::FloatQuant(k),
       float_quant_utils::split_latents(nums, k),
     )),
-    ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
+    ModeSpec::TryIntMult(_) | ModeSpec::TryDict => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
     )),
   }
@@ -325,15 +325,15 @@ macro_rules! impl_float_number {
           .expect("invalid mode for float type")
       }
 
-      fn mode_is_valid(mode: Mode) -> bool {
+      fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
           Mode::Classic => true,
-          Mode::FloatMult(dyn_latent) => {
+          &Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
           }
-          Mode::FloatQuant(k) => k > 0 && k <= Self::PRECISION_BITS,
+          &Mode::FloatQuant(k) => k > 0 && k <= Self::PRECISION_BITS,
           _ => false,
         }
       }
@@ -365,14 +365,14 @@ macro_rules! impl_float_number {
           mem_layout ^ $sign_bit_mask
         }
       }
-      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
         match mode {
           Mode::Classic => (),
-          Mode::FloatMult(dyn_latent) => {
+          &Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
             float_mult_utils::join_latents(base, primary, secondary)
           }
-          Mode::FloatQuant(k) => float_quant_utils::join_latents::<Self>(k, primary, secondary),
+          &Mode::FloatQuant(k) => float_quant_utils::join_latents::<Self>(k, primary, secondary),
           _ => unreachable!("impossible mode for floats"),
         }
       }

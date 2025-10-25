@@ -32,6 +32,7 @@ pub enum ModeSpec {
   ///
   /// Only applies to integer types.
   TryIntMult(u64),
+  TryDict,
 }
 
 /// Specifies how Pco should choose a

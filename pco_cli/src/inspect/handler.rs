@@ -181,7 +181,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       chunks.push(ChunkSummary {
         idx,
         n: chunk_ns[idx],
-        mode: format!("{:?}", meta.mode),
+        mode: format!("{:.100}", format!("{:?}", meta.mode)),
         delta_encoding: format!("{:?}", meta.delta_encoding),
         latent_vars,
       });

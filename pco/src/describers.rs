@@ -41,7 +41,7 @@ pub(crate) fn match_classic_mode<T: Number>(
   meta: &ChunkMeta,
   delta_units: &'static str,
 ) -> Option<PerLatentVar<LatentDescriber>> {
-  let primary: LatentDescriber = match (meta.mode, meta.delta_encoding) {
+  let primary: LatentDescriber = match (&meta.mode, meta.delta_encoding) {
     (Mode::Classic, DeltaEncoding::None) => Box::new(ClassicDescriber::<T>::default()),
     (Mode::Classic, _) => {
       centered_delta_describer::<T::L>("delta".to_string(), delta_units.to_string())
@@ -101,6 +101,24 @@ pub(crate) fn match_int_modes<L: Latent>(
         delta: delta_latent_describer(meta.delta_encoding),
         primary,
         secondary: Some(secondary),
+      })
+    }
+    Mode::Dict(_) => {
+      let primary = if matches!(meta.delta_encoding, DeltaEncoding::None) {
+        Box::new(IntDescriber {
+          description: "index".to_string(),
+          units: "".to_string(),
+          center: L::ZERO,
+          is_signed: false,
+        })
+      } else {
+        centered_delta_describer::<L>(format!("index delta"), "".to_string())
+      };
+
+      Some(PerLatentVar {
+        delta: delta_latent_describer(meta.delta_encoding),
+        primary,
+        secondary: None,
       })
     }
     _ => None,

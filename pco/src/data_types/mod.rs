@@ -169,7 +169,7 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 
   fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber>;
 
-  fn mode_is_valid(mode: Mode) -> bool;
+  fn mode_is_valid(mode: &Mode) -> bool;
   /// Breaks the numbers into latent variables for better compression.
   ///
   /// Returns
@@ -185,7 +185,7 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 
   fn from_latent_ordered(l: Self::L) -> Self;
   fn to_latent_ordered(self) -> Self::L;
-  fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>);
+  fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>);
 
   fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L];
   fn transmute_to_latent(self) -> Self::L;

@@ -18,6 +18,7 @@ fn unparse_mode_spec(spec: &ModeSpec) -> String {
   match spec {
     ModeSpec::Auto => "Auto".to_string(),
     ModeSpec::Classic => "Classic".to_string(),
+    ModeSpec::TryDict => "Dict".to_string(),
     ModeSpec::TryFloatMult(base) => format!("FloatMult@{}", base),
     ModeSpec::TryFloatQuant(k) => format!("FloatQuant@{}", k),
     ModeSpec::TryIntMult(base) => format!("IntMult@{}", base),
