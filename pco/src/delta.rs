@@ -133,36 +133,36 @@ fn find_best_lookback<L: Latent>(
   proposed_lookbacks: &[usize; PROPOSED_LOOKBACKS],
   lookback_counts: &mut [u32],
 ) -> usize {
+  let mut best_goodness = 0;
+  let mut best_lookback: usize = 0;
   for &lookback in proposed_lookbacks {
-    if lookback > 0 && latents[i - lookback] == l {
-      return lookback;
+    let (lookback_count, other) = unsafe {
+      let other = if lookback == 0 {
+        L::ZERO
+      } else {
+        *latents.get_unchecked(i - lookback)
+      };
+      (
+        *lookback_counts.get_unchecked(lookback),
+        other,
+      )
+    };
+    let lookback_goodness = Bitlen::BITS - lookback_count.leading_zeros();
+    let delta = L::min(l.wrapping_sub(other), other.wrapping_sub(l));
+    let delta_goodness = if delta == L::ZERO {
+      L::BITS
+    } else if lookback == 0 {
+      L::BITS / 2
+    } else {
+      0
+    }; //delta.leading_zeros();
+    let goodness = lookback_goodness + delta_goodness;
+    if goodness > best_goodness {
+      best_goodness = goodness;
+      best_lookback = lookback;
     }
   }
-  0
-  // let mut best_goodness = 0;
-  // let mut best_lookback: usize = 0;
-  // for &lookback in proposed_lookbacks {
-  //   let (lookback_count, other) = unsafe {
-  //     let other = if lookback == 0 {
-  //       L::ZERO
-  //     } else {
-  //       *latents.get_unchecked(i - lookback)
-  //     };
-  //     (
-  //       *lookback_counts.get_unchecked(lookback),
-  //       other,
-  //     )
-  //   };
-  //   let lookback_goodness = Bitlen::BITS - lookback_count.leading_zeros();
-  //   let delta = L::min(l.wrapping_sub(other), other.wrapping_sub(l));
-  //   let delta_goodness = delta.leading_zeros();
-  //   let goodness = lookback_goodness + delta_goodness;
-  //   if goodness > best_goodness {
-  //     best_goodness = goodness;
-  //     best_lookback = lookback;
-  //   }
-  // }
-  // best_lookback
+  best_lookback
 }
 
 #[inline(never)]

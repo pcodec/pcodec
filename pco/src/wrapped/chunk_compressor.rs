@@ -35,7 +35,7 @@ use std::io::Write;
 const PAGE_SIZE_OVERESTIMATION: f64 = 1.2;
 const N_PER_EXTRA_DELTA_GROUP: usize = 10000;
 const DELTA_GROUP_SIZE: usize = 200;
-const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
+const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 19;
 const LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
 const LOOKBACK_REQUIRED_BYTE_SAVINGS_PER_N: f32 = 0.25;
 
