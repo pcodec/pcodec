@@ -205,7 +205,7 @@ fn delta_encode_and_build_page_infos(
     let end_idx = start_idx + page_n;
 
     let page_delta_latents = delta::compute_delta_latent_var(
-      &delta_encoding,
+      delta_encoding,
       &mut latents.primary,
       start_idx..end_idx,
     );

@@ -24,18 +24,19 @@ mod unsigneds;
 
 pub(crate) type ModeAndLatents = (Mode, SplitLatents);
 
-trait Sealed {}
+mod private {
+  pub trait Sealed {}
 
-// Implementations of Sealed for all numeric types
-impl Sealed for u16 {}
-impl Sealed for u32 {}
-impl Sealed for u64 {}
-impl Sealed for i16 {}
-impl Sealed for i32 {}
-impl Sealed for i64 {}
-impl Sealed for f32 {}
-impl Sealed for f64 {}
-impl Sealed for half::f16 {}
+  impl Sealed for f32 {}
+  impl Sealed for f64 {}
+  impl Sealed for half::f16 {}
+  impl Sealed for i16 {}
+  impl Sealed for i32 {}
+  impl Sealed for i64 {}
+  impl Sealed for u16 {}
+  impl Sealed for u32 {}
+  impl Sealed for u64 {}
+}
 
 /// This is used internally for compressing and decompressing with
 /// float modes.
@@ -117,7 +118,7 @@ pub trait Latent:
   + PartialOrd
   + Rem<Output = Self>
   + RemAssign
-  + Sealed
+  + private::Sealed
   + Send
   + Sync
   + Shl<Bitlen, Output = Self>
@@ -164,7 +165,7 @@ pub trait Latent:
 ///
 /// Custom data types (defined outside of pco) are not currently supported.
 pub trait Number:
-  Copy + Debug + Display + Default + PartialEq + Sealed + Send + Sync + 'static
+  Copy + Debug + Display + Default + PartialEq + private::Sealed + Send + Sync + 'static
 {
   /// A number from 1-255 that corresponds to the number's data type.
   ///
