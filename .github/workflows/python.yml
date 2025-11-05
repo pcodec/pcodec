@@ -23,7 +23,7 @@ jobs:
         with:
           command: develop
           args: --manifest-path pco_python/Cargo.toml
-          sscache: true
+          sccache: true
       - name: Install test requirements
         run: source .venv/bin/activate && pip install -r pco_python/test_requirements.txt
       - name: Run tests
