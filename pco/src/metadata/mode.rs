@@ -45,7 +45,7 @@ use std::io::Write;
 /// convey the correct intuition without dealing with implementation
 /// complexities.
 /// Slightly more rigorous formulas are in format.md.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Mode {
   /// Represents each number as a single latent: itself.

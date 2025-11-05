@@ -119,7 +119,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     let page_meta =
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
-    let mode = chunk_meta.mode;
+    let mode = chunk_meta.mode.clone();
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
 
     let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
@@ -129,7 +129,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     Ok(Self {
       n,
       mode,
-      delta_encoding: chunk_meta.delta_encoding,
+      delta_encoding: chunk_meta.delta_encoding.clone(),
       reader_builder,
       n_processed: 0,
       latent_decompressors,
@@ -157,7 +157,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     let inner = &mut self.inner;
     let n = inner.n;
     let n_remaining = inner.n_remaining();
-    let mode = inner.mode;
+    let mode = &inner.mode;
 
     // DELTA LATENTS
     if let Some(LatentScratch {
