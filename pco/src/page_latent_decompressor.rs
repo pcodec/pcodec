@@ -53,9 +53,8 @@ impl<L: Latent> State<L> {
   }
 }
 
-// LatentBatchDecompressor does the main work of decoding bytes into Latents
 #[derive(Clone, Debug)]
-pub struct LatentPageDecompressor<L: Latent> {
+pub struct PageLatentDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
   state_lowers: Vec<L>,
@@ -68,7 +67,7 @@ pub struct LatentPageDecompressor<L: Latent> {
   state: State<L>,
 }
 
-impl<L: Latent> LatentPageDecompressor<L> {
+impl<L: Latent> PageLatentDecompressor<L> {
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
   unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader) {
@@ -245,7 +244,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
       1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, dst),
       9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
-        "[LatentBatchDecompressor] {} byte read not supported for {}-bit Latents",
+        "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
         L::BITS
       ),
@@ -301,18 +300,18 @@ impl<L: Latent> LatentPageDecompressor<L> {
   }
 }
 
-// Because the size of LatentPageDecompressor is enormous (largely due to
+// Because the size of PageLatentDecompressor is enormous (largely due to
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
 // TODO: consider an arena for these?
-type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
+type BoxedPageLatentDecompressor<L> = Box<PageLatentDecompressor<L>>;
 
 define_latent_enum!(
   #[derive()]
-  pub DynLatentPageDecompressor(BoxedLatentPageDecompressor)
+  pub DynPageLatentDecompressor(BoxedPageLatentDecompressor)
 );
 
-impl DynLatentPageDecompressor {
+impl DynPageLatentDecompressor {
   pub fn create<L: Latent>(
     ans_size_log: Bitlen,
     bins: &[Bin<L>],
@@ -367,7 +366,7 @@ impl DynLatentPageDecompressor {
         None
       };
 
-    let lpd = LatentPageDecompressor {
+    let lpd = PageLatentDecompressor {
       bytes_per_offset,
       state_lowers,
       needs_ans,
