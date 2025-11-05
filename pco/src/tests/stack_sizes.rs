@@ -1,7 +1,7 @@
-use crate::latent_batch_dissector::LatentBatchDissector;
-use crate::latent_chunk_compressor::LatentChunkCompressor;
-use crate::latent_page_decompressor::{DynLatentPageDecompressor, LatentPageDecompressor};
+use crate::chunk_latent_compressor::ChunkLatentCompressor;
+use crate::chunk_latent_dissector::ChunkLatentDissector;
 use crate::metadata::PerLatentVar;
+use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::wrapped::{ChunkCompressor, ChunkDecompressor, PageDecompressor};
 use std::mem;
 
@@ -12,11 +12,11 @@ fn test_stack_sizes() {
 
   // compression
   assert_eq!(
-    mem::size_of::<LatentBatchDissector<u64>>(),
+    mem::size_of::<ChunkLatentDissector<u64>>(),
     3088
   );
   assert_eq!(
-    mem::size_of::<LatentChunkCompressor<u64>>(),
+    mem::size_of::<ChunkLatentCompressor<u64>>(),
     136
   );
   assert_eq!(mem::size_of::<ChunkDecompressor<u64>>(), 168);
@@ -24,15 +24,15 @@ fn test_stack_sizes() {
 
   // decompression
   assert_eq!(
-    mem::size_of::<LatentPageDecompressor<u64>>(),
+    mem::size_of::<PageLatentDecompressor<u64>>(),
     4288
   );
   assert_eq!(
-    mem::size_of::<DynLatentPageDecompressor>(),
+    mem::size_of::<DynPageLatentDecompressor>(),
     16
   );
   assert_eq!(
-    mem::size_of::<PerLatentVar<DynLatentPageDecompressor>>(),
+    mem::size_of::<PerLatentVar<DynPageLatentDecompressor>>(),
     48
   );
   assert_eq!(

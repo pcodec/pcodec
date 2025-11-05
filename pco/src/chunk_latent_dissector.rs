@@ -7,18 +7,17 @@ use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::{ans, bits};
 
-pub struct LatentBatchDissector<'a, L: Latent> {
+pub struct ChunkLatentDissector<'a, L: Latent> {
   // immutable
   table: &'a CompressionTable<L>,
   encoder: &'a ans::Encoder,
 
   // mutable
-  // TODO: use an arena and heap-allocate these?
   lower_scratch: [L; FULL_BATCH_N],
   symbol_scratch: [Symbol; FULL_BATCH_N],
 }
 
-impl<'a, L: Latent> LatentBatchDissector<'a, L> {
+impl<'a, L: Latent> ChunkLatentDissector<'a, L> {
   pub fn new(table: &'a CompressionTable<L>, encoder: &'a ans::Encoder) -> Self {
     // We initialize the scratch buffer for bin lowers carefully to enable
     // a shortcut when there's only one bin.
@@ -138,7 +137,12 @@ impl<'a, L: Latent> LatentBatchDissector<'a, L> {
     }
   }
 
-  pub fn dissect_latent_batch(&mut self, latents: &[L], base_i: usize, dst: &mut DissectedPageVar) {
+  pub fn dissect_batch_latents(
+    &mut self,
+    latents: &[L],
+    base_i: usize,
+    dst: &mut DissectedPageVar,
+  ) {
     let DissectedPageVar {
       ans_vals,
       ans_bits,

@@ -1,11 +1,11 @@
 use crate::bit_writer::BitWriter;
+use crate::chunk_latent_dissector::ChunkLatentDissector;
 use crate::compression_intermediates::BinCompressionInfo;
 use crate::compression_intermediates::DissectedPageVar;
 use crate::compression_table::CompressionTable;
 use crate::constants::{Bitlen, Weight, ANS_INTERLEAVING, PAGE_PADDING};
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
-use crate::latent_batch_dissector::LatentBatchDissector;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
@@ -79,7 +79,7 @@ pub(crate) struct TrainedBins<L: Latent> {
 }
 
 #[derive(Clone, Debug)]
-pub struct LatentChunkCompressor<L: Latent> {
+pub struct ChunkLatentCompressor<L: Latent> {
   table: CompressionTable<L>,
   pub encoder: ans::Encoder,
   pub avg_bits_per_latent: f64,
@@ -89,7 +89,7 @@ pub struct LatentChunkCompressor<L: Latent> {
   latents: Vec<L>,
 }
 
-impl<L: Latent> LatentChunkCompressor<L> {
+impl<L: Latent> ChunkLatentCompressor<L> {
   pub(crate) fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Self> {
     let needs_ans = bins.len() != 1;
 
@@ -101,7 +101,7 @@ impl<L: Latent> LatentChunkCompressor<L> {
     let max_bits_per_offset = bins::max_offset_bits(bins);
     let max_u64s_per_offset = read_write_uint::calc_max_u64s_for_writing(max_bits_per_offset);
 
-    Ok(LatentChunkCompressor {
+    Ok(ChunkLatentCompressor {
       table,
       encoder,
       avg_bits_per_latent: bins::avg_bits_per_latent(bins, trained.ans_size_log),
@@ -134,14 +134,14 @@ impl<L: Latent> LatentChunkCompressor<L> {
     );
 
     // we go through in reverse for ANS!
-    let mut lbd = LatentBatchDissector::new(&self.table, &self.encoder);
+    let mut cld = ChunkLatentDissector::new(&self.table, &self.encoder);
     for (batch_idx, batch) in self.latents[page_range]
       .chunks(FULL_BATCH_N)
       .enumerate()
       .rev()
     {
       let base_i = batch_idx * FULL_BATCH_N;
-      lbd.dissect_latent_batch(batch, base_i, &mut dissected_page_var)
+      cld.dissect_batch_latents(batch, base_i, &mut dissected_page_var)
     }
     dissected_page_var
   }
@@ -212,5 +212,5 @@ impl<L: Latent> LatentChunkCompressor<L> {
 
 define_latent_enum!(
   #[derive(Clone, Debug)]
-  pub DynLatentChunkCompressor(LatentChunkCompressor)
+  pub DynChunkLatentCompressor(ChunkLatentCompressor)
 );

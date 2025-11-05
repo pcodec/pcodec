@@ -1,5 +1,8 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
+use crate::chunk_latent_compressor::{
+  ChunkLatentCompressor, DynChunkLatentCompressor, TrainedBins,
+};
 use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
@@ -11,9 +14,6 @@ use crate::data_types::{Latent, LatentType, Number};
 use crate::delta::DeltaState;
 use crate::errors::{PcoError, PcoResult};
 use crate::histograms::histogram;
-use crate::latent_chunk_compressor::{
-  DynLatentChunkCompressor, LatentChunkCompressor, TrainedBins,
-};
 use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::delta_encoding::{DeltaConsecutiveConfig, DeltaLookbackConfig};
@@ -121,7 +121,7 @@ fn train_infos<L: Latent>(
 #[derive(Clone, Debug)]
 pub struct ChunkCompressor {
   meta: ChunkMeta,
-  latent_chunk_compressors: PerLatentVar<DynLatentChunkCompressor>,
+  chunk_latent_compressors: PerLatentVar<DynChunkLatentCompressor>,
   page_infos: Vec<PageInfo>,
 }
 
@@ -268,7 +268,7 @@ fn new_candidate_w_split_and_delta_encoding(
 
   // training bins
   let mut var_metas = PerLatentVarBuilder::default();
-  let mut latent_chunk_compressors = PerLatentVarBuilder::default();
+  let mut chunk_latent_compressors = PerLatentVarBuilder::default();
   let mut bin_countss = PerLatentVarBuilder::default();
   for (key, latents) in latents.enumerated() {
     let unoptimized_bins_log = match key {
@@ -283,7 +283,7 @@ fn new_candidate_w_split_and_delta_encoding(
       ),
     };
 
-    let (var_meta, lcc, bin_counts) = match_latent_enum!(
+    let (var_meta, clc, bin_counts) = match_latent_enum!(
       latents,
       DynLatents<L>(latents) => {
         let contiguous_deltas = collect_contiguous_latents(&latents, &page_infos, key);
@@ -293,23 +293,23 @@ fn new_candidate_w_split_and_delta_encoding(
 
         let ans_size_log = trained.ans_size_log;
         let bin_counts = trained.counts.to_vec();
-        let lcc = DynLatentChunkCompressor::new(
-          LatentChunkCompressor::new(trained, &bins, latents)?
+        let clc = DynChunkLatentCompressor::new(
+          ChunkLatentCompressor::new(trained, &bins, latents)?
         ).unwrap();
         let var_meta = ChunkLatentVarMeta {
           bins: DynBins::new(bins).unwrap(),
           ans_size_log,
         };
-        (var_meta, lcc, bin_counts)
+        (var_meta, clc, bin_counts)
       }
     );
     var_metas.set(key, var_meta);
-    latent_chunk_compressors.set(key, lcc);
+    chunk_latent_compressors.set(key, clc);
     bin_countss.set(key, bin_counts);
   }
 
   let var_metas = var_metas.into();
-  let latent_chunk_compressors = latent_chunk_compressors.into();
+  let chunk_latent_compressors = chunk_latent_compressors.into();
   let bin_countss = bin_countss.into();
 
   let meta = ChunkMeta {
@@ -319,7 +319,7 @@ fn new_candidate_w_split_and_delta_encoding(
   };
   let chunk_compressor = ChunkCompressor {
     meta,
-    latent_chunk_compressors,
+    chunk_latent_compressors,
     page_infos,
   };
 
@@ -482,7 +482,7 @@ fn fallback_chunk_compressor(
   let (latents, page_infos) =
     delta_encode_and_build_page_infos(&DeltaEncoding::None, &n_per_page, latents);
 
-  let (meta, lcc) = match_latent_enum!(
+  let (meta, clc) = match_latent_enum!(
     latents.primary,
     DynLatents<L>(latents) => {
       let infos = vec![BinCompressionInfo::<L> {
@@ -493,7 +493,7 @@ fn fallback_chunk_compressor(
       let meta = guarantee::baseline_chunk_meta::<L>();
       let latent_var_meta = &meta.per_latent_var.primary;
 
-      let lcc = LatentChunkCompressor::new(
+      let clc = ChunkLatentCompressor::new(
         TrainedBins {
           infos,
           ans_size_log: 0,
@@ -502,15 +502,15 @@ fn fallback_chunk_compressor(
         latent_var_meta.bins.downcast_ref::<L>().unwrap(),
         latents,
       )?;
-      (meta, DynLatentChunkCompressor::new(lcc).unwrap())
+      (meta, DynChunkLatentCompressor::new(clc).unwrap())
     }
   );
 
   Ok(ChunkCompressor {
     meta,
-    latent_chunk_compressors: PerLatentVar {
+    chunk_latent_compressors: PerLatentVar {
       delta: None,
-      primary: lcc,
+      primary: clc,
       secondary: None,
     },
     page_infos,
@@ -619,18 +619,18 @@ impl ChunkCompressor {
 
   fn dissect_page(&self, page_idx: usize) -> PcoResult<DissectedPage> {
     let Self {
-      latent_chunk_compressors,
+      chunk_latent_compressors,
       page_infos,
       ..
     } = self;
 
     let page_info = &page_infos[page_idx];
 
-    let per_latent_var = latent_chunk_compressors.as_ref().map(|key, lcc| {
+    let per_latent_var = chunk_latent_compressors.as_ref().map(|key, clc| {
       let range = page_info.range_for_latent_var(key);
       match_latent_enum!(
-        lcc,
-        DynLatentChunkCompressor<L>(inner) => {
+        clc,
+        DynChunkLatentCompressor<L>(inner) => {
           inner.dissect_page(range)
         }
       )
@@ -653,16 +653,16 @@ impl ChunkCompressor {
   fn page_size_hint_inner(&self, page_idx: usize, page_size_overestimation: f64) -> usize {
     let page_info = &self.page_infos[page_idx];
     let mut body_bit_size = 0;
-    for (_, (lcc, page_info_var)) in self
-      .latent_chunk_compressors
+    for (_, (clc, page_info_var)) in self
+      .chunk_latent_compressors
       .as_ref()
       .zip_exact(page_info.per_latent_var.as_ref())
       .enumerated()
     {
       let n_stored_latents = page_info_var.range.len();
       let avg_bits_per_latent = match_latent_enum!(
-        lcc,
-        DynLatentChunkCompressor<L>(inner) => { inner.avg_bits_per_latent }
+        clc,
+        DynChunkLatentCompressor<L>(inner) => { inner.avg_bits_per_latent }
       );
       let nums_bit_size = n_stored_latents as f64 * avg_bits_per_latent;
       body_bit_size += (nums_bit_size * page_size_overestimation).ceil() as usize;
@@ -682,15 +682,15 @@ impl ChunkCompressor {
         batch_start + FULL_BATCH_N,
         dissected_page.page_n,
       );
-      for (_, (dissected_page_var, lcc)) in dissected_page
+      for (_, (dissected_page_var, clc)) in dissected_page
         .per_latent_var
         .as_ref()
-        .zip_exact(self.latent_chunk_compressors.as_ref())
+        .zip_exact(self.chunk_latent_compressors.as_ref())
         .enumerated()
       {
         match_latent_enum!(
-          lcc,
-          DynLatentChunkCompressor<L>(inner) => {
+          clc,
+          DynChunkLatentCompressor<L>(inner) => {
             inner.write_dissected_batch(dissected_page_var, batch_start, writer)?;
           }
         );
@@ -717,10 +717,10 @@ impl ChunkCompressor {
     let dissected_page = self.dissect_page(page_idx)?;
     let page_info = &self.page_infos[page_idx];
 
-    let ans_default_state_and_size_log = self.latent_chunk_compressors.as_ref().map(|_, lcc| {
+    let ans_default_state_and_size_log = self.chunk_latent_compressors.as_ref().map(|_, clc| {
       match_latent_enum!(
-        lcc,
-        DynLatentChunkCompressor<L>(inner) => { (inner.encoder.default_state(), inner.encoder.size_log()) }
+        clc,
+        DynChunkLatentCompressor<L>(inner) => { (inner.encoder.default_state(), inner.encoder.size_log()) }
       )
     });
 
