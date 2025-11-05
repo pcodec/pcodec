@@ -3,7 +3,6 @@ use std::convert::TryInto;
 use numpy::{
   Element, IntoPyArray, PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods,
 };
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyModule, PyNone};
 use pyo3::{pyfunction, wrap_pyfunction, Bound, PyObject, PyResult, Python};
@@ -114,15 +113,13 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   /// :raises: TypeError, RuntimeError
   #[pyfunction]
   fn simple_decompress(py: Python, compressed: &Bound<PyBytes>) -> PyResult<PyObject> {
-    use pco::standalone::NumberTypeOrTermination::*;
-
     let src = compressed.as_bytes();
     let (file_decompressor, src) = FileDecompressor::new(src).map_err(pco_err_to_py)?;
     let maybe_number_type = file_decompressor
       .peek_number_type_or_termination(src)
       .map_err(pco_err_to_py)?;
     match maybe_number_type {
-      Known(number_type) => {
+      Some(number_type) => {
         match_number_enum!(
           number_type,
           NumberType<T> => {
@@ -135,11 +132,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
           }
         )
       }
-      Termination => Ok(PyNone::get(py).to_object(py)),
-      Unknown(other) => Err(PyRuntimeError::new_err(format!(
-        "unrecognized number type byte {:?}",
-        other,
-      ))),
+      None => Ok(PyNone::get(py).to_object(py)),
     }
   }
   m.add_function(wrap_pyfunction!(simple_decompress, m)?)?;
