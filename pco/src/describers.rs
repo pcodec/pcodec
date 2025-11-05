@@ -22,7 +22,7 @@ pub trait DescribeLatent {
 
 pub type LatentDescriber = Box<dyn DescribeLatent>;
 
-fn delta_latent_describer(delta_encoding: DeltaEncoding) -> Option<LatentDescriber> {
+fn delta_latent_describer(delta_encoding: &DeltaEncoding) -> Option<LatentDescriber> {
   match delta_encoding {
     DeltaEncoding::None | DeltaEncoding::Consecutive(_) => None,
     DeltaEncoding::Lookback(_) => {
@@ -41,7 +41,7 @@ pub(crate) fn match_classic_mode<T: Number>(
   meta: &ChunkMeta,
   delta_units: &'static str,
 ) -> Option<PerLatentVar<LatentDescriber>> {
-  let primary: LatentDescriber = match (meta.mode, meta.delta_encoding) {
+  let primary: LatentDescriber = match (&meta.mode, &meta.delta_encoding) {
     (Mode::Classic, DeltaEncoding::None) => Box::new(ClassicDescriber::<T>::default()),
     (Mode::Classic, _) => {
       centered_delta_describer::<T::L>("delta".to_string(), delta_units.to_string())
@@ -50,7 +50,7 @@ pub(crate) fn match_classic_mode<T: Number>(
   };
 
   Some(PerLatentVar {
-    delta: delta_latent_describer(meta.delta_encoding),
+    delta: delta_latent_describer(&meta.delta_encoding),
     primary,
     secondary: None,
   })
@@ -98,7 +98,7 @@ pub(crate) fn match_int_modes<L: Latent>(
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: Some(secondary),
       })
@@ -146,7 +146,7 @@ pub(crate) fn match_float_modes<F: Float>(
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: Some(secondary),
       })
@@ -182,7 +182,7 @@ pub(crate) fn match_float_modes<F: Float>(
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: Some(secondary),
       })

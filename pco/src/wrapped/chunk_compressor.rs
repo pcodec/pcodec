@@ -180,7 +180,7 @@ fn collect_contiguous_latents<L: Latent>(
 }
 
 fn delta_encode_and_build_page_infos(
-  delta_encoding: DeltaEncoding,
+  delta_encoding: &DeltaEncoding,
   n_per_page: &[usize],
   latents: SplitLatents,
 ) -> (PerLatentVar<DynLatents>, Vec<PageInfo>) {
@@ -205,7 +205,7 @@ fn delta_encode_and_build_page_infos(
     let end_idx = start_idx + page_n;
 
     let page_delta_latents = delta::compute_delta_latent_var(
-      delta_encoding,
+      &delta_encoding,
       &mut latents.primary,
       start_idx..end_idx,
     );
@@ -213,7 +213,7 @@ fn delta_encode_and_build_page_infos(
     let mut per_latent_var = latents.as_mut().map(|key, var_latents| {
       let encoding_for_var = delta_encoding.for_latent_var(key);
       let delta_state = delta::encode_in_place(
-        encoding_for_var,
+        &encoding_for_var,
         page_delta_latents.as_ref(),
         start_idx..end_idx,
         var_latents,
@@ -264,7 +264,7 @@ fn new_candidate_w_split_and_delta_encoding(
 
   // delta encoding
   let (latents, page_infos) =
-    delta_encode_and_build_page_infos(delta_encoding, &n_per_page, latents);
+    delta_encode_and_build_page_infos(&delta_encoding, &n_per_page, latents);
 
   // training bins
   let mut var_metas = PerLatentVarBuilder::default();
@@ -402,7 +402,7 @@ fn choose_delta_encoding(
     let lookback_cost = calculate_compressed_sample_size(
       &sample,
       unoptimized_bins_log,
-      lookback_encoding,
+      lookback_encoding.clone(),
     )? + lookback_penalty;
     if lookback_cost < best_cost {
       best_encoding = new_lookback_delta_encoding(primary_latents.len());
@@ -415,7 +415,11 @@ fn choose_delta_encoding(
       order: delta_encoding_order,
       secondary_uses_delta: false,
     });
-    let cost = calculate_compressed_sample_size(&sample, unoptimized_bins_log, encoding)?;
+    let cost = calculate_compressed_sample_size(
+      &sample,
+      unoptimized_bins_log,
+      encoding.clone(),
+    )?;
     if cost < best_cost {
       best_encoding = encoding;
       best_cost = cost;
@@ -476,7 +480,7 @@ fn fallback_chunk_compressor(
   let n = latents.primary.len();
   let n_per_page = config.paging_spec.n_per_page(n)?;
   let (latents, page_infos) =
-    delta_encode_and_build_page_infos(DeltaEncoding::None, &n_per_page, latents);
+    delta_encode_and_build_page_infos(&DeltaEncoding::None, &n_per_page, latents);
 
   let (meta, lcc) = match_latent_enum!(
     latents.primary,
@@ -520,7 +524,7 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
   validate_chunk_size(n)?;
 
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
-  if !T::mode_is_valid(mode) {
+  if !T::mode_is_valid(&mode) {
     return Err(PcoError::invalid_argument(
       "The chosen mode of {:?} was invalid for type {}. \
       This is most likely due to an invalid argument, but if using Auto mode \

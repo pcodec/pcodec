@@ -75,27 +75,16 @@ impl FileCompressor {
     let mut writer = BitWriter::new(dst, STANDALONE_HEADER_PADDING);
     writer.write_aligned_bytes(&MAGIC_HEADER)?;
     unsafe {
-      match self.uniform_type {
-        Some(number_type) => {
-          // Use new standalone v3 to encode this.
-          // This code path is only possible via `with_uniform_type`, which is
-          // new functionality.
-          writer.write_usize(
-            CURRENT_STANDALONE_VERSION,
-            BITS_TO_ENCODE_STANDALONE_VERSION,
-          );
-          writer.write_aligned_bytes(&[number_type as u8])?;
-        }
-        None => {
-          // no new functionality required, stick to v2 to avoid breaking
-          // people's code
-          // TODO in 1.0 get rid of this case and write a number type byte of 0
-          writer.write_usize(
-            PRE_UNIFORM_TYPE_STANDALONE_VERSION,
-            BITS_TO_ENCODE_STANDALONE_VERSION,
-          );
-        }
-      }
+      writer.write_usize(
+        CURRENT_STANDALONE_VERSION,
+        BITS_TO_ENCODE_STANDALONE_VERSION,
+      );
+      let uniform_number_type_byte = match self.uniform_type {
+        Some(number_type) => number_type as u8,
+        None => 0,
+      };
+      writer.write_aligned_bytes(&[uniform_number_type_byte])?;
+
       write_varint(self.n_hint as u64, &mut writer);
     }
     writer.finish_byte();
