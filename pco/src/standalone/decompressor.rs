@@ -7,7 +7,6 @@ use crate::errors::{PcoError, PcoResult};
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
-use crate::standalone::NumberTypeOrTermination;
 use crate::{bit_reader, wrapped};
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
@@ -145,18 +144,26 @@ impl FileDecompressor {
     self.n_hint
   }
 
-  /// Peeks at what's next in the file, returning whether it's a termination
-  /// or chunk with some data type.
+  /// Peeks at what's next in the file, returning the next chunk's number type
+  /// or None if there are no more chunks.
   ///
   /// If a uniform number type for the file exists, it will be used instead.
-  /// Will return an error if there is insufficient data.
-  pub fn peek_number_type_or_termination(&self, src: &[u8]) -> PcoResult<NumberTypeOrTermination> {
+  /// Will return an error if there is insufficient data or a number type this
+  /// version of Pco does not support.
+  pub fn peek_number_type_or_termination(&self, src: &[u8]) -> PcoResult<Option<NumberType>> {
     if let Some(uniform_type) = self.uniform_type {
-      return Ok(NumberTypeOrTermination::Known(uniform_type));
+      return Ok(Some(uniform_type));
     }
 
     match src.first() {
-      Some(&byte) => Ok(NumberTypeOrTermination::from(byte)),
+      Some(&byte) => match NumberType::from_descriminant(byte) {
+        Some(number_type) => Ok(Some(number_type)),
+        None if byte == MAGIC_TERMINATION_BYTE => Ok(None),
+        _ => Err(PcoError::corruption(format!(
+          "peeked unknown data type byte: {}",
+          byte
+        ))),
+      },
       None => Err(PcoError::insufficient_data(
         "unable to peek data type from empty bytes",
       )),
