@@ -54,20 +54,29 @@ impl<L: Latent> State<L> {
 }
 
 #[derive(Clone, Debug)]
-pub struct PageLatentDecompressor<L: Latent> {
-  // known information about this latent variable
+pub struct Config<L: Latent> {
   bytes_per_offset: usize,
   state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
-  pub maybe_constant_value: Option<L>,
+  maybe_constant_value: Option<L>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PageLatentDecompressor<L: Latent> {
+  // known information about this latent variable
+  config: Config<L>,
 
   // mutable state
   state: State<L>,
 }
 
 impl<L: Latent> PageLatentDecompressor<L> {
+  pub fn maybe_constant_value(&self) -> Option<L> {
+    self.config.maybe_constant_value
+  }
+
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
   unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader) {
@@ -82,8 +91,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let ans_nodes = self.decoder.nodes.as_slice();
-    let lowers = self.state_lowers.as_slice();
+    let ans_nodes = self.config.decoder.nodes.as_slice();
+    let lowers = self.config.state_lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -134,10 +143,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = unsafe { self.decoder.nodes.get_unchecked(state_idx) };
+      let node = unsafe { self.config.decoder.nodes.get_unchecked(state_idx) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = unsafe { *self.state_lowers.get_unchecked(state_idx) };
+      let lower = unsafe { *self.config.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state
@@ -212,7 +221,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       return;
     }
 
-    if self.needs_ans {
+    if self.config.needs_ans {
       let batch_n = dst.len();
       assert!(batch_n <= FULL_BATCH_N);
 
@@ -231,7 +240,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
-    match self.bytes_per_offset {
+    match self.config.bytes_per_offset {
       // all
       0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
 
@@ -245,7 +254,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
-        self.bytes_per_offset,
+        self.config.bytes_per_offset,
         L::BITS
       ),
     }
@@ -259,7 +268,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     dst: &mut [L],
   ) -> PcoResult<()> {
     let n_remaining_pre_delta =
-      n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
+      n_remaining_in_page.saturating_sub(self.config.delta_encoding.n_latents_per_state());
     let pre_delta_len = if dst.len() <= n_remaining_pre_delta {
       dst.len()
     } else {
@@ -271,15 +280,15 @@ impl<L: Latent> PageLatentDecompressor<L> {
     };
     self.decompress_batch_pre_delta(reader, &mut dst[..pre_delta_len]);
 
-    match self.delta_encoding {
+    match self.config.delta_encoding {
       DeltaEncoding::None => Ok(()),
       DeltaEncoding::Consecutive(_) => {
         delta::decode_consecutive_in_place(&mut self.state.delta_state, dst);
         Ok(())
       }
-      DeltaEncoding::Lookback(config) => {
+      DeltaEncoding::Lookback(lookback_config) => {
         let has_oob_lookbacks = delta::decode_with_lookbacks_in_place(
-          config,
+          lookback_config,
           delta_latents
             .unwrap()
             .downcast_ref::<DeltaLookback>()
@@ -367,12 +376,14 @@ impl DynPageLatentDecompressor {
       };
 
     let lpd = PageLatentDecompressor {
-      bytes_per_offset,
-      state_lowers,
-      needs_ans,
-      decoder,
-      delta_encoding,
-      maybe_constant_value,
+      config: Config {
+        bytes_per_offset,
+        state_lowers,
+        needs_ans,
+        decoder,
+        delta_encoding,
+        maybe_constant_value,
+      },
       state,
     };
     Ok(Self::new(Box::new(lpd)).unwrap())

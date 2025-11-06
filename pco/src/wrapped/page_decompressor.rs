@@ -57,7 +57,7 @@ fn make_latent_scratch(pld: Option<&DynPageLatentDecompressor>) -> Option<Latent
   match_latent_enum!(
     pld,
     DynPageLatentDecompressor<L>(inner) => {
-      let maybe_constant_value = inner.maybe_constant_value;
+      let maybe_constant_value = inner.maybe_constant_value();
       Some(LatentScratch {
         is_constant: maybe_constant_value.is_some(),
         dst: DynLatents::new(vec![maybe_constant_value.unwrap_or_default(); FULL_BATCH_N]).unwrap(),
