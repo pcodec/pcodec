@@ -1,15 +1,19 @@
 use better_io::BetterBufRead;
+use std::cell::OnceCell;
 use std::marker::PhantomData;
 
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
-use crate::metadata::ChunkMeta;
+use crate::metadata::{ChunkMeta, PerLatentVar};
+use crate::page_latent_decompressor::DynChunkLatentVarConfig;
+use crate::wrapped::page_decompressor::make_latent_var_configs;
 use crate::wrapped::PageDecompressor;
 
 /// Holds metadata about a chunk and can produce page decompressors.
 #[derive(Clone, Debug)]
 pub struct ChunkDecompressor<T: Number> {
   pub(crate) meta: ChunkMeta,
+  latent_var_configs: OnceCell<PerLatentVar<DynChunkLatentVarConfig>>,
   phantom: PhantomData<T>,
 }
 
@@ -26,6 +30,7 @@ impl<T: Number> ChunkDecompressor<T> {
 
     Ok(Self {
       meta,
+      latent_var_configs: OnceCell::new(),
       phantom: PhantomData,
     })
   }
@@ -44,6 +49,10 @@ impl<T: Number> ChunkDecompressor<T> {
     src: R,
     n: usize,
   ) -> PcoResult<PageDecompressor<T, R>> {
-    PageDecompressor::<T, R>::new(src, &self.meta, n)
+    // TODO error handling
+    let latent_var_configs = self
+      .latent_var_configs
+      .get_or_init(|| make_latent_var_configs(&self.meta).unwrap());
+    PageDecompressor::<T, R>::new(src, &self.meta, latent_var_configs, n)
   }
 }

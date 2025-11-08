@@ -24,6 +24,7 @@ impl<L: Latent> Deref for ScratchArray<L> {
     &self.0
   }
 }
+
 impl<L: Latent> DerefMut for ScratchArray<L> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.0
@@ -54,25 +55,69 @@ impl<L: Latent> State<L> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Config<L: Latent> {
-  bytes_per_offset: usize,
-  state_lowers: Vec<L>,
-  needs_ans: bool,
-  decoder: ans::Decoder,
-  delta_encoding: DeltaEncoding,
-  maybe_constant_value: Option<L>,
+pub struct ChunkLatentVarConfig<L: Latent> {
+  pub bytes_per_offset: usize,
+  pub state_lowers: Vec<L>,
+  pub n_bins: usize,
+  pub decoder: ans::Decoder,
+  pub delta_encoding: DeltaEncoding,
+  pub maybe_constant_value: Option<L>,
+}
+
+define_latent_enum!(
+  #[derive(Clone, Debug)]
+  pub DynChunkLatentVarConfig(ChunkLatentVarConfig)
+);
+
+impl<L: Latent> ChunkLatentVarConfig<L> {
+  pub fn create(
+    ans_size_log: Bitlen,
+    bins: &[Bin<L>],
+    delta_encoding: DeltaEncoding,
+  ) -> PcoResult<Self> {
+    let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
+    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
+    let weights = bins::weights(bins);
+    let ans_spec = Spec::from_weights(ans_size_log, weights)?;
+    let state_lowers = ans_spec
+      .state_symbols
+      .iter()
+      .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
+      .collect();
+    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
+
+    let maybe_constant_value =
+      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
+        bins.first().map(|bin| bin.lower)
+      } else {
+        None
+      };
+
+    Ok(ChunkLatentVarConfig {
+      bytes_per_offset,
+      state_lowers,
+      n_bins: bins.len(),
+      decoder,
+      delta_encoding,
+      maybe_constant_value,
+    })
+  }
+
+  pub fn needs_ans(&self) -> bool {
+    self.n_bins != 1
+  }
 }
 
 #[derive(Clone, Debug)]
-pub struct PageLatentDecompressor<L: Latent> {
+pub struct PageLatentDecompressor<'a, L: Latent> {
   // known information about this latent variable
-  config: Config<L>,
+  config: &'a ChunkLatentVarConfig<L>,
 
   // mutable state
   state: State<L>,
 }
 
-impl<L: Latent> PageLatentDecompressor<L> {
+impl<'a, L: Latent> PageLatentDecompressor<'a, L> {
   pub fn maybe_constant_value(&self) -> Option<L> {
     self.config.maybe_constant_value
   }
@@ -221,7 +266,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       return;
     }
 
-    if self.config.needs_ans {
+    if self.config.needs_ans() {
       let batch_n = dst.len();
       assert!(batch_n <= FULL_BATCH_N);
 
@@ -313,36 +358,49 @@ impl<L: Latent> PageLatentDecompressor<L> {
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
 // TODO: consider an arena for these?
-type BoxedPageLatentDecompressor<L> = Box<PageLatentDecompressor<L>>;
+type BoxedPageLatentDecompressor<'a, L> = Box<PageLatentDecompressor<'a, L>>;
 
 define_latent_enum!(
   #[derive()]
   pub DynPageLatentDecompressor(BoxedPageLatentDecompressor)
 );
 
-impl DynPageLatentDecompressor {
+impl<'a> DynPageLatentDecompressor<'a> {
+  pub fn new<S: Latent>(inner: BoxedPageLatentDecompressor<S>) -> Option<Self> {
+    // copied from dtype_dispatch
+    let type_id = std::any::TypeId::of::<S>();
+    if type_id == std::any::TypeId::of::<u16>() {
+      let ptr =
+        &inner as *const BoxedPageLatentDecompressor<S> as *const BoxedPageLatentDecompressor<u16>;
+      let typed = unsafe { ptr.read() };
+      std::mem::forget(inner);
+      Some(DynPageLatentDecompressor::U16(typed))
+    } else if type_id == std::any::TypeId::of::<u32>() {
+      let ptr =
+        &inner as *const BoxedPageLatentDecompressor<S> as *const BoxedPageLatentDecompressor<u32>;
+      let typed = unsafe { ptr.read() };
+      std::mem::forget(inner);
+      Some(DynPageLatentDecompressor::U32(typed))
+    } else if type_id == std::any::TypeId::of::<u64>() {
+      let ptr =
+        &inner as *const BoxedPageLatentDecompressor<S> as *const BoxedPageLatentDecompressor<u64>;
+      let typed = unsafe { ptr.read() };
+      std::mem::forget(inner);
+      Some(DynPageLatentDecompressor::U64(typed))
+    } else {
+      None
+    }
+  }
+
   pub fn create<L: Latent>(
-    ans_size_log: Bitlen,
-    bins: &[Bin<L>],
-    delta_encoding: DeltaEncoding,
+    config: &'a ChunkLatentVarConfig<L>,
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
-    let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
-    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
-    let weights = bins::weights(bins);
-    let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let state_lowers = ans_spec
-      .state_symbols
-      .iter()
-      .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
-      .collect();
-    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
-
-    let (working_delta_state, delta_state_pos) = match delta_encoding {
+    let (working_delta_state, delta_state_pos) = match config.delta_encoding {
       DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
-      DeltaEncoding::Lookback(config) => {
-        delta::new_lookback_window_buffer_and_pos(config, &stored_delta_state)
+      DeltaEncoding::Lookback(lookback_config) => {
+        delta::new_lookback_window_buffer_and_pos(lookback_config, &stored_delta_state)
       }
     };
 
@@ -355,35 +413,20 @@ impl DynPageLatentDecompressor {
       delta_state_pos,
     };
 
-    let needs_ans = bins.len() != 1;
-    if !needs_ans {
+    if !config.needs_ans() {
       // we optimize performance by setting state once and never again
-      let bin = &bins[0];
-      let mut csum = 0;
-      for i in 0..FULL_BATCH_N {
-        state.offset_bits_scratch[i] = bin.offset_bits;
-        state.offset_bits_csum_scratch[i] = csum;
-        state.lowers_scratch[i] = bin.lower;
-        csum += bin.offset_bits;
-      }
+      let offset_bits = config.decoder.nodes[0].offset_bits as Bitlen;
+      state.offset_bits_scratch.fill(offset_bits);
+      state.lowers_scratch.fill(config.state_lowers[0]);
+      state
+        .offset_bits_csum_scratch
+        .iter_mut()
+        .enumerate()
+        .for_each(|(i, csum)| *csum = i as u32 * offset_bits);
     }
 
-    let maybe_constant_value =
-      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
-        bins.first().map(|bin| bin.lower)
-      } else {
-        None
-      };
-
     let lpd = PageLatentDecompressor {
-      config: Config {
-        bytes_per_offset,
-        state_lowers,
-        needs_ans,
-        decoder,
-        delta_encoding,
-        maybe_constant_value,
-      },
+      config: &config,
       state,
     };
     Ok(Self::new(Box::new(lpd)).unwrap())

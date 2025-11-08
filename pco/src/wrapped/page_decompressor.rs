@@ -13,7 +13,9 @@ use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
-use crate::page_latent_decompressor::DynPageLatentDecompressor;
+use crate::page_latent_decompressor::{
+  ChunkLatentVarConfig, DynChunkLatentVarConfig, DynPageLatentDecompressor,
+};
 use crate::progress::Progress;
 
 const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
@@ -24,7 +26,7 @@ struct LatentScratch {
   dst: DynLatents,
 }
 
-struct PageDecompressorInner<R: BetterBufRead> {
+struct PageDecompressorInner<'a, R: BetterBufRead> {
   // immutable
   n: usize,
   mode: Mode,
@@ -33,14 +35,14 @@ struct PageDecompressorInner<R: BetterBufRead> {
   // mutable
   reader_builder: BitReaderBuilder<R>,
   n_processed: usize,
-  latent_decompressors: PerLatentVar<DynPageLatentDecompressor>,
+  latent_decompressors: PerLatentVar<DynPageLatentDecompressor<'a>>,
   delta_scratch: Option<LatentScratch>,
   secondary_scratch: Option<LatentScratch>,
 }
 
 /// Holds metadata about a page and supports decompression.
-pub struct PageDecompressor<T: Number, R: BetterBufRead> {
-  inner: PageDecompressorInner<R>,
+pub struct PageDecompressor<'a, T: Number, R: BetterBufRead> {
+  inner: PageDecompressorInner<'a, R>,
   phantom: PhantomData<T>,
 }
 
@@ -66,40 +68,57 @@ fn make_latent_scratch(pld: Option<&DynPageLatentDecompressor>) -> Option<Latent
   )
 }
 
-fn make_latent_decompressors(
+pub(crate) fn make_latent_var_configs(
   chunk_meta: &ChunkMeta,
+) -> PcoResult<PerLatentVar<DynChunkLatentVarConfig>> {
+  // TODO can this just be a map?
+  let mut configs = PerLatentVarBuilder::default();
+  for (key, chunk_latent_var_meta) in chunk_meta.per_latent_var.as_ref().enumerated() {
+    let var_delta_encoding = chunk_meta.delta_encoding.for_latent_var(key);
+    let config = match_latent_enum!(
+      &chunk_latent_var_meta.bins,
+      DynBins<L>(bins) => {
+        DynChunkLatentVarConfig::new(
+          ChunkLatentVarConfig::create(chunk_latent_var_meta.ans_size_log, bins, var_delta_encoding)?
+        ).unwrap()
+      }
+    );
+
+    configs.set(key, config);
+  }
+  Ok(configs.into())
+}
+
+fn make_latent_decompressors<'a>(
+  latent_var_configs: &'a PerLatentVar<DynChunkLatentVarConfig>,
   page_meta: &PageMeta,
   n: usize,
-) -> PcoResult<PerLatentVar<DynPageLatentDecompressor>> {
+) -> PcoResult<PerLatentVar<DynPageLatentDecompressor<'a>>> {
   let mut states = PerLatentVarBuilder::default();
-  for (key, (chunk_latent_var_meta, page_latent_var_meta)) in chunk_meta
-    .per_latent_var
+  for (key, (latent_var_config, page_latent_var_meta)) in latent_var_configs
     .as_ref()
     .zip_exact(page_meta.per_latent_var.as_ref())
     .enumerated()
   {
-    let var_delta_encoding = chunk_meta.delta_encoding.for_latent_var(key);
-    let n_in_body = n.saturating_sub(var_delta_encoding.n_latents_per_state());
     let state = match_latent_enum!(
-      &chunk_latent_var_meta.bins,
-      DynBins<L>(bins) => {
+      latent_var_config,
+      DynChunkLatentVarConfig<L>(config) => {
+        let n_in_body = n.saturating_sub(config.delta_encoding.n_latents_per_state());
         let delta_state = page_latent_var_meta
           .delta_state
           .downcast_ref::<L>()
           .unwrap()
           .clone();
 
-        if bins.is_empty() && n_in_body > 0 {
+        if config.n_bins == 0 && n_in_body > 0 {
           return Err(PcoError::corruption(format!(
-            "unable to decompress chunk with no bins and {} latents",
+            "unable to decompress page with no bins and {} latents",
             n_in_body
           )));
         }
 
         DynPageLatentDecompressor::create(
-          chunk_latent_var_meta.ans_size_log,
-          bins,
-          var_delta_encoding,
+          config,
           page_latent_var_meta.ans_final_state_idxs,
           delta_state,
         )?
@@ -111,8 +130,13 @@ fn make_latent_decompressors(
   Ok(states.into())
 }
 
-impl<R: BetterBufRead> PageDecompressorInner<R> {
-  pub(crate) fn new(mut src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
+impl<'a, R: BetterBufRead> PageDecompressorInner<'a, R> {
+  pub(crate) fn new(
+    mut src: R,
+    chunk_meta: &ChunkMeta,
+    latent_var_configs: &'a PerLatentVar<DynChunkLatentVarConfig>,
+    n: usize,
+  ) -> PcoResult<Self> {
     bit_reader::ensure_buf_read_capacity(&mut src, PERFORMANT_BUF_READ_CAPACITY);
     let mut reader_builder = BitReaderBuilder::new(src, PAGE_PADDING, 0);
 
@@ -120,7 +144,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
     let mode = chunk_meta.mode.clone();
-    let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
+    let latent_decompressors = make_latent_decompressors(latent_var_configs, &page_meta, n)?;
 
     let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
     let secondary_scratch = make_latent_scratch(latent_decompressors.secondary.as_ref());
@@ -143,11 +167,16 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
   }
 }
 
-impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
+impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   #[inline(never)]
-  pub(crate) fn new(src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
+  pub(crate) fn new(
+    src: R,
+    chunk_meta: &ChunkMeta,
+    latent_var_configs: &'a PerLatentVar<DynChunkLatentVarConfig>,
+    n: usize,
+  ) -> PcoResult<Self> {
     Ok(Self {
-      inner: PageDecompressorInner::new(src, chunk_meta, n)?,
+      inner: PageDecompressorInner::new(src, chunk_meta, latent_var_configs, n)?,
       phantom: PhantomData::<T>,
     })
   }
