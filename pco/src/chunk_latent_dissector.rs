@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use crate::ans::{AnsState, Symbol};
-use crate::compression_intermediates::DissectedPageVar;
+use crate::compression_intermediates::PageDissectedVar;
 use crate::compression_table::CompressionTable;
 use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
@@ -23,11 +23,7 @@ impl<'a, L: Latent> ChunkLatentDissector<'a, L> {
     // a shortcut when there's only one bin.
     // For symbol scratch we initialize to zeros, which also happens to be
     // correct when there's only one bin.
-    let default_lower = table
-      .infos
-      .first()
-      .map(|info| info.lower)
-      .unwrap_or(L::ZERO);
+    let default_lower = table.only_bin().map(|info| info.lower).unwrap_or(L::ZERO);
     Self {
       table,
       encoder,
@@ -37,40 +33,13 @@ impl<'a, L: Latent> ChunkLatentDissector<'a, L> {
   }
 
   #[inline(never)]
-  fn binary_search(&self, latents: &[L]) -> [usize; FULL_BATCH_N] {
-    let mut search_idxs = [0; FULL_BATCH_N];
-
-    // we do this as `size_log` SIMD loops over the batch
-    for depth in 0..self.table.search_size_log {
-      let bisection_idx = 1 << (self.table.search_size_log - 1 - depth);
-      for (&latent, search_idx) in latents.iter().zip(search_idxs.iter_mut()) {
-        let candidate_idx = *search_idx + bisection_idx;
-        let value = unsafe { *self.table.search_lowers.get_unchecked(candidate_idx) };
-        *search_idx += ((latent >= value) as usize) * bisection_idx;
-      }
-    }
-
-    let n_bins = self.table.infos.len();
-    if n_bins < 1 << self.table.search_size_log {
-      // We worked with a balanced binary tree with missing leaves filled, so it
-      // might have overshot some bin indices.
-      search_idxs
-        .iter_mut()
-        .for_each(|search_idx| *search_idx = min(*search_idx, n_bins - 1));
-    }
-
-    search_idxs
-  }
-
-  #[inline(never)]
   fn dissect_bins(&mut self, search_idxs: &[usize], dst_offset_bits: &mut [Bitlen]) {
     if self.table.is_trivial() {
       // trivial case: there's at most one bin. We've prepopulated the scratch
       // buffers with the correct values in this case.
       let default_offset_bits = self
         .table
-        .infos
-        .first()
+        .only_bin()
         .map(|info| info.offset_bits)
         .unwrap_or(0);
       dst_offset_bits.fill(default_offset_bits);
@@ -141,9 +110,9 @@ impl<'a, L: Latent> ChunkLatentDissector<'a, L> {
     &mut self,
     latents: &[L],
     base_i: usize,
-    dst: &mut DissectedPageVar,
+    dst: &mut PageDissectedVar,
   ) {
-    let DissectedPageVar {
+    let PageDissectedVar {
       ans_vals,
       ans_bits,
       offsets,
@@ -151,7 +120,7 @@ impl<'a, L: Latent> ChunkLatentDissector<'a, L> {
       ans_final_states,
     } = dst;
 
-    let search_idxs = self.binary_search(latents);
+    let search_idxs = self.table.binary_search(latents);
 
     let end_i = min(base_i + FULL_BATCH_N, ans_vals.len());
 
