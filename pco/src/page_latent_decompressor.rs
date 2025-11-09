@@ -366,7 +366,7 @@ impl DynPageLatentDecompressor {
         None
       };
 
-    let lpd = PageLatentDecompressor {
+    let pld = PageLatentDecompressor {
       bytes_per_offset,
       state_lowers,
       needs_ans,
@@ -375,6 +375,6 @@ impl DynPageLatentDecompressor {
       maybe_constant_value,
       state,
     };
-    Ok(Self::new(Box::new(lpd)).unwrap())
+    Ok(Self::new(Box::new(pld)).unwrap())
   }
 }

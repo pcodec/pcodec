@@ -26,7 +26,7 @@ impl PageInfo {
 }
 
 #[derive(Clone, Debug)]
-pub struct DissectedPageVar {
+pub struct PageDissectedVar {
   // These vecs should have the same length.
   pub ans_vals: Vec<AnsState>,
   pub ans_bits: Vec<Bitlen>,
@@ -39,7 +39,7 @@ pub struct DissectedPageVar {
 #[derive(Clone, Debug)]
 pub struct DissectedPage {
   pub page_n: usize,
-  pub per_latent_var: PerLatentVar<DissectedPageVar>,
+  pub per_latent_var: PerLatentVar<PageDissectedVar>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

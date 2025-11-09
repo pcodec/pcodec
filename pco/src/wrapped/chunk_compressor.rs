@@ -678,7 +678,7 @@ impl ChunkCompressor {
         batch_start + FULL_BATCH_N,
         dissected_page.page_n,
       );
-      for (_, (dissected_page_var, clc)) in dissected_page
+      for (_, (page_dissected_var, clc)) in dissected_page
         .per_latent_var
         .as_ref()
         .zip_exact(self.chunk_latent_compressors.as_ref())
@@ -687,7 +687,7 @@ impl ChunkCompressor {
         match_latent_enum!(
           clc,
           DynChunkLatentCompressor<L>(inner) => {
-            inner.write_dissected_batch(dissected_page_var, batch_start, writer)?;
+            inner.write_dissected_batch(page_dissected_var, batch_start, writer)?;
           }
         );
       }
