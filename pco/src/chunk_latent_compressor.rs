@@ -1,9 +1,9 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_latent_dissector::ChunkLatentDissector;
 use crate::compression_intermediates::BinCompressionInfo;
-use crate::compression_intermediates::DissectedPageVar;
+use crate::compression_intermediates::PageDissectedVar;
 use crate::compression_table::CompressionTable;
-use crate::constants::{Bitlen, Weight, ANS_INTERLEAVING, PAGE_PADDING};
+use crate::constants::{Bitlen, Weight, PAGE_PADDING};
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
@@ -63,14 +63,6 @@ unsafe fn write_uints<U: ReadWriteUint, const MAX_U64S: usize>(
   (stale_byte_idx, bits_past_byte)
 }
 
-fn uninit_vec<T>(n: usize) -> Vec<T> {
-  unsafe {
-    let mut res = Vec::with_capacity(n);
-    res.set_len(n);
-    res
-  }
-}
-
 #[derive(Default)]
 pub(crate) struct TrainedBins<L: Latent> {
   pub infos: Vec<BinCompressionInfo<L>>,
@@ -83,7 +75,7 @@ pub struct ChunkLatentCompressor<L: Latent> {
   table: CompressionTable<L>,
   pub encoder: ans::Encoder,
   pub avg_bits_per_latent: f64,
-  is_trivial: bool,
+  is_trivial: bool, // if the page body will always be empty
   needs_ans: bool,
   max_u64s_per_offset: usize,
   latents: Vec<L>,
@@ -112,50 +104,26 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     })
   }
 
-  pub fn dissect_page(&self, page_range: Range<usize>) -> DissectedPageVar {
-    let uninit_dissected_page_var = |n, ans_default_state| {
-      let ans_final_states = [ans_default_state; ANS_INTERLEAVING];
-      DissectedPageVar {
-        ans_vals: uninit_vec(n),
-        ans_bits: uninit_vec(n),
-        offsets: DynLatents::new(uninit_vec::<L>(n)).unwrap(),
-        offset_bits: uninit_vec(n),
-        ans_final_states,
-      }
-    };
-
+  pub fn dissect_page(&self, page_range: Range<usize>) -> PageDissectedVar {
+    let cld = ChunkLatentDissector::new(&self.table, &self.encoder);
     if self.is_trivial {
-      return uninit_dissected_page_var(0, self.encoder.default_state());
+      // safe because length of uninit elements is 0
+      unsafe { cld.uninit_page_dissected_var(0) }
+    } else {
+      cld.dissect_page(&self.latents[page_range])
     }
-
-    let mut dissected_page_var = uninit_dissected_page_var(
-      page_range.len(),
-      self.encoder.default_state(),
-    );
-
-    // we go through in reverse for ANS!
-    let mut cld = ChunkLatentDissector::new(&self.table, &self.encoder);
-    for (batch_idx, batch) in self.latents[page_range]
-      .chunks(FULL_BATCH_N)
-      .enumerate()
-      .rev()
-    {
-      let base_i = batch_idx * FULL_BATCH_N;
-      cld.dissect_batch_latents(batch, base_i, &mut dissected_page_var)
-    }
-    dissected_page_var
   }
 
   pub fn write_dissected_batch<W: Write>(
     &self,
-    dissected_page_var: &DissectedPageVar,
+    page_dissected_var: &PageDissectedVar,
     batch_start: usize,
     writer: &mut BitWriter<W>,
   ) -> PcoResult<()> {
     assert!(writer.buf.len() >= PAGE_PADDING);
     writer.flush()?;
 
-    if batch_start >= dissected_page_var.offsets.len() {
+    if batch_start >= page_dissected_var.offsets.len() {
       return Ok(());
     }
 
@@ -163,8 +131,8 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     if self.needs_ans {
       (writer.stale_byte_idx, writer.bits_past_byte) = unsafe {
         write_short_uints(
-          &dissected_page_var.ans_vals[batch_start..],
-          &dissected_page_var.ans_bits[batch_start..],
+          &page_dissected_var.ans_vals[batch_start..],
+          &page_dissected_var.ans_bits[batch_start..],
           writer.stale_byte_idx,
           writer.bits_past_byte,
           &mut writer.buf,
@@ -175,27 +143,27 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     // write offsets
     (writer.stale_byte_idx, writer.bits_past_byte) = unsafe {
       match_latent_enum!(
-        &dissected_page_var.offsets,
+        &page_dissected_var.offsets,
         DynLatents<L>(offsets) => {
           match self.max_u64s_per_offset {
             0 => (writer.stale_byte_idx, writer.bits_past_byte),
             1 => write_short_uints::<L>(
               &offsets[batch_start..],
-              &dissected_page_var.offset_bits[batch_start..],
+              &page_dissected_var.offset_bits[batch_start..],
               writer.stale_byte_idx,
               writer.bits_past_byte,
               &mut writer.buf,
             ),
             2 => write_uints::<L, 2>(
               &offsets[batch_start..],
-              &dissected_page_var.offset_bits[batch_start..],
+              &page_dissected_var.offset_bits[batch_start..],
               writer.stale_byte_idx,
               writer.bits_past_byte,
               &mut writer.buf,
             ),
             3 => write_uints::<L, 3>(
               &offsets[batch_start..],
-              &dissected_page_var.offset_bits[batch_start..],
+              &page_dissected_var.offset_bits[batch_start..],
               writer.stale_byte_idx,
               writer.bits_past_byte,
               &mut writer.buf,

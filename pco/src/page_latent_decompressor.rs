@@ -425,10 +425,10 @@ impl<'a> DynPageLatentDecompressor<'a> {
         .for_each(|(i, csum)| *csum = i as u32 * offset_bits);
     }
 
-    let lpd = PageLatentDecompressor {
+    let pld = PageLatentDecompressor {
       config: &config,
       state,
     };
-    Ok(Self::new(Box::new(lpd)).unwrap())
+    Ok(Self::new(Box::new(pld)).unwrap())
   }
 }
