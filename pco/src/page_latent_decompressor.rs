@@ -33,7 +33,6 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
 
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
-  // scratch needs no backup
   offset_bits_csum_scratch: ScratchArray<Bitlen>,
   offset_bits_scratch: ScratchArray<Bitlen>,
   lowers_scratch: ScratchArray<L>,
@@ -425,10 +424,7 @@ impl<'a> DynPageLatentDecompressor<'a> {
         .for_each(|(i, csum)| *csum = i as u32 * offset_bits);
     }
 
-    let pld = PageLatentDecompressor {
-      config: &config,
-      state,
-    };
+    let pld = PageLatentDecompressor { config, state };
     Ok(Self::new(Box::new(pld)).unwrap())
   }
 }
