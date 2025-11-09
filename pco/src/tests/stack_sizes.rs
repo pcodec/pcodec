@@ -13,7 +13,7 @@ fn test_stack_sizes() {
   // compression
   assert_eq!(
     mem::size_of::<ChunkLatentDissector<u64>>(),
-    3088
+    24
   );
   assert_eq!(
     mem::size_of::<ChunkLatentCompressor<u64>>(),
