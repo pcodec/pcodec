@@ -1,5 +1,4 @@
 use crate::chunk_latent_compressor::ChunkLatentCompressor;
-use crate::chunk_latent_dissector::ChunkLatentDissector;
 use crate::metadata::PerLatentVar;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::wrapped::{ChunkCompressor, ChunkDecompressor, PageDecompressor};
@@ -10,14 +9,9 @@ fn test_stack_sizes() {
   // Some of our structs get pretty large on the stack, so it's good to be
   // aware of that. Hopefully we can minimize this in the future.
 
-  // compression
-  assert_eq!(
-    mem::size_of::<ChunkLatentDissector<u64>>(),
-    24
-  );
   assert_eq!(
     mem::size_of::<ChunkLatentCompressor<u64>>(),
-    136
+    144
   );
   assert_eq!(mem::size_of::<ChunkDecompressor<u64>>(), 168);
   assert_eq!(mem::size_of::<ChunkCompressor>(), 624);

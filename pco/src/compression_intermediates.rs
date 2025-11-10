@@ -66,7 +66,7 @@ impl<L: Latent> Default for BinCompressionInfo<L> {
 }
 
 #[allow(clippy::type_complexity)]
-pub(crate) struct Bid<T: Number> {
+pub struct Bid<T: Number> {
   pub mode: Mode,
   pub bits_saved_per_num: f64,
   // we include a split_fn since modes like FloatMult can benefit from extra
@@ -74,4 +74,11 @@ pub(crate) struct Bid<T: Number> {
   // information is an implementation detail of the compressor, not part of the
   // format itself, and is not / does not need to be known to the decompressor.
   pub split_fn: Box<dyn FnOnce(&[T]) -> SplitLatents>,
+}
+
+#[derive(Default)]
+pub struct TrainedBins<L: Latent> {
+  pub infos: Vec<BinCompressionInfo<L>>,
+  pub ans_size_log: Bitlen,
+  pub counts: Vec<Weight>,
 }
