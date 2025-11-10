@@ -724,7 +724,8 @@ impl ChunkCompressor {
 
   /// Writes a page to the destination, using pre-allocated scratch space.
   ///
-  /// Will return an error if the provided `Write` errors.
+  /// Will return an error if the provided `Write` errors or the scratch comes
+  /// from an incompatible chunk.
   pub fn write_page_with_scratch<W: Write>(
     &self,
     page_idx: usize,
