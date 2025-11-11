@@ -43,8 +43,9 @@ fn test_wrapped_compress<W: Write>(chunks: &[Chunk], dst: W) -> PcoResult<W> {
   for chunk in chunks {
     let cc = fc.chunk_compressor(&chunk.nums, &chunk.config)?;
     dst = cc.write_chunk_meta(dst)?;
+    let mut scratch = cc.build_scratch();
     for page_idx in 0..cc.n_per_page().len() {
-      dst = cc.write_page(page_idx, dst)?;
+      dst = cc.write_page_with_scratch(page_idx, &mut scratch, dst)?;
     }
   }
 

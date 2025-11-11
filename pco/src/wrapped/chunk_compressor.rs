@@ -1,9 +1,9 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
 use crate::chunk_latent_compressor::{
-  ChunkLatentCompressor, DynChunkLatentCompressor, TrainedBins,
+  ChunkLatentCompressor, DynChunkLatentCompressor, DynChunkLatentCompressorScratch,
 };
-use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar};
+use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
   Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_COMPRESSION_LEVEL, MAX_DELTA_ENCODING_ORDER,
@@ -123,6 +123,13 @@ pub struct ChunkCompressor {
   meta: ChunkMeta,
   chunk_latent_compressors: PerLatentVar<DynChunkLatentCompressor>,
   page_infos: Vec<PageInfo>,
+}
+
+/// Scratch buffers used by `ChunkCompressor` during compression.
+/// Not Send or Sync, but can be reused across pages within a single chunk to
+/// reduce allocations.
+pub struct ChunkCompressorScratch {
+  per_var: PerLatentVar<DynChunkLatentCompressorScratch>,
 }
 
 fn bins_from_compression_infos<L: Latent>(infos: &[BinCompressionInfo<L>]) -> Vec<Bin<L>> {
@@ -613,7 +620,11 @@ impl ChunkCompressor {
     Ok(writer.into_inner())
   }
 
-  fn dissect_page(&self, page_idx: usize) -> PcoResult<DissectedPage> {
+  fn dissect_page(
+    &self,
+    page_idx: usize,
+    scratch: &mut ChunkCompressorScratch,
+  ) -> PcoResult<DissectedPage> {
     let Self {
       chunk_latent_compressors,
       page_infos,
@@ -622,15 +633,18 @@ impl ChunkCompressor {
 
     let page_info = &page_infos[page_idx];
 
-    let per_latent_var = chunk_latent_compressors.as_ref().map(|key, clc| {
-      let range = page_info.range_for_latent_var(key);
-      match_latent_enum!(
-        clc,
-        DynChunkLatentCompressor<L>(inner) => {
-          inner.dissect_page(range)
-        }
-      )
-    });
+    let per_latent_var = chunk_latent_compressors
+      .as_ref()
+      .zip_exact(scratch.per_var.as_mut())
+      .map(|key, (clc, latent_scratch)| {
+        let range = page_info.range_for_latent_var(key);
+        match_latent_enum!(
+          clc,
+          DynChunkLatentCompressor<L>(inner) => {
+            inner.dissect_page(range, latent_scratch.downcast_mut::<L>().unwrap())
+          }
+        )
+      });
 
     Ok(DissectedPage {
       page_n: page_info.page_n,
@@ -696,10 +710,28 @@ impl ChunkCompressor {
     Ok(())
   }
 
-  /// Writes a page to the destination.
+  pub fn build_scratch(&self) -> ChunkCompressorScratch {
+    let per_var = self.chunk_latent_compressors.as_ref().map(|_, clc| {
+      match_latent_enum!(
+        clc,
+        DynChunkLatentCompressor<L>(inner) => {
+          DynChunkLatentCompressorScratch::new(inner.build_scratch()).unwrap()
+        }
+      )
+    });
+    ChunkCompressorScratch { per_var }
+  }
+
+  /// Writes a page to the destination, using pre-allocated scratch space.
   ///
-  /// Will return an error if the provided `Write` errors.
-  pub fn write_page<W: Write>(&self, page_idx: usize, dst: W) -> PcoResult<W> {
+  /// Will return an error if the provided `Write` errors or the scratch comes
+  /// from an incompatible chunk.
+  pub fn write_page_with_scratch<W: Write>(
+    &self,
+    page_idx: usize,
+    scratch: &mut ChunkCompressorScratch,
+    dst: W,
+  ) -> PcoResult<W> {
     let n_pages = self.page_infos.len();
     if page_idx >= n_pages {
       return Err(PcoError::invalid_argument(format!(
@@ -710,7 +742,7 @@ impl ChunkCompressor {
 
     let mut writer = BitWriter::new(dst, PAGE_PADDING);
 
-    let dissected_page = self.dissect_page(page_idx)?;
+    let dissected_page = self.dissect_page(page_idx, scratch)?;
     let page_info = &self.page_infos[page_idx];
 
     let ans_default_state_and_size_log = self.chunk_latent_compressors.as_ref().map(|_, clc| {
@@ -745,6 +777,14 @@ impl ChunkCompressor {
     writer.finish_byte();
     writer.flush()?;
     Ok(writer.into_inner())
+  }
+
+  /// Writes a page to the destination.
+  ///
+  /// Will return an error if the provided `Write` errors.
+  pub fn write_page<W: Write>(&self, page_idx: usize, dst: W) -> PcoResult<W> {
+    let scratch = self.build_scratch();
+    self.write_page_with_scratch(page_idx, &mut scratch.into(), dst)
   }
 }
 
