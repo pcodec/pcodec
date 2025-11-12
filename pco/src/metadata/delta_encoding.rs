@@ -49,7 +49,7 @@ impl DeltaLookbackConfig {
 /// greatly reducing the entropy of the data distribution in some cases.
 /// This stage of processing happens after applying the
 /// [`Mode`][crate::metadata::Mode] during compression.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DeltaEncoding {
   /// No delta encoding; the values are encoded as-is.
@@ -187,9 +187,9 @@ impl DeltaEncoding {
     }
   }
 
-  pub(crate) fn for_latent_var(self, key: LatentVarKey) -> DeltaEncoding {
+  pub(crate) fn for_latent_var(&self, key: LatentVarKey) -> DeltaEncoding {
     if self.applies_to_latent_var(key) {
-      self
+      self.clone()
     } else {
       None
     }

@@ -298,7 +298,7 @@ pub fn decode_with_lookbacks_in_place<L: Latent>(
 }
 
 pub fn compute_delta_latent_var(
-  delta_encoding: DeltaEncoding,
+  delta_encoding: &DeltaEncoding,
   primary_latents: &mut DynLatents,
   range: Range<usize>,
 ) -> Option<DynLatents> {
@@ -309,7 +309,7 @@ pub fn compute_delta_latent_var(
         primary_latents,
         DynLatents<L>(inner) => {
           let latents = &mut inner[range];
-          DynLatents::new(choose_lookbacks(config, latents)).unwrap()
+          DynLatents::new(choose_lookbacks(*config, latents)).unwrap()
         }
       );
       Some(res)
@@ -318,7 +318,7 @@ pub fn compute_delta_latent_var(
 }
 
 pub fn encode_in_place(
-  delta_encoding: DeltaEncoding,
+  delta_encoding: &DeltaEncoding,
   delta_latents: Option<&DynLatents>,
   range: Range<usize>,
   latents: &mut DynLatents,
@@ -333,7 +333,7 @@ pub fn encode_in_place(
         }
         DeltaEncoding::Lookback(config) => {
           let lookbacks = delta_latents.unwrap().downcast_ref::<DeltaLookback>().unwrap();
-          encode_with_lookbacks_in_place(config, lookbacks, &mut inner[range])
+          encode_with_lookbacks_in_place(*config, lookbacks, &mut inner[range])
         }
       };
       DynLatents::new(delta_state).unwrap()

@@ -45,7 +45,7 @@ impl ChunkMeta {
       .as_ref()
       .map(|key, var_meta| {
         let delta_encoding = self.delta_encoding.for_latent_var(key);
-        var_meta.exact_page_meta_bit_size(delta_encoding)
+        var_meta.exact_page_meta_bit_size(&delta_encoding)
       })
       .sum();
     bit_size.div_ceil(8)
@@ -53,7 +53,7 @@ impl ChunkMeta {
 
   pub(crate) fn validate_delta_encoding(&self) -> PcoResult<()> {
     let delta_latent_var = &self.per_latent_var.delta;
-    match (self.delta_encoding, delta_latent_var) {
+    match (&self.delta_encoding, delta_latent_var) {
       (DeltaEncoding::Lookback(config), Some(latent_var)) => {
         let window_n = config.window_n() as DeltaLookback;
         let bins = latent_var.bins.downcast_ref::<DeltaLookback>().unwrap();

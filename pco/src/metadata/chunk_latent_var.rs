@@ -166,7 +166,7 @@ impl ChunkLatentVarMeta {
     BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + total_bin_size
   }
 
-  pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: DeltaEncoding) -> usize {
+  pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: &DeltaEncoding) -> usize {
     let bits_per_latent = match_latent_enum!(
       &self.bins,
       DynBins<L>(_bins) => { L::BITS }
