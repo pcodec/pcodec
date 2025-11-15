@@ -18,11 +18,6 @@ use crate::progress::Progress;
 
 const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
 
-#[derive(Debug)]
-struct LatentScratch {
-  is_constant: bool,
-}
-
 struct PageDecompressorInner<R: BetterBufRead> {
   // immutable
   n: usize,
@@ -33,28 +28,12 @@ struct PageDecompressorInner<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
   n_processed: usize,
   latent_decompressors: PerLatentVar<DynPageLatentDecompressor>,
-  delta_scratch: Option<LatentScratch>,
-  secondary_scratch: Option<LatentScratch>,
 }
 
 /// Holds metadata about a page and supports decompression.
 pub struct PageDecompressor<T: Number, R: BetterBufRead> {
   inner: PageDecompressorInner<R>,
   phantom: PhantomData<T>,
-}
-
-fn make_latent_scratch(pld: Option<&DynPageLatentDecompressor>) -> Option<LatentScratch> {
-  let pld = pld?;
-
-  match_latent_enum!(
-    pld,
-    DynPageLatentDecompressor<L>(inner) => {
-      let maybe_constant_value = inner.maybe_constant_value;
-      Some(LatentScratch {
-        is_constant: maybe_constant_value.is_some(),
-      })
-    }
-  )
 }
 
 fn make_latent_decompressors(
@@ -113,9 +92,6 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     let mode = chunk_meta.mode;
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
 
-    let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
-    let secondary_scratch = make_latent_scratch(latent_decompressors.secondary.as_ref());
-
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
       n,
@@ -124,8 +100,6 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder,
       n_processed: 0,
       latent_decompressors,
-      delta_scratch,
-      secondary_scratch,
     })
   }
 
@@ -151,8 +125,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     let mode = inner.mode;
 
     // DELTA LATENTS
-    if let Some(LatentScratch { is_constant: false }) = &mut inner.delta_scratch {
-      let dyn_pld = inner.latent_decompressors.delta.as_mut().unwrap();
+    if let Some(dyn_pld) = inner.latent_decompressors.delta.as_mut() {
       let limit = min(
         n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
         batch_n,
@@ -200,8 +173,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       None => None,
     };
     // SECONDARY LATENTS
-    if let Some(LatentScratch { is_constant: false }) = &mut inner.secondary_scratch {
-      let dyn_pld = inner.latent_decompressors.secondary.as_mut().unwrap();
+    if let Some(dyn_pld) = &mut inner.latent_decompressors.secondary {
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,

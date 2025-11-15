@@ -37,7 +37,7 @@ struct State<L: Latent> {
   // scratch needs no backup
   offset_bits_csum_scratch: ScratchArray<Bitlen>,
   offset_bits_scratch: ScratchArray<Bitlen>,
-  lowers_scratch: ScratchArray<L>,
+  latents: ScratchArray<L>,
 
   ans_state_idxs: [AnsState; ANS_INTERLEAVING],
   delta_state: Vec<L>,
@@ -50,7 +50,7 @@ impl<L: Latent> State<L> {
     unsafe {
       *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
       *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
-      *self.lowers_scratch.get_unchecked_mut(i) = lower;
+      *self.latents.get_unchecked_mut(i) = lower;
     };
   }
 }
@@ -61,9 +61,9 @@ pub struct PageLatentDecompressor<L: Latent> {
   bytes_per_offset: usize,
   state_lowers: Vec<L>,
   needs_ans: bool,
+  is_constant: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
-  pub maybe_constant_value: Option<L>,
 
   // mutable state
   state: State<L>,
@@ -167,7 +167,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       state
         .offset_bits_csum_scratch
         .iter()
-        .zip(state.lowers_scratch.iter_mut()),
+        .zip(state.latents.iter_mut()),
     ) {
       let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
       let byte_idx = bit_idx / 8;
@@ -191,7 +191,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
   pub unsafe fn decompress_batch_pre_delta(&mut self, reader: &mut BitReader, batch_n: usize) {
-    if batch_n == 0 {
+    if batch_n == 0 || self.is_constant {
       return;
     }
 
@@ -204,7 +204,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.decompress_ans_symbols(reader, batch_n);
       }
     } else {
-      self.state.lowers_scratch[..batch_n].fill(self.state_lowers[0]);
+      self.state.latents[..batch_n].fill(self.state_lowers[0]);
     }
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -245,7 +245,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
     let pre_delta_len = limit.min(n_remaining_pre_delta);
     self.decompress_batch_pre_delta(reader, pre_delta_len);
-    let dst = &mut self.state.lowers_scratch[..limit];
+    let dst = &mut self.state.latents[..limit];
 
     match self.delta_encoding {
       DeltaEncoding::None => Ok(()),
@@ -316,7 +316,7 @@ impl DynPageLatentDecompressor {
     let mut state = State {
       offset_bits_csum_scratch: ScratchArray([0; FULL_BATCH_N]),
       offset_bits_scratch: ScratchArray([0; FULL_BATCH_N]),
-      lowers_scratch: ScratchArray([L::ZERO; FULL_BATCH_N]),
+      latents: ScratchArray([L::ZERO; FULL_BATCH_N]),
       ans_state_idxs: ans_final_state_idxs,
       delta_state: working_delta_state,
       delta_state_pos,
@@ -330,25 +330,20 @@ impl DynPageLatentDecompressor {
       for i in 0..FULL_BATCH_N {
         state.offset_bits_scratch[i] = bin.offset_bits;
         state.offset_bits_csum_scratch[i] = csum;
-        state.lowers_scratch[i] = bin.lower;
+        state.latents[i] = bin.lower;
         csum += bin.offset_bits;
       }
     }
 
-    let maybe_constant_value =
-      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
-        bins.first().map(|bin| bin.lower)
-      } else {
-        None
-      };
+    let is_constant = bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None);
 
     let pld = PageLatentDecompressor {
       bytes_per_offset,
       state_lowers,
       needs_ans,
+      is_constant,
       decoder,
       delta_encoding,
-      maybe_constant_value,
       state,
     };
     Ok(Self::new(Box::new(pld)).unwrap())
@@ -356,9 +351,9 @@ impl DynPageLatentDecompressor {
 
   pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
     match self {
-      Self::U16(inner) => DynLatentSlice::U16(&mut *inner.state.lowers_scratch),
-      Self::U32(inner) => DynLatentSlice::U32(&mut *inner.state.lowers_scratch),
-      Self::U64(inner) => DynLatentSlice::U64(&mut *inner.state.lowers_scratch),
+      Self::U16(inner) => DynLatentSlice::U16(&mut *inner.state.latents),
+      Self::U32(inner) => DynLatentSlice::U32(&mut *inner.state.latents),
+      Self::U64(inner) => DynLatentSlice::U64(&mut *inner.state.latents),
     }
   }
 }
