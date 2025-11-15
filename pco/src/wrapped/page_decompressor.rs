@@ -146,13 +146,10 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         Ok(())
       })?;
     }
+    let delta_lpd = &mut inner.latent_decompressors.delta;
 
     // PRIMARY LATENTS
-    let delta_latents = inner
-      .latent_decompressors
-      .delta
-      .as_mut()
-      .map(|pld| pld.latents());
+    let delta_latents = delta_lpd.as_mut().map(|pld| pld.latents());
     inner.reader_builder.with_reader(|reader| unsafe {
       let dyn_pld = inner
         .latent_decompressors
@@ -163,11 +160,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     })?;
 
     // SECONDARY LATENTS
-    let delta_latents = inner
-      .latent_decompressors
-      .delta
-      .as_mut()
-      .map(|pld| pld.latents());
+    let delta_latents = delta_lpd.as_mut().map(|pld| pld.latents());
     if let Some(dyn_pld) = &mut inner.latent_decompressors.secondary {
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(

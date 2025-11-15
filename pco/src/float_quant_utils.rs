@@ -150,8 +150,6 @@ pub(crate) fn estimate_best_k_and_bits_saved<F: Float>(sample: &[F]) -> (Bitlen,
 
 #[cfg(test)]
 mod test {
-  use crate::data_types::Number;
-
   use super::*;
 
   #[test]
