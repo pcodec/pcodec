@@ -783,8 +783,8 @@ impl ChunkCompressor {
   ///
   /// Will return an error if the provided `Write` errors.
   pub fn write_page<W: Write>(&self, page_idx: usize, dst: W) -> PcoResult<W> {
-    let scratch = self.build_scratch();
-    self.write_page_with_scratch(page_idx, &mut scratch.into(), dst)
+    let mut scratch = self.build_scratch();
+    self.write_page_with_scratch(page_idx, &mut scratch, dst)
   }
 }
 

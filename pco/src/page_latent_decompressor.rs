@@ -3,13 +3,12 @@ use std::ops::{Deref, DerefMut};
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
-use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
+use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
-use crate::macros::match_latent_enum;
-use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
+use crate::metadata::{bins, Bin, DeltaEncoding};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can

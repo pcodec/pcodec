@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use better_io::BetterBufRead;
@@ -12,7 +11,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
 
@@ -147,10 +146,11 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         Ok(())
       })?;
     }
-    let delta_latents = match &mut inner.latent_decompressors.delta {
-      Some(pld) => Some(pld.latents()),
-      None => None,
-    };
+    let delta_latents = inner
+      .latent_decompressors
+      .delta
+      .as_mut()
+      .map(|pld| pld.latents());
 
     // PRIMARY LATENTS
     inner.reader_builder.with_reader(|reader| unsafe {
@@ -168,10 +168,11 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       )
     })?;
 
-    let delta_latents = match &mut inner.latent_decompressors.delta {
-      Some(pld) => Some(pld.latents()),
-      None => None,
-    };
+    let delta_latents = inner
+      .latent_decompressors
+      .delta
+      .as_mut()
+      .map(|pld| pld.latents());
     // SECONDARY LATENTS
     if let Some(dyn_pld) = &mut inner.latent_decompressors.secondary {
       inner.reader_builder.with_reader(|reader| unsafe {
@@ -192,10 +193,11 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     }
 
     let primary = inner.latent_decompressors.primary.latents();
-    let secondary = match &mut inner.latent_decompressors.secondary {
-      Some(pld) => Some(pld.latents()),
-      None => None,
-    };
+    let secondary = inner
+      .latent_decompressors
+      .secondary
+      .as_mut()
+      .map(|pld| pld.latents());
     T::join_latents(mode, primary, secondary, dst);
 
     inner.n_processed += batch_n;
