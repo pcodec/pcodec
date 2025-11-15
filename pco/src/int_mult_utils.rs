@@ -6,6 +6,7 @@ use std::mem;
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, Number};
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::metadata::DynLatents;
 use crate::sampling::{self, PrimaryLatentAndSavings};
 
@@ -36,10 +37,16 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
 }
 
 #[inline(never)]
-pub(crate) fn join_latents<L: Latent>(base: L, primary: &mut [L], secondary: Option<&DynLatents>) {
-  let secondary = secondary.unwrap().downcast_ref::<L>().unwrap();
-  for (mult_and_dst, &adj) in primary.iter_mut().zip(secondary.iter()) {
-    *mult_and_dst = (*mult_and_dst * base).wrapping_add(adj);
+pub(crate) fn join_latents<T: Number>(
+  base: T::L,
+  primary: DynLatentSlice,
+  secondary: Option<DynLatentSlice>,
+  dst: &mut [T],
+) {
+  let primary = primary.downcast::<T::L>().unwrap();
+  let secondary = secondary.unwrap().downcast::<T::L>().unwrap();
+  for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
+    *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
   }
 }
 
@@ -261,18 +268,20 @@ mod tests {
     let base = 4_u32;
     let latents = split_latents(&nums, base);
     let mut primary = latents.primary.downcast::<u32>().unwrap();
-    let secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
+    let mut secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
+    let mut dst = vec![0; nums.len()];
     assert_eq!(&primary, &vec![2_u32, 0, 1]);
     assert_eq!(&secondary, &vec![0_u32, 1, 1]);
 
     // JOIN
     join_latents(
       base,
-      &mut primary,
-      DynLatents::new(secondary).as_ref(),
+      DynLatentSlice::U32(&mut primary),
+      Some(DynLatentSlice::U32(&mut secondary)),
+      &mut dst,
     );
 
-    assert_eq!(primary, nums);
+    assert_eq!(dst, nums);
   }
 
   #[test]
