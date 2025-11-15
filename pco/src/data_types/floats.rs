@@ -1,4 +1,3 @@
-
 use half::f16;
 
 use super::ModeAndLatents;
