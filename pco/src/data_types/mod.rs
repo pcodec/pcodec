@@ -107,7 +107,6 @@ pub trait Latent:
   + Rem<Output = Self>
   + RemAssign
   + Send
-  + Sized
   + Sync
   + Shl<Bitlen, Output = Self>
   + Shr<Bitlen, Output = Self>
@@ -193,9 +192,6 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
     secondary: Option<DynLatentSlice>,
     dst: &mut [Self],
   );
-
-  fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L];
-  fn transmute_to_latent(self) -> Self::L;
 }
 
 pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {

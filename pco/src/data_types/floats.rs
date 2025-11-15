@@ -1,4 +1,3 @@
-use std::mem;
 
 use half::f16;
 
@@ -381,15 +380,6 @@ macro_rules! impl_float_number {
           Mode::FloatQuant(k) => float_quant_utils::join_latents(k, primary, secondary, dst),
           _ => unreachable!("impossible mode for floats"),
         }
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        unsafe { mem::transmute(slice) }
-      }
-
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self.to_bits()
       }
     }
   };

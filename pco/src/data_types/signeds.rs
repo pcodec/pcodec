@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::data_types::{join_latents_classic, unsigneds, ModeAndLatents, Number};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
@@ -53,14 +51,6 @@ macro_rules! impl_signed {
           }
           _ => unreachable!("impossible mode for signed ints"),
         }
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        unsafe { mem::transmute(slice) }
-      }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self.cast_unsigned()
       }
     }
   };

@@ -254,7 +254,11 @@ mod test {
       Some(DynLatentSlice::U64(&mut secondary)),
       &mut dst,
     );
-    assert_eq!(dst, nums);
+
+    assert_eq!(dst.len(), nums.len());
+    for (a, b) in dst.iter().zip(&nums) {
+      assert_eq!(a.to_bits(), b.to_bits());
+    }
   }
 
   #[test]

@@ -136,14 +136,6 @@ macro_rules! impl_unsigned_number {
           _ => unreachable!("impossible mode for unsigned ints"),
         }
       }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        slice
-      }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self
-      }
     }
   };
 }

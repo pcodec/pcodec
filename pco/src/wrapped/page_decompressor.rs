@@ -146,34 +146,28 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         Ok(())
       })?;
     }
+
+    // PRIMARY LATENTS
     let delta_latents = inner
       .latent_decompressors
       .delta
       .as_mut()
       .map(|pld| pld.latents());
-
-    // PRIMARY LATENTS
     inner.reader_builder.with_reader(|reader| unsafe {
-      let primary_dst = T::transmute_to_latents(dst);
       let dyn_pld = inner
         .latent_decompressors
         .primary
         .downcast_mut::<T::L>()
         .unwrap();
-      dyn_pld.decompress_batch(
-        delta_latents,
-        n_remaining,
-        reader,
-        primary_dst.len(),
-      )
+      dyn_pld.decompress_batch(delta_latents, n_remaining, reader, batch_n)
     })?;
 
+    // SECONDARY LATENTS
     let delta_latents = inner
       .latent_decompressors
       .delta
       .as_mut()
       .map(|pld| pld.latents());
-    // SECONDARY LATENTS
     if let Some(dyn_pld) = &mut inner.latent_decompressors.secondary {
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
