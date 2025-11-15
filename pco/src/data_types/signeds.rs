@@ -1,7 +1,8 @@
 use std::mem;
 
-use crate::data_types::{unsigneds, ModeAndLatents, Number};
+use crate::data_types::{join_latents_classic, unsigneds, ModeAndLatents, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
@@ -38,12 +39,17 @@ macro_rules! impl_signed {
       fn to_latent_ordered(self) -> Self::L {
         self.wrapping_sub(Self::MIN) as $latent
       }
-      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(
+        mode: Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) {
         match mode {
-          Mode::Classic => (),
+          Mode::Classic => join_latents_classic(primary, dst),
           Mode::IntMult(dyn_latent) => {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary)
+            int_mult_utils::join_latents(base, primary, secondary, dst)
           }
           _ => unreachable!("impossible mode for signed ints"),
         }

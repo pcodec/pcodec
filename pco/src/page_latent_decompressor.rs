@@ -5,8 +5,10 @@ use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
 use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
+use crate::macros::match_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
@@ -156,64 +158,44 @@ impl<L: Latent> PageLatentDecompressor<L> {
   unsafe fn decompress_offsets<const READ_BYTES: usize>(
     &mut self,
     reader: &mut BitReader,
-    dst: &mut [L],
+    n: usize,
   ) {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (dst, (&offset_bits, (&offset_bits_csum, &lower))) in dst.iter_mut().zip(
-      state.offset_bits_scratch.iter().zip(
-        state
-          .offset_bits_csum_scratch
-          .iter()
-          .zip(state.lowers_scratch.iter()),
-      ),
+    for (&offset_bits, (&offset_bits_csum, lower)) in state.offset_bits_scratch.iter().take(n).zip(
+      state
+        .offset_bits_csum_scratch
+        .iter()
+        .zip(state.lowers_scratch.iter_mut()),
     ) {
       let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx % 8;
-      let latent_minus_lower = bit_reader::read_uint_at::<L, READ_BYTES>(
+      let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
         src,
         byte_idx as usize,
         bits_past_byte,
         offset_bits,
       );
 
-      // On aarch64, lowers are added outside this loop for better SIMD; otherwise, add here.
-      *dst = if cfg!(target_arch = "aarch64") {
-        latent_minus_lower
-      } else {
-        latent_minus_lower.wrapping_add(lower)
-      };
+      *lower += offset;
     }
     let final_bit_idx = base_bit_idx
-      + state.offset_bits_csum_scratch[dst.len() - 1] as usize
-      + state.offset_bits_scratch[dst.len() - 1] as usize;
+      + state.offset_bits_csum_scratch[n - 1] as usize
+      + state.offset_bits_scratch[n - 1] as usize;
     reader.stale_byte_idx = final_bit_idx / 8;
     reader.bits_past_byte = final_bit_idx as Bitlen % 8;
-
-    // On aarch64, lower is added outside decompress_offsets loop for better SIMD.
-    if cfg!(target_arch = "aarch64") {
-      self.add_lowers(dst);
-    }
-  }
-
-  #[inline(never)]
-  fn add_lowers(&self, dst: &mut [L]) {
-    for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
-      *dst = dst.wrapping_add(lower);
-    }
   }
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
-  pub unsafe fn decompress_batch_pre_delta(&mut self, reader: &mut BitReader, dst: &mut [L]) {
-    if dst.is_empty() {
+  pub unsafe fn decompress_batch_pre_delta(&mut self, reader: &mut BitReader, batch_n: usize) {
+    if batch_n == 0 {
       return;
     }
 
     if self.needs_ans {
-      let batch_n = dst.len();
       assert!(batch_n <= FULL_BATCH_N);
 
       if batch_n == FULL_BATCH_N {
@@ -221,6 +203,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       } else {
         self.decompress_ans_symbols(reader, batch_n);
       }
+    } else {
+      self.state.lowers_scratch[..batch_n].fill(self.state_lowers[0]);
     }
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -233,16 +217,15 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latents.
     match self.bytes_per_offset {
       // all
-      0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
-
+      0 => (),
       // u16
-      1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, dst),
+      1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, batch_n),
       // u32
-      1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, dst),
-      5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, dst),
+      1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, batch_n),
+      5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, batch_n),
       // u64
-      1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, dst),
-      9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
+      1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, batch_n),
+      9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, batch_n),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
@@ -253,23 +236,16 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   pub unsafe fn decompress_batch(
     &mut self,
-    delta_latents: Option<&DynLatents>,
+    delta_latents: Option<DynLatentSlice>,
     n_remaining_in_page: usize,
     reader: &mut BitReader,
-    dst: &mut [L],
+    limit: usize,
   ) -> PcoResult<()> {
     let n_remaining_pre_delta =
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
-    let pre_delta_len = if dst.len() <= n_remaining_pre_delta {
-      dst.len()
-    } else {
-      // If we're at the end, this won't initialize the last
-      // few elements before delta decoding them, so we do that manually here to
-      // satisfy MIRI. This step isn't really necessary.
-      dst[n_remaining_pre_delta..].fill(L::default());
-      n_remaining_pre_delta
-    };
-    self.decompress_batch_pre_delta(reader, &mut dst[..pre_delta_len]);
+    let pre_delta_len = limit.min(n_remaining_pre_delta);
+    self.decompress_batch_pre_delta(reader, pre_delta_len);
+    let dst = &mut self.state.lowers_scratch[..limit];
 
     match self.delta_encoding {
       DeltaEncoding::None => Ok(()),
@@ -278,12 +254,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
         Ok(())
       }
       DeltaEncoding::Lookback(config) => {
+        let Some(DynLatentSlice::U32(lookbacks)) = delta_latents else {
+          unreachable!()
+        };
         let has_oob_lookbacks = delta::decode_with_lookbacks_in_place(
           config,
-          delta_latents
-            .unwrap()
-            .downcast_ref::<DeltaLookback>()
-            .unwrap(),
+          lookbacks,
           &mut self.state.delta_state_pos,
           &mut self.state.delta_state,
           dst,
@@ -376,5 +352,13 @@ impl DynPageLatentDecompressor {
       state,
     };
     Ok(Self::new(Box::new(pld)).unwrap())
+  }
+
+  pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
+    match self {
+      Self::U16(inner) => DynLatentSlice::U16(&mut *inner.state.lowers_scratch),
+      Self::U32(inner) => DynLatentSlice::U32(&mut *inner.state.lowers_scratch),
+      Self::U64(inner) => DynLatentSlice::U64(&mut *inner.state.lowers_scratch),
+    }
   }
 }
