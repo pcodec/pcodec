@@ -162,7 +162,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (&offset_bits, (&offset_bits_csum, lower)) in state.offset_bits_scratch.iter().take(n).zip(
+    for (&offset_bits, (&offset_bits_csum, latent)) in state.offset_bits_scratch.iter().take(n).zip(
       state
         .offset_bits_csum_scratch
         .iter()
@@ -178,7 +178,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
         offset_bits,
       );
 
-      *lower += offset;
+      *latent += offset;
     }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[n - 1] as usize
@@ -236,8 +236,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
   pub unsafe fn decompress_batch(
     &mut self,
     delta_latents: Option<DynLatentSlice>,
-    n_remaining_in_page: usize,
     reader: &mut BitReader,
+    n_remaining_in_page: usize,
     limit: usize,
   ) -> PcoResult<()> {
     let n_remaining_pre_delta =

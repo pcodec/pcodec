@@ -7,6 +7,7 @@ use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
 use crate::constants::{FULL_BATCH_N, PAGE_PADDING};
 use crate::data_types::Number;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
@@ -107,6 +108,35 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
   }
 }
 
+fn decompress_primary_or_secondary<'a, R: BetterBufRead>(
+  reader_builder: &mut BitReaderBuilder<R>,
+  maybe_pld: Option<&'a mut DynPageLatentDecompressor>,
+  delta_latents: Option<DynLatentSlice>,
+  n_remaining: usize,
+  batch_n: usize,
+) -> PcoResult<Option<DynLatentSlice<'a>>> {
+  let Some(dyn_pld) = maybe_pld else {
+    return Ok(None);
+  };
+
+  reader_builder.with_reader(|reader| unsafe {
+    match_latent_enum!(
+      dyn_pld,
+      DynPageLatentDecompressor<L>(pld) => {
+        // We never apply delta encoding to delta latents, so we just
+        // skip straight to the inner PageLatentDecompressor
+        pld.decompress_batch(
+          delta_latents,
+          reader,
+          n_remaining,
+          batch_n,
+        )
+      }
+    )
+  })?;
+  Ok(Some(dyn_pld.latents()))
+}
+
 impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   #[inline(never)]
   pub(crate) fn new(src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
@@ -146,45 +176,26 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         Ok(())
       })?;
     }
-    let delta_lpd = &mut inner.latent_decompressors.delta;
+    let delta_pld = &mut inner.latent_decompressors.delta;
 
-    // PRIMARY LATENTS
-    let delta_latents = delta_lpd.as_mut().map(|pld| pld.latents());
-    inner.reader_builder.with_reader(|reader| unsafe {
-      let dyn_pld = inner
-        .latent_decompressors
-        .primary
-        .downcast_mut::<T::L>()
-        .unwrap();
-      dyn_pld.decompress_batch(delta_latents, n_remaining, reader, batch_n)
-    })?;
+    // PRIMARY AND SECONDARY LATENTS
+    let primary = decompress_primary_or_secondary(
+      &mut inner.reader_builder,
+      Some(&mut inner.latent_decompressors.primary),
+      delta_pld.as_mut().map(|pld| pld.latents()),
+      n_remaining,
+      batch_n,
+    )?
+    .unwrap();
 
-    // SECONDARY LATENTS
-    let delta_latents = delta_lpd.as_mut().map(|pld| pld.latents());
-    if let Some(dyn_pld) = &mut inner.latent_decompressors.secondary {
-      inner.reader_builder.with_reader(|reader| unsafe {
-        match_latent_enum!(
-          dyn_pld,
-          DynPageLatentDecompressor<L>(pld) => {
-            // We never apply delta encoding to delta latents, so we just
-            // skip straight to the inner PageLatentDecompressor
-            pld.decompress_batch(
-              delta_latents,
-              n_remaining,
-              reader,
-              batch_n,
-            )
-          }
-        )
-      })?;
-    }
+    let secondary = decompress_primary_or_secondary(
+      &mut inner.reader_builder,
+      inner.latent_decompressors.secondary.as_mut(),
+      delta_pld.as_mut().map(|pld| pld.latents()),
+      n_remaining,
+      batch_n,
+    )?;
 
-    let primary = inner.latent_decompressors.primary.latents();
-    let secondary = inner
-      .latent_decompressors
-      .secondary
-      .as_mut()
-      .map(|pld| pld.latents());
     T::join_latents(mode, primary, secondary, dst);
 
     inner.n_processed += batch_n;
