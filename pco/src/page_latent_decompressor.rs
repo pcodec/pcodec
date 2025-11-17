@@ -166,12 +166,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (latent, (&offset_bits, &offset_bits_csum)) in state.latents[..n].iter_mut().zip(
-      state
-        .offset_bits_scratch
-        .iter()
-        .zip(state.offset_bits_csum_scratch.iter()),
-    ) {
+    for i in 0..n {
+      let offset_bits = *state.offset_bits_scratch.get_unchecked(i);
+      let offset_bits_csum = *state.offset_bits_csum_scratch.get_unchecked(i);
+      let latent = state.latents.get_unchecked_mut(i);
       let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
       let byte_idx = bit_idx / 8;
       let bits_past_byte = bit_idx % 8;
@@ -184,6 +182,24 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
       *latent = latent.wrapping_add(offset);
     }
+    // for (latent, (&offset_bits, &offset_bits_csum)) in state.latents[..n].iter_mut().zip(
+    //   state
+    //     .offset_bits_scratch
+    //     .iter()
+    //     .zip(state.offset_bits_csum_scratch.iter()),
+    // ) {
+    //   let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
+    //   let byte_idx = bit_idx / 8;
+    //   let bits_past_byte = bit_idx % 8;
+    //   let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
+    //     src,
+    //     byte_idx as usize,
+    //     bits_past_byte,
+    //     offset_bits,
+    //   );
+
+    //   *latent = latent.wrapping_add(offset);
+    // }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[n - 1] as usize
       + state.offset_bits_scratch[n - 1] as usize;
@@ -221,13 +237,13 @@ impl<L: Latent> PageLatentDecompressor<L> {
       // all
       0 => (),
       // u16
-      1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, batch_n),
-      // u32
-      1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, batch_n),
-      5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, batch_n),
+      // 1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, batch_n),
+      // // u32
+      // 1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, batch_n),
+      // 5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, batch_n),
       // u64
       1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, batch_n),
-      9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, batch_n),
+      // 9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, batch_n),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
