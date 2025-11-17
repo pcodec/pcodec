@@ -162,11 +162,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (&offset_bits, (&offset_bits_csum, latent)) in state.offset_bits_scratch.iter().take(n).zip(
-      state
-        .offset_bits_csum_scratch
+    for (&offset_bits, (&offset_bits_csum, latent)) in state.offset_bits_scratch[..n].iter().zip(
+      state.offset_bits_csum_scratch[..n]
         .iter()
-        .zip(state.latents.iter_mut()),
+        .zip(state.latents[..n].iter_mut()),
     ) {
       let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
       let byte_idx = bit_idx / 8;
@@ -194,9 +193,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       return;
     }
 
+    assert!(batch_n <= FULL_BATCH_N);
     if self.needs_ans {
-      assert!(batch_n <= FULL_BATCH_N);
-
       if batch_n == FULL_BATCH_N {
         self.decompress_full_ans_symbols(reader);
       } else {
