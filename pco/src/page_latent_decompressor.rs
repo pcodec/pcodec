@@ -45,12 +45,16 @@ struct State<L: Latent> {
 
 impl<L: Latent> State<L> {
   #[inline]
-  fn set_scratch(&mut self, i: usize, offset_bit_idx: Bitlen, offset_bits: Bitlen, lower: L) {
-    unsafe {
-      *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
-      *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
-      *self.latents.get_unchecked_mut(i) = lower;
-    };
+  unsafe fn set_scratch(
+    &mut self,
+    i: usize,
+    offset_bit_idx: Bitlen,
+    offset_bits: Bitlen,
+    lower: L,
+  ) {
+    *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
+    *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
+    *self.latents.get_unchecked_mut(i) = lower;
   }
 }
 
