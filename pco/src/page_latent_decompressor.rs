@@ -1,5 +1,9 @@
+use std::any::TypeId;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
+use std::ptr;
+
+use wide::{u32x4, u64x2, u64x4};
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
@@ -57,6 +61,30 @@ impl<L: Latent> State<L> {
     *self.latents.get_unchecked_mut(i) = lower;
   }
 }
+
+#[inline]
+unsafe fn u64x4_from_slice(p: *const u64) -> u64x4 {
+  u64x4::new(*(p as *const [u64; 4]))
+}
+
+#[inline]
+unsafe fn u64x4_from_u32_slice(slice: &[u32]) -> u64x4 {
+  // println!("A {:?}", &slice[..2]);
+  u64x4::new([
+    slice[0] as u64,
+    slice[1] as u64,
+    slice[2] as u64,
+    slice[3] as u64,
+  ])
+  // let p = slice.as_ptr();
+  // u64x2::new([*p as u64, *(p.add(1)) as u64])
+}
+
+// #[inline]
+// unsafe fn u32x2_from_slice(values: &[u32]) -> u32x2 {
+//   let p = values.as_ptr();
+//   u32x2::new(*(p as *const [u32; 2]))
+// }
 
 #[derive(Clone, Debug)]
 pub struct PageLatentDecompressor<L: Latent> {
@@ -166,40 +194,50 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for i in 0..n {
-      let offset_bits = *state.offset_bits_scratch.get_unchecked(i);
-      let offset_bits_csum = *state.offset_bits_csum_scratch.get_unchecked(i);
-      let latent = state.latents.get_unchecked_mut(i);
-      let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
-      let byte_idx = bit_idx / 8;
-      let bits_past_byte = bit_idx % 8;
-      let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
-        src,
-        byte_idx as usize,
-        bits_past_byte,
-        offset_bits,
-      );
+    let type_id = TypeId::of::<L>();
+    if type_id == TypeId::of::<u64>() {
+      let base_bit_idx = u64x4::splat(base_bit_idx as u64);
+      let mask = u64x4::splat(7);
+      for i in (0..256).step_by(4) {
+        let offset_bits = u64x4_from_u32_slice(&state.offset_bits_scratch.0[i..]);
+        let offset_bits_csum = u64x4_from_u32_slice(&state.offset_bits_csum_scratch.0[i..]);
+        let latents = u64x4_from_slice(&state.latents.0[i..] as *const [L] as *const u64);
+        // println!(
+        //   "{:?} {:?} {:?}",
+        //   offset_bits, offset_bits_csum, latents
+        // );
+        // if i == 200 {
+        //   panic!()
+        // }
+        let bit_idx = base_bit_idx + offset_bits_csum;
+        let byte_idx: u64x4 = bit_idx >> 3;
+        let bits_past_byte = bit_idx & mask;
+        let words = u64x4::new(
+          [0, 1, 2, 3].map(|i| bit_reader::u64_at(src, byte_idx.as_array()[i] as usize)),
+        );
+        let offset = (words >> bits_past_byte) & (!(u64x4::MAX << offset_bits));
+        let latents_mut = state.latents.0[i..].as_mut_ptr() as *mut [u64; 4];
+        *latents_mut = (latents + offset).to_array();
+      }
+    } else {
+      let base_bit_idx = base_bit_idx as Bitlen;
+      for i in 0..n {
+        let offset_bits = *state.offset_bits_scratch.get_unchecked(i);
+        let offset_bits_csum = *state.offset_bits_csum_scratch.get_unchecked(i);
+        let latent = state.latents.get_unchecked_mut(i);
+        let bit_idx = base_bit_idx + offset_bits_csum;
+        let byte_idx = bit_idx / 8;
+        let bits_past_byte = bit_idx % 8;
+        let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
+          src,
+          byte_idx as usize,
+          bits_past_byte,
+          offset_bits,
+        );
 
-      *latent = latent.wrapping_add(offset);
+        *latent = latent.wrapping_add(offset);
+      }
     }
-    // for (latent, (&offset_bits, &offset_bits_csum)) in state.latents[..n].iter_mut().zip(
-    //   state
-    //     .offset_bits_scratch
-    //     .iter()
-    //     .zip(state.offset_bits_csum_scratch.iter()),
-    // ) {
-    //   let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
-    //   let byte_idx = bit_idx / 8;
-    //   let bits_past_byte = bit_idx % 8;
-    //   let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
-    //     src,
-    //     byte_idx as usize,
-    //     bits_past_byte,
-    //     offset_bits,
-    //   );
-
-    //   *latent = latent.wrapping_add(offset);
-    // }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[n - 1] as usize
       + state.offset_bits_scratch[n - 1] as usize;
