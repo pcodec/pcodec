@@ -56,7 +56,6 @@ impl<L: Latent> State<L> {
 #[derive(Clone, Debug)]
 pub struct PageLatentDecompressor<L: Latent> {
   // known information about this latent variable
-  bytes_per_offset: usize,
   state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
@@ -223,6 +222,14 @@ impl<L: Latent> PageLatentDecompressor<L> {
       }
     }
 
+    let bytes_per_offset = read_write_uint::calc_max_bytes(
+      self.state.offset_bits_scratch[..batch_n]
+        .iter()
+        .cloned()
+        .max()
+        .unwrap() as Bitlen,
+    );
+
     // We want to read the offsets for each latent type as fast as possible.
     // Depending on the number of bits per offset, we can read them in
     // different chunk sizes. We use the smallest chunk size that can hold
@@ -231,7 +238,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
-    match self.bytes_per_offset {
+    match bytes_per_offset {
       // all
       0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
 
@@ -245,7 +252,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
-        self.bytes_per_offset,
+        bytes_per_offset,
         L::BITS
       ),
     }
@@ -319,7 +326,6 @@ impl DynPageLatentDecompressor {
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
-    let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
@@ -367,7 +373,6 @@ impl DynPageLatentDecompressor {
       };
 
     let pld = PageLatentDecompressor {
-      bytes_per_offset,
       state_lowers,
       needs_ans,
       decoder,
