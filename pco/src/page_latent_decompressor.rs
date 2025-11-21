@@ -228,13 +228,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let bytes_per_offset = if self.bytes_per_offset == 0 {
       self.bytes_per_offset
     } else {
-      read_write_uint::calc_max_bytes(
-        self.state.offset_bits_scratch[..dst.len()]
-          .iter()
-          .cloned()
-          .max()
-          .unwrap() as Bitlen,
-      )
+      self.state.offset_bits_scratch[..dst.len()]
+        .iter()
+        .cloned()
+        .max()
+        .map(read_write_uint::calc_max_bytes)
+        .unwrap_or(self.bytes_per_offset)
     };
 
     // We want to read the offsets for each latent type as fast as possible.
