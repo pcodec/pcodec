@@ -57,6 +57,7 @@ impl<L: Latent> State<L> {
 pub struct PageLatentDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
+  bytes_per_offset_matched_ub: i64,
   state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
@@ -223,17 +224,40 @@ impl<L: Latent> PageLatentDecompressor<L> {
       }
     }
 
-    // Recompute bytes_per_offset based on actual offset bits in this batch.
-    // This is very fast and allows us to optimize the read size for smaller batches.
-    let bytes_per_offset = if self.bytes_per_offset == 0 {
+    // Conditionally recompute `bytes_per_offset` based on actual offset bits
+    // in this batch. This is very fast and allows us to optimize the read size.
+    // However, if it stabilizes to the upper bound, we'll stop recomputing it to
+    // avoid unnecessary work.
+    // Cases:
+    // - `self.bytes_per_offset == 0`: all offsets are zero, so no need to
+    //   recompute.
+    // - `self.bytes_per_offset_matched_ub >= threshold`: we've seen several
+    //   batches in a row where the computed `bytes_per_offset` matches the
+    //   previous upper bound. This suggests that the upper bound is accurate, so we
+    //   can just use it directly.
+    // - `dst.len() < FULL_BATCH_N`: improves performance for case where there's
+    //   just one batch since we've already calculated the upper bound.
+    const MATCHED_UPPER_BOUND_THRESHOLD_COUNT: i64 = 8;
+    let bytes_per_offset = if self.bytes_per_offset == 0
+      || self.bytes_per_offset_matched_ub >= MATCHED_UPPER_BOUND_THRESHOLD_COUNT
+      || dst.len() < FULL_BATCH_N
+    {
       self.bytes_per_offset
     } else {
-      self.state.offset_bits_scratch[..dst.len()]
+      let bytes_per_offset = self
+        .state
+        .offset_bits_scratch
         .iter()
         .cloned()
         .max()
         .map(read_write_uint::calc_max_bytes)
-        .unwrap_or(self.bytes_per_offset)
+        .unwrap_or(self.bytes_per_offset);
+      if bytes_per_offset == self.bytes_per_offset {
+        self.bytes_per_offset_matched_ub += 1;
+      } else {
+        self.bytes_per_offset_matched_ub -= 1;
+      }
+      bytes_per_offset
     };
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -381,6 +405,7 @@ impl DynPageLatentDecompressor {
 
     let pld = PageLatentDecompressor {
       bytes_per_offset,
+      bytes_per_offset_matched_ub: 0,
       state_lowers,
       needs_ans,
       decoder,
