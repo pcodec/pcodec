@@ -56,6 +56,7 @@ impl<L: Latent> State<L> {
 #[derive(Clone, Debug)]
 pub struct PageLatentDecompressor<L: Latent> {
   // known information about this latent variable
+  bytes_per_offset: usize,
   state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
@@ -222,6 +223,14 @@ impl<L: Latent> PageLatentDecompressor<L> {
       }
     }
 
+    if self.bytes_per_offset == 0 {
+      // Stop here, no offsets to read.
+      // TODO: Consider special decompress_ans_symbols that only writes lowers/latents.
+      return;
+    }
+
+    // Recompute bytes_per_offset based on actual offset bits in this batch.
+    // This is very fast and allows us to optimize the read size for smaller batches.
     let bytes_per_offset = read_write_uint::calc_max_bytes(
       self.state.offset_bits_scratch[..batch_n]
         .iter()
@@ -326,6 +335,7 @@ impl DynPageLatentDecompressor {
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
+    let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
@@ -373,6 +383,7 @@ impl DynPageLatentDecompressor {
       };
 
     let pld = PageLatentDecompressor {
+      bytes_per_offset,
       state_lowers,
       needs_ans,
       decoder,
