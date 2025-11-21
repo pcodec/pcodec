@@ -223,21 +223,19 @@ impl<L: Latent> PageLatentDecompressor<L> {
       }
     }
 
-    if self.bytes_per_offset == 0 {
-      // Stop here, no offsets to read.
-      // TODO: Consider special decompress_ans_symbols that only writes lowers/latents.
-      return;
-    }
-
     // Recompute bytes_per_offset based on actual offset bits in this batch.
     // This is very fast and allows us to optimize the read size for smaller batches.
-    let bytes_per_offset = read_write_uint::calc_max_bytes(
-      self.state.offset_bits_scratch[..batch_n]
-        .iter()
-        .cloned()
-        .max()
-        .unwrap() as Bitlen,
-    );
+    let bytes_per_offset = if self.bytes_per_offset == 0 {
+      self.bytes_per_offset
+    } else {
+      read_write_uint::calc_max_bytes(
+        self.state.offset_bits_scratch[..dst.len()]
+          .iter()
+          .cloned()
+          .max()
+          .unwrap() as Bitlen,
+      )
+    };
 
     // We want to read the offsets for each latent type as fast as possible.
     // Depending on the number of bits per offset, we can read them in
