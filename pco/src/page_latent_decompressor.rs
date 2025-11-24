@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::fmt::Debug;
 use std::mem;
 use std::ops::{Deref, DerefMut};
@@ -11,7 +10,6 @@ use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding};
-use crate::read_write_uint::ReadWriteUint;
 use crate::{ans, bit_reader, delta, read_write_uint};
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
@@ -75,70 +73,10 @@ pub struct PageLatentDecompressor<L: Latent> {
   state: State<L>,
 }
 
-// pub unsafe fn decompress_offsets_u32_fast(
-//   base_bit_idx: u32,
-//   src: &[u8],
-//   offset_bits_csum_scratch: &[u32],
-//   offset_bits_scratch: &[u32],
-//   latents: &mut [u32],
-// ) {
-//   for i in 0..256 {
-//     let bit_idx = base_bit_idx + offset_bits_csum_scratch[i];
-//     let byte_idx = bit_idx / 8;
-//     let bits_past_byte = bit_idx % 8;
-//     latents[i] = bit_reader::read_u32_at(
-//       src,
-//       byte_idx as usize,
-//       bits_past_byte,
-//       offset_bits_scratch[i],
-//     )
-//     .wrapping_add(latents[i]);
-//   }
-// }
-
-// #[inline]
-// pub unsafe fn read_uint_at<U: ReadWriteUint>(
-//   src: &[u8],
-//   byte_idx: usize,
-//   bits_past_byte: Bitlen,
-//   n: Bitlen,
-// ) -> U {
-//   debug_assert!(n <= 57);
-//   let raw_bytes = *(src.as_ptr().add(byte_idx) as *const [u8; 8]);
-//   let value = u64::from_le_bytes(raw_bytes);
-//   U::from_u64((value >> bits_past_byte) & ((1 << n) - 1))
-// }
-// #[inline(never)]
-// unsafe fn decompress_offsets_u64_8(
-//   src: &[u8],
-//   base_bit_idx: u32,
-//   // state: &mut State<u64>,
-//   offset_bits_csum_scratch: &[u32],
-//   offset_bits_scratch: &[u32],
-//   latents: &mut [u64],
-// ) {
-//   for i in 0..256 {
-//     let bit_idx = base_bit_idx + offset_bits_csum_scratch[i];
-//     let byte_idx = bit_idx / 8;
-//     let bits_past_byte = bit_idx % 8;
-//     latents[i] = bit_reader::read_u64_at(
-//       src,
-//       byte_idx as usize,
-//       bits_past_byte,
-//       offset_bits_scratch[i],
-//     )
-//     .wrapping_add(latents[i]);
-//   }
-// }
-
-// #[inline]
-// unsafe fn read_u64_at(src: &[u8], byte_idx: usize, bits_past_byte: u32, n: u32) -> u64 {
-//   debug_assert!(n <= 57);
-//   let raw_bytes = *(src.as_ptr().add(byte_idx) as *const [u8; 8]);
-//   let value = u64::from_le_bytes(raw_bytes);
-//   (value >> bits_past_byte) & ((1 << n) - 1)
-// }
-
+// It would be somewhat easier to implement this with generics, but we find that
+// doing so fails to vectorize for some combinations of platform and data type
+// (e.g. single u64 reads on aarch64). The following code has been written very
+// carefully to compile well on all architectures, so be careful changing it.
 macro_rules! impl_specialized_decompress_offsets {
   ($f:ident, $t:ty, $read:ident) => {
     #[inline(never)]
@@ -163,7 +101,6 @@ macro_rules! impl_specialized_decompress_offsets {
     }
   };
 }
-
 impl_specialized_decompress_offsets!(decompress_offsets_u16_4, u16, read_u32_at);
 impl_specialized_decompress_offsets!(decompress_offsets_u32_4, u32, read_u32_at);
 impl_specialized_decompress_offsets!(decompress_offsets_u32_8, u32, read_u64_at);
@@ -259,39 +196,6 @@ impl<L: Latent> PageLatentDecompressor<L> {
     self.state.ans_state_idxs = state_idxs;
   }
 
-  // #[inline(never)]
-  // unsafe fn decompress_offsets<const READ_BYTES: usize>(
-  //   &mut self,
-  //   reader: &mut BitReader,
-  //   n: usize,
-  // ) {
-  //   let src = reader.src;
-  //   let state = &mut self.state;
-  //   let latents = mem::transmute::<&mut [L], &mut [u64]>(&mut state.latents.0);
-  //   decompress_offsets2(
-  //     base_bit_idx,
-  //     src,
-  //     &state.offset_bits_csum_scratch.0,
-  //     &state.offset_bits_scratch.0,
-  //     latents,
-  //     // &mut state.latents.0,
-  //   );
-  //   // for i in 0..256 {
-  //   //   let offset_bits = state.offset_bits_scratch[i];
-  //   //   let offset_bits_csum = state.offset_bits_csum_scratch[i];
-  //   //   let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
-  //   //   let byte_idx = bit_idx / 8;
-  //   //   let bits_past_byte = bit_idx % 8;
-  //   //   let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
-  //   //     src,
-  //   //     byte_idx as usize,
-  //   //     bits_past_byte,
-  //   //     offset_bits,
-  //   //   );
-
-  //   //   state.latents[i] = offset.wrapping_add(state.latents[i]);
-  //   // }
-  // }
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
   pub unsafe fn decompress_batch_pre_delta(&mut self, reader: &mut BitReader, batch_n: usize) {
@@ -320,65 +224,24 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latents.
     let base_bit_idx = reader.bit_idx();
     let bbi32 = base_bit_idx as u32;
+    macro_rules! run {
+      ($specialization: ident) => {
+        $specialization(
+          &reader.src,
+          bbi32,
+          &self.state.offset_bits_csum_scratch.0,
+          &self.state.offset_bits_scratch.0,
+          mem::transmute(self.state.latents.0.as_mut_slice()),
+        )
+      };
+    }
     match self.bytes_per_offset {
-      // all
       0 => (),
-      // u16
-      // 1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, batch_n),
-      // u32
-      // 1..=4 if L::BITS == 32 => decompress_offsets_u32_fast(
-      //   base_bit_idx as u32,
-      //   &reader.src,
-      //   &state.offset_bits_csum_scratch.0,
-      //   &state.offset_bits_scratch.0,
-      //   mem::transmute(state.latents.0.as_mut_slice()),
-      // ),
-      // 5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, batch_n),
-      // u64
-      1..=4 if L::BITS == 16 => decompress_offsets_u16_4(
-        &reader.src,
-        bbi32,
-        &self.state.offset_bits_csum_scratch.0,
-        &self.state.offset_bits_scratch.0,
-        mem::transmute(self.state.latents.0.as_mut_slice()),
-      ),
-      1..=4 if L::BITS == 32 => decompress_offsets_u32_4(
-        &reader.src,
-        bbi32,
-        &self.state.offset_bits_csum_scratch.0,
-        &self.state.offset_bits_scratch.0,
-        mem::transmute(self.state.latents.0.as_mut_slice()),
-      ),
-      5..=8 if L::BITS == 32 => decompress_offsets_u32_8(
-        &reader.src,
-        bbi32,
-        &self.state.offset_bits_csum_scratch.0,
-        &self.state.offset_bits_scratch.0,
-        mem::transmute(self.state.latents.0.as_mut_slice()),
-      ),
-      1..=8 if L::BITS == 64 => decompress_offsets_u64_8(
-        &reader.src,
-        bbi32,
-        &self.state.offset_bits_csum_scratch.0,
-        &self.state.offset_bits_scratch.0,
-        mem::transmute(self.state.latents.0.as_mut_slice()),
-        // mem::transmute(&mut self.state),
-      ),
-      9..=15 if L::BITS == 64 => decompress_offsets_u64_15(
-        &reader.src,
-        bbi32,
-        &self.state.offset_bits_csum_scratch.0,
-        &self.state.offset_bits_scratch.0,
-        mem::transmute(self.state.latents.0.as_mut_slice()),
-      ),
-      // 1..=8 if L::BITS == 64 => decompress_offsets_u64(
-      //   base_bit_idx,
-      //   &reader.src,
-      //   &state.offset_bits_csum_scratch.0,
-      //   &state.offset_bits_scratch.0,
-      //   mem::transmute(state.latents.0.as_mut_slice()),
-      // ),
-      // 9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, batch_n),
+      1..=4 if L::BITS == 16 => run!(decompress_offsets_u16_4),
+      1..=4 if L::BITS == 32 => run!(decompress_offsets_u32_4),
+      5..=8 if L::BITS == 32 => run!(decompress_offsets_u32_8),
+      1..=8 if L::BITS == 64 => run!(decompress_offsets_u64_8),
+      9..=15 if L::BITS == 64 => run!(decompress_offsets_u64_15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
