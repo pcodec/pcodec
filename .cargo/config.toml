@@ -5,4 +5,13 @@ rustflags = ["-C", "target-feature=+bmi1,+bmi2,+avx2"]
 rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
+  "-C", "target-cpu=native",
+]
+
+[build]
+rustflags = [
+  # enable LTO to reduce binary size (empirically by ~20%)
+  "-C", "lto=true",
+  "-C", "embed-bitcode=true",
+  "-Zdylib-lto"
 ]

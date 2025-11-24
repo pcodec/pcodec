@@ -88,7 +88,45 @@ macro_rules! impl_latent {
 
 impl_latent!(u16);
 impl_latent!(u32);
-impl_latent!(u64);
+// impl_latent!(u64);
+
+impl Latent for u64 {
+  const ZERO: Self = 0;
+  const ONE: Self = 1;
+  const MID: Self = 1 << (Self::BITS - 1);
+  const MAX: Self = Self::MAX;
+  const BITS: Bitlen = Self::BITS as Bitlen;
+
+  #[inline]
+  fn from_u32(x: u32) -> Self {
+    x as Self
+  }
+
+  #[inline]
+  fn from_u64(x: u64) -> Self {
+    x
+  }
+
+  #[inline]
+  fn leading_zeros(self) -> Bitlen {
+    self.leading_zeros() as Bitlen
+  }
+
+  #[inline]
+  fn to_u64(self) -> u64 {
+    self as u64
+  }
+
+  #[inline]
+  fn wrapping_add(self, other: Self) -> Self {
+    self.wrapping_add(other)
+  }
+
+  #[inline]
+  fn wrapping_sub(self, other: Self) -> Self {
+    self.wrapping_sub(other)
+  }
+}
 
 macro_rules! impl_unsigned_number {
   ($t: ty, $header_byte: expr) => {
