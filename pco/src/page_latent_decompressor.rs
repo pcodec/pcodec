@@ -224,6 +224,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latents.
     let base_bit_idx = reader.bit_idx();
     let bbi32 = base_bit_idx as u32;
+    assert!(self.state.offset_bits_csum_scratch.len() >= FULL_BATCH_N);
+    assert!(self.state.offset_bits_scratch.len() >= FULL_BATCH_N);
+    assert!(self.state.latents.len() >= FULL_BATCH_N);
     macro_rules! run {
       ($specialization: ident) => {
         $specialization(
@@ -258,7 +261,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   pub unsafe fn decompress_batch(
     &mut self,
-    delta_latents: Option<DynLatentSlice>,
+    delta_latents: &Option<DynLatentSlice>,
     reader: &mut BitReader,
     n_remaining_in_page: usize,
     limit: usize,

@@ -108,10 +108,11 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
   }
 }
 
+#[inline(never)]
 fn decompress_primary_or_secondary<'a, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   dyn_pld: &'a mut DynPageLatentDecompressor,
-  delta_latents: Option<DynLatentSlice>,
+  delta_latents: &Option<DynLatentSlice>,
   n_remaining: usize,
   batch_n: usize,
 ) -> PcoResult<DynLatentSlice<'a>> {
@@ -119,8 +120,6 @@ fn decompress_primary_or_secondary<'a, R: BetterBufRead>(
     match_latent_enum!(
       dyn_pld,
       DynPageLatentDecompressor<L>(pld) => {
-        // We never apply delta encoding to delta latents, so we just
-        // skip straight to the inner PageLatentDecompressor
         pld.decompress_batch(
           delta_latents,
           reader,
@@ -172,22 +171,25 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         Ok(())
       })?;
     }
-    let delta_pld = &mut inner.latent_decompressors.delta;
+    let delta_latents = inner
+      .latent_decompressors
+      .delta
+      .as_mut()
+      .map(|pld| pld.latents());
 
     // PRIMARY AND SECONDARY LATENTS
     let primary = decompress_primary_or_secondary(
       &mut inner.reader_builder,
       &mut inner.latent_decompressors.primary,
-      delta_pld.as_mut().map(|pld| pld.latents()),
+      &delta_latents,
       n_remaining,
       batch_n,
     )?;
-
     let secondary = match inner.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(decompress_primary_or_secondary(
         &mut inner.reader_builder,
         dyn_pld,
-        delta_pld.as_mut().map(|pld| pld.latents()),
+        &delta_latents,
         n_remaining,
         batch_n,
       )?),
