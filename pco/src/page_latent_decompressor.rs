@@ -224,9 +224,6 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latents.
     let base_bit_idx = reader.bit_idx();
     let bbi32 = base_bit_idx as u32;
-    assert!(self.state.offset_bits_csum_scratch.len() >= FULL_BATCH_N);
-    assert!(self.state.offset_bits_scratch.len() >= FULL_BATCH_N);
-    assert!(self.state.latents.len() >= FULL_BATCH_N);
     macro_rules! run {
       ($specialization: ident) => {
         $specialization(
