@@ -13,20 +13,16 @@ use crate::{int_mult_utils, sampling};
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
   base: F,
-  primary: DynLatentSlice,
+  primary: &mut [F::L],
   secondary: Option<DynLatentSlice>,
-  dst: &mut [F],
 ) {
-  let primary = primary.downcast::<F::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
-  for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    let unadjusted = F::int_float_from_latent(mult) * base;
-    *dst = F::from_latent_ordered(
-      unadjusted
-        .to_latent_ordered()
-        .wrapping_add(adj)
-        .toggle_center(),
-    );
+  for (mult_and_dst, &adj) in primary.iter_mut().zip(secondary.iter()) {
+    let unadjusted = F::int_float_from_latent(*mult_and_dst) * base;
+    *mult_and_dst = unadjusted
+      .to_latent_ordered()
+      .wrapping_add(adj)
+      .toggle_center();
   }
 }
 

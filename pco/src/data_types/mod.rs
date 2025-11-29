@@ -186,12 +186,10 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 
   fn from_latent_ordered(l: Self::L) -> Self;
   fn to_latent_ordered(self) -> Self::L;
-  fn join_latents(
-    mode: Mode,
-    primary: DynLatentSlice,
-    secondary: Option<DynLatentSlice>,
-    dst: &mut [Self],
-  );
+  fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<DynLatentSlice>);
+
+  fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L];
+  fn transmute_to_latent(self) -> Self::L;
 }
 
 pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
@@ -199,16 +197,5 @@ pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
   SplitLatents {
     primary,
     secondary: None,
-  }
-}
-
-pub(crate) fn join_latents_classic<T: Number>(primary: DynLatentSlice, dst: &mut [T]) {
-  for (&l, dst) in primary
-    .downcast::<T::L>()
-    .unwrap()
-    .iter()
-    .zip(dst.iter_mut())
-  {
-    *dst = T::from_latent_ordered(l);
   }
 }

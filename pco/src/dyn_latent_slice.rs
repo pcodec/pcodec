@@ -2,6 +2,7 @@ use crate::data_types::Latent;
 
 // Unfortunately we can't implement this with dtype_dispatch because it doesn't
 // handle extra generics/lifetime parameters yet.
+// TODO not mutable
 pub enum DynLatentSlice<'a> {
   U16(&'a mut [u16]),
   U32(&'a mut [u32]),

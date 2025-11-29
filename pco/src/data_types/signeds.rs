@@ -1,9 +1,11 @@
-use crate::data_types::{join_latents_classic, unsigneds, ModeAndLatents, Number};
+use std::mem;
+
+use crate::data_types::{unsigneds, ModeAndLatents, Number};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, Mode};
+use crate::metadata::{ChunkMeta, DynLatents, Mode};
 use crate::{describers, int_mult_utils, ChunkConfig};
 
 macro_rules! impl_signed {
@@ -37,20 +39,23 @@ macro_rules! impl_signed {
       fn to_latent_ordered(self) -> Self::L {
         self.wrapping_sub(Self::MIN) as $latent
       }
-      fn join_latents(
-        mode: Mode,
-        primary: DynLatentSlice,
-        secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
-      ) {
+      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<DynLatentSlice>) {
         match mode {
-          Mode::Classic => join_latents_classic(primary, dst),
+          Mode::Classic => (),
           Mode::IntMult(dyn_latent) => {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary, dst)
+            int_mult_utils::join_latents(base, primary, secondary)
           }
           _ => unreachable!("impossible mode for signed ints"),
         }
+      }
+
+      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
+        unsafe { mem::transmute(slice) }
+      }
+      #[inline]
+      fn transmute_to_latent(self) -> Self::L {
+        self.cast_unsigned()
       }
     }
   };

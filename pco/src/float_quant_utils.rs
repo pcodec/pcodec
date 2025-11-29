@@ -11,28 +11,26 @@ use std::cmp;
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
   k: Bitlen,
-  primary: DynLatentSlice,
+  primary: &mut [F::L],
   secondary: Option<DynLatentSlice>,
-  dst: &mut [F],
 ) {
-  let primary = primary.downcast::<F::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;
   let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
-  for ((&y, &m), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
+  for (y_and_dst, &m) in primary.iter_mut().zip(secondary.iter()) {
     debug_assert!(
       m >> k == F::L::ZERO,
       "Invalid input to FloatQuant: m must be a k-bit integer"
     );
-    let is_pos_as_float = y >= sign_cutoff;
+    let is_pos_as_float = *y_and_dst >= sign_cutoff;
     let lowest_k_bits = if is_pos_as_float {
       m
     } else {
       lowest_k_bits_max - m
     };
-    *dst = F::from_latent_ordered((y << k) + lowest_k_bits);
+    *y_and_dst = (*y_and_dst << k) + lowest_k_bits;
   }
 }
 
@@ -150,6 +148,8 @@ pub(crate) fn estimate_best_k_and_bits_saved<F: Float>(sample: &[F]) -> (Bitlen,
 
 #[cfg(test)]
 mod test {
+  use crate::data_types::Number;
+
   use super::*;
 
   #[test]
@@ -240,23 +240,25 @@ mod test {
   #[test]
   fn test_join_split_round_trip() {
     let nums = vec![1.234, -9999.999, f64::NAN, -f64::INFINITY];
+    let uints = nums
+      .iter()
+      .map(|num| num.to_latent_ordered())
+      .collect::<Vec<_>>();
 
     let k: Bitlen = 5;
-    let SplitLatents { primary, secondary } = split_latents(&nums, k);
+    let SplitLatents {
+      primary,
+      mut secondary,
+    } = split_latents(&nums, k);
     let mut primary = primary.downcast::<u64>().unwrap();
-    let mut secondary = secondary.unwrap().downcast::<u64>().unwrap();
-    let mut dst = vec![0.0; nums.len()];
     join_latents::<f64>(
       k,
-      DynLatentSlice::U64(&mut primary),
-      Some(DynLatentSlice::U64(&mut secondary)),
-      &mut dst,
+      &mut primary,
+      secondary
+        .as_mut()
+        .map(|secondary| DynLatentSlice::U64(secondary.downcast_mut().unwrap())),
     );
-
-    assert_eq!(dst.len(), nums.len());
-    for (a, b) in dst.iter().zip(&nums) {
-      assert_eq!(a.to_bits(), b.to_bits());
-    }
+    assert_eq!(uints, primary);
   }
 
   #[test]

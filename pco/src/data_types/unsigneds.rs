@@ -1,11 +1,11 @@
 use super::ModeAndLatents;
 use crate::constants::Bitlen;
-use crate::data_types::{join_latents_classic, split_latents_classic, Latent, Number};
+use crate::data_types::{split_latents_classic, Latent, Number};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatent, Mode};
+use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
 use crate::{describers, int_mult_utils, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
@@ -88,45 +88,7 @@ macro_rules! impl_latent {
 
 impl_latent!(u16);
 impl_latent!(u32);
-// impl_latent!(u64);
-
-impl Latent for u64 {
-  const ZERO: Self = 0;
-  const ONE: Self = 1;
-  const MID: Self = 1 << (Self::BITS - 1);
-  const MAX: Self = Self::MAX;
-  const BITS: Bitlen = Self::BITS as Bitlen;
-
-  #[inline]
-  fn from_u32(x: u32) -> Self {
-    x as Self
-  }
-
-  #[inline]
-  fn from_u64(x: u64) -> Self {
-    x
-  }
-
-  #[inline]
-  fn leading_zeros(self) -> Bitlen {
-    self.leading_zeros() as Bitlen
-  }
-
-  #[inline]
-  fn to_u64(self) -> u64 {
-    self as u64
-  }
-
-  #[inline]
-  fn wrapping_add(self, other: Self) -> Self {
-    self.wrapping_add(other)
-  }
-
-  #[inline]
-  fn wrapping_sub(self, other: Self) -> Self {
-    self.wrapping_sub(other)
-  }
-}
+impl_latent!(u64);
 
 macro_rules! impl_unsigned_number {
   ($t: ty, $header_byte: expr) => {
@@ -159,20 +121,23 @@ macro_rules! impl_unsigned_number {
       fn to_latent_ordered(self) -> Self::L {
         self
       }
-      fn join_latents(
-        mode: Mode,
-        primary: DynLatentSlice,
-        secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
-      ) {
+      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<DynLatentSlice>) {
         match mode {
-          Mode::Classic => join_latents_classic(primary, dst),
+          Mode::Classic => (),
           Mode::IntMult(dyn_latent) => {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary, dst)
+            int_mult_utils::join_latents(base, primary, secondary)
           }
           _ => unreachable!("impossible mode for unsigned ints"),
         }
+      }
+
+      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
+        slice
+      }
+      #[inline]
+      fn transmute_to_latent(self) -> Self::L {
+        self
       }
     }
   };
