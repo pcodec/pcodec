@@ -440,6 +440,7 @@ impl DynPageLatentDecompressor {
     Ok(Self::new(Box::new(pld)).unwrap())
   }
 
+  #[inline]
   pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
     match self {
       Self::U16(inner) => DynLatentSlice::U16(&mut *inner.state.latents),

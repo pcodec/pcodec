@@ -10,6 +10,7 @@ pub enum DynLatentSlice<'a> {
 }
 
 impl<'a> DynLatentSlice<'a> {
+  #[inline]
   pub fn downcast<L: Latent>(self) -> Option<&'a mut [L]> {
     match self {
       Self::U16(inner) if std::any::TypeId::of::<L>() == std::any::TypeId::of::<u16>() => {

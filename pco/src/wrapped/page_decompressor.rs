@@ -127,9 +127,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   fn decompress_batch(&mut self, dst: &mut [T]) -> PcoResult<()> {
     let batch_n = dst.len();
     let inner = &mut self.inner;
-    let n = inner.n;
     let n_remaining = inner.n_remaining();
-    let mode = inner.mode;
 
     // DELTA LATENTS
     if let Some(dyn_pld) = inner.latent_decompressors.delta.as_mut() {
@@ -195,7 +193,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     }
 
     T::join_latents(
-      mode,
+      inner.mode,
       T::transmute_to_latents(dst),
       inner
         .latent_decompressors
@@ -206,7 +204,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     convert_from_latents_to_numbers(dst);
 
     inner.n_processed += batch_n;
-    if inner.n_processed == n {
+    if inner.n_processed == inner.n {
       inner.reader_builder.with_reader(|reader| {
         reader.drain_empty_byte("expected trailing bits at end of page to be empty")
       })?;
