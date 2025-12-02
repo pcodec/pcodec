@@ -5,7 +5,7 @@ use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, DynLatent, Mode};
 use crate::{describers, int_mult_utils, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(

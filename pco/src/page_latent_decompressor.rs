@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Write};
+use std::fmt::Debug;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
@@ -274,15 +274,15 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let bbi32 = base_bit_idx as u32;
     macro_rules! run {
-      ($specialization: ident) => {
+      ($specialization: ident, $t: ty) => {
         $specialization(
           &reader.src,
           bbi32,
           &self.state.offset_bits_csum_scratch.0,
           &self.state.offset_bits_scratch.0,
           self.write_to,
-          mem::transmute(self.state.latents.0.as_mut_slice()),
-          mem::transmute(dst),
+          mem::transmute::<&mut [L], &mut [$t]>(self.state.latents.0.as_mut_slice()),
+          mem::transmute::<&mut [L], &mut [$t]>(dst),
         )
       };
     }
@@ -291,11 +291,11 @@ impl<L: Latent> PageLatentDecompressor<L> {
       (0, _, WriteTo::Dst) => {
         dst.copy_from_slice(&self.state.latents[..batch_n]);
       }
-      (1..=4, 16, _) => run!(decompress_offsets_u16_4),
-      (1..=4, 32, _) => run!(decompress_offsets_u32_4),
-      (5..=8, 32, _) => run!(decompress_offsets_u32_8),
-      (1..=8, 64, _) => run!(decompress_offsets_u64_8),
-      (9..=15, 64, _) => run!(decompress_offsets_u64_15),
+      (1..=4, 16, _) => run!(decompress_offsets_u16_4, u16),
+      (1..=4, 32, _) => run!(decompress_offsets_u32_4, u32),
+      (5..=8, 32, _) => run!(decompress_offsets_u32_8, u32),
+      (1..=8, 64, _) => run!(decompress_offsets_u64_8, u64),
+      (9..=15, 64, _) => run!(decompress_offsets_u64_15, u64),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,

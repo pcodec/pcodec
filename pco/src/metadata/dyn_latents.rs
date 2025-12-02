@@ -1,7 +1,6 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::data_types::Latent;
-use crate::dyn_latent_slice::DynLatentSlice;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use std::io::Write;
 
