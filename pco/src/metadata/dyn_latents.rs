@@ -39,13 +39,4 @@ impl DynLatents {
       }
     );
   }
-
-  // // TODO mutable?
-  // pub(crate) fn slice(&mut self) -> DynLatentSlice {
-  //   match self {
-  //     DynLatents::U16(slice) => DynLatentSlice::U16(slice),
-  //     DynLatents::U32(slice) => DynLatentSlice::U32(slice),
-  //     DynLatents::U64(slice) => DynLatentSlice::U64(slice),
-  //   }
-  // }
 }
