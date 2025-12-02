@@ -12,7 +12,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, Mode};
+use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, LatentVarKey, Mode};
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, WriteTo};
 use crate::progress::Progress;
 
@@ -57,6 +57,10 @@ fn make_latent_decompressors(
   {
     let var_delta_encoding = chunk_meta.delta_encoding.for_latent_var(key);
     let n_in_body = n.saturating_sub(var_delta_encoding.n_latents_per_state());
+    let write_to = match key {
+      LatentVarKey::Primary => WriteTo::Dst,
+      _ => WriteTo::Scratch,
+    };
     let state = match_latent_enum!(
       &chunk_latent_var_meta.bins,
       DynBins<L>(bins) => {
@@ -79,6 +83,7 @@ fn make_latent_decompressors(
           var_delta_encoding,
           page_latent_var_meta.ans_final_state_idxs,
           delta_state,
+          write_to,
         )?
       }
     );
@@ -145,7 +150,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
             // skip straight to the inner PageLatentDecompressor
             pld.decompress_batch_pre_delta(
               reader,
-              WriteTo::Scratch(limit),
+              limit,
               &mut [],
             )
           }
@@ -170,7 +175,6 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         &delta_latents,
         reader,
         n_remaining,
-        WriteTo::Dst,
         T::transmute_to_latents(dst),
       )
     })?;
@@ -184,7 +188,6 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
               &delta_latents,
               reader,
               n_remaining,
-              WriteTo::Scratch(batch_n),
               &mut [],
             )
           }

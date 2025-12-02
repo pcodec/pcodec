@@ -8,7 +8,7 @@ use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
-use crate::macros::define_latent_enum;
+use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::{bins, Bin, DeltaEncoding};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
@@ -61,7 +61,7 @@ impl<L: Latent> State<L> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum WriteTo {
-  Scratch(usize),
+  Scratch,
   Dst,
 }
 
@@ -74,6 +74,7 @@ pub struct PageLatentDecompressor<L: Latent> {
   is_constant: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
+  write_to: WriteTo,
 
   // mutable state
   state: State<L>,
@@ -96,8 +97,8 @@ macro_rules! impl_specialized_decompress_offsets {
       dst: &mut [$t],
     ) {
       match write_to {
-        WriteTo::Scratch(batch_n) => {
-          for i in 0..batch_n {
+        WriteTo::Scratch => {
+          for i in 0..FULL_BATCH_N {
             let bit_idx = base_bit_idx + offset_bits_csum[i];
             let byte_idx = bit_idx / 8;
             let bits_past_byte = bit_idx % 8;
@@ -227,14 +228,19 @@ impl<L: Latent> PageLatentDecompressor<L> {
   pub unsafe fn decompress_batch_pre_delta(
     &mut self,
     reader: &mut BitReader,
-    write_to: WriteTo,
+    limit: usize,
     dst: &mut [L],
   ) {
-    let batch_n = match write_to {
-      WriteTo::Scratch(n) => n,
+    let batch_n = match self.write_to {
+      WriteTo::Scratch => {
+        if self.is_constant {
+          return;
+        }
+        limit.min(FULL_BATCH_N)
+      }
       WriteTo::Dst => dst.len(),
     };
-    if batch_n == 0 || (self.is_constant && matches!(write_to, WriteTo::Scratch(_))) {
+    if batch_n == 0 {
       return;
     }
 
@@ -246,12 +252,13 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.decompress_ans_symbols(reader, batch_n);
       }
     } else {
-      match write_to {
-        WriteTo::Scratch(_) => {
-          self.state.latents[..batch_n].fill(self.state_lowers[0]);
+      let lower = self.state_lowers[0];
+      match self.write_to {
+        WriteTo::Scratch => {
+          self.state.latents.fill(lower);
         }
         WriteTo::Dst => {
-          dst[..batch_n].fill(self.state_lowers[0]);
+          dst[..batch_n].fill(lower);
         }
       }
     }
@@ -273,19 +280,22 @@ impl<L: Latent> PageLatentDecompressor<L> {
           bbi32,
           &self.state.offset_bits_csum_scratch.0,
           &self.state.offset_bits_scratch.0,
-          write_to,
+          self.write_to,
           mem::transmute(self.state.latents.0.as_mut_slice()),
           mem::transmute(dst),
         )
       };
     }
-    match self.bytes_per_offset {
-      0 => (),
-      1..=4 if L::BITS == 16 => run!(decompress_offsets_u16_4),
-      1..=4 if L::BITS == 32 => run!(decompress_offsets_u32_4),
-      5..=8 if L::BITS == 32 => run!(decompress_offsets_u32_8),
-      1..=8 if L::BITS == 64 => run!(decompress_offsets_u64_8),
-      9..=15 if L::BITS == 64 => run!(decompress_offsets_u64_15),
+    match (self.bytes_per_offset, L::BITS, self.write_to) {
+      (0, _, WriteTo::Scratch) => (),
+      (0, _, WriteTo::Dst) => {
+        dst.copy_from_slice(&self.state.latents[..batch_n]);
+      }
+      (1..=4, 16, _) => run!(decompress_offsets_u16_4),
+      (1..=4, 32, _) => run!(decompress_offsets_u32_4),
+      (5..=8, 32, _) => run!(decompress_offsets_u32_8),
+      (1..=8, 64, _) => run!(decompress_offsets_u64_8),
+      (9..=15, 64, _) => run!(decompress_offsets_u64_15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
@@ -305,33 +315,19 @@ impl<L: Latent> PageLatentDecompressor<L> {
     delta_latents: &Option<DynLatentSlice>,
     reader: &mut BitReader,
     n_remaining_in_page: usize,
-    write_to: WriteTo,
     dst: &mut [L],
   ) -> PcoResult<()> {
-    let n_remaining_pre_delta =
+    let pre_delta_limit =
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
-    let (pre_delta_len, pre_delta_write_to) = match write_to {
-      WriteTo::Scratch(limit) => {
-        let pre_delta_len = limit.min(n_remaining_pre_delta);
-        (
-          pre_delta_len,
-          WriteTo::Scratch(pre_delta_len),
-        )
-      }
-      WriteTo::Dst => (
-        dst.len().min(n_remaining_pre_delta),
-        WriteTo::Dst,
-      ),
-    };
-    let dst_len = dst.len();
+    let pre_delta_len = dst.len().min(pre_delta_limit);
     self.decompress_batch_pre_delta(
       reader,
-      pre_delta_write_to,
-      &mut dst[..pre_delta_len.min(dst_len)],
+      pre_delta_limit,
+      &mut dst[..pre_delta_len],
     );
 
-    let delta_encoding_slice = match write_to {
-      WriteTo::Scratch(batch_n) => &mut self.state.latents[..batch_n],
+    let delta_encoding_slice = match self.write_to {
+      WriteTo::Scratch => &mut self.state.latents[..dst.len()],
       WriteTo::Dst => dst,
     };
 
@@ -385,6 +381,7 @@ impl DynPageLatentDecompressor {
     delta_encoding: DeltaEncoding,
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
+    write_to: WriteTo,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
@@ -436,12 +433,18 @@ impl DynPageLatentDecompressor {
       decoder,
       delta_encoding,
       state,
+      write_to,
     };
     Ok(Self::new(Box::new(pld)).unwrap())
   }
 
   #[inline]
   pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
+    debug_assert!(
+      match_latent_enum!(self, DynPageLatentDecompressor<L>(inner) => {
+        matches!(inner.write_to, WriteTo::Scratch)
+      })
+    );
     match self {
       Self::U16(inner) => DynLatentSlice::U16(&mut *inner.state.latents),
       Self::U32(inner) => DynLatentSlice::U32(&mut *inner.state.latents),
