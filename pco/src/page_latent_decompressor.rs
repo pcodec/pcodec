@@ -232,15 +232,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
     dst: &mut [L],
   ) {
     let batch_n = match self.write_to {
-      WriteTo::Scratch => {
-        if self.is_constant {
-          return;
-        }
-        limit.min(FULL_BATCH_N)
-      }
+      WriteTo::Scratch => limit.min(FULL_BATCH_N),
       WriteTo::Dst => dst.len(),
     };
-    if batch_n == 0 {
+    if batch_n == 0 || (matches!(self.write_to, WriteTo::Scratch) && self.is_constant) {
       return;
     }
 
@@ -251,16 +246,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       } else {
         self.decompress_ans_symbols(reader, batch_n);
       }
-    } else {
-      let lower = self.state_lowers[0];
-      match self.write_to {
-        WriteTo::Scratch => {
-          self.state.latents.fill(lower);
-        }
-        WriteTo::Dst => {
-          dst[..batch_n].fill(lower);
-        }
-      }
+    } else if matches!(self.write_to, WriteTo::Scratch) {
+      self.state.latents.fill(self.state_lowers[0]);
     }
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -272,12 +259,11 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
     let base_bit_idx = reader.bit_idx();
-    let bbi32 = base_bit_idx as u32;
     macro_rules! run {
       ($specialization: ident, $t: ty) => {
         $specialization(
           &reader.src,
-          bbi32,
+          base_bit_idx as u32,
           &self.state.offset_bits_csum_scratch.0,
           &self.state.offset_bits_scratch.0,
           self.write_to,
@@ -286,16 +272,17 @@ impl<L: Latent> PageLatentDecompressor<L> {
         )
       };
     }
-    match (self.bytes_per_offset, L::BITS, self.write_to) {
-      (0, _, WriteTo::Scratch) => (),
-      (0, _, WriteTo::Dst) => {
-        dst.copy_from_slice(&self.state.latents[..batch_n]);
+    match (self.bytes_per_offset, L::BITS) {
+      (0, _) => {
+        if matches!(self.write_to, WriteTo::Dst) {
+          dst.copy_from_slice(&self.state.latents[..batch_n])
+        }
       }
-      (1..=4, 16, _) => run!(decompress_offsets_u16_4, u16),
-      (1..=4, 32, _) => run!(decompress_offsets_u32_4, u32),
-      (5..=8, 32, _) => run!(decompress_offsets_u32_8, u32),
-      (1..=8, 64, _) => run!(decompress_offsets_u64_8, u64),
-      (9..=15, 64, _) => run!(decompress_offsets_u64_15, u64),
+      (1..=4, 16) => run!(decompress_offsets_u16_4, u16),
+      (1..=4, 32) => run!(decompress_offsets_u32_4, u32),
+      (5..=8, 32) => run!(decompress_offsets_u32_8, u32),
+      (1..=8, 64) => run!(decompress_offsets_u64_8, u64),
+      (9..=15, 64) => run!(decompress_offsets_u64_15, u64),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
@@ -317,6 +304,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     n_remaining_in_page: usize,
     dst: &mut [L],
   ) -> PcoResult<()> {
+    // The data flow here is complicated and worth explaining. A PLD may be
+    // configured to write to either its own internal buffer (latents) or a
+    // provided dst. AND decoding always write to the internal buffers; offsets
+    // get written to the ultimate destination, and then delta encoding is done
+    // in place on the ultimate destination. If ANS or offset decoding or both
+    // are trivial, we can skip steps or fill with a constant value.
     let pre_delta_limit =
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
     let pre_delta_len = dst.len().min(pre_delta_limit);
@@ -326,7 +319,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       &mut dst[..pre_delta_len],
     );
 
-    let delta_encoding_slice = match self.write_to {
+    let delta_dst = match self.write_to {
       WriteTo::Scratch => &mut self.state.latents[..dst.len()],
       WriteTo::Dst => dst,
     };
@@ -334,10 +327,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     match self.delta_encoding {
       DeltaEncoding::None => Ok(()),
       DeltaEncoding::Consecutive(_) => {
-        delta::decode_consecutive_in_place(
-          &mut self.state.delta_state,
-          delta_encoding_slice,
-        );
+        delta::decode_consecutive_in_place(&mut self.state.delta_state, delta_dst);
         Ok(())
       }
       DeltaEncoding::Lookback(config) => {
@@ -349,7 +339,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
           lookbacks,
           &mut self.state.delta_state_pos,
           &mut self.state.delta_state,
-          delta_encoding_slice,
+          delta_dst,
         );
         if has_oob_lookbacks {
           Err(PcoError::corruption(
@@ -438,7 +428,6 @@ impl DynPageLatentDecompressor {
     Ok(Self::new(Box::new(pld)).unwrap())
   }
 
-  #[inline]
   pub fn latents<'a>(&'a self) -> DynLatentSlice<'a> {
     match self {
       Self::U16(inner) => {

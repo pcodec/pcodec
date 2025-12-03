@@ -128,6 +128,11 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   }
 
   fn decompress_batch(&mut self, dst: &mut [T]) -> PcoResult<()> {
+    // For hacky performance reasons, we write the primary latents out of place
+    // into the provded `dst`, but we write delta and secondary latents in place
+    // into buffers stored by their respective PLDs. This helps to balance
+    // instructions with memory bandwidth on various types of hardware. Then we
+    // join the primary and secondary latents in place in dst.
     let batch_n = dst.len();
     let inner = &mut self.inner;
     let n_remaining = inner.n_remaining();
@@ -159,10 +164,10 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     let delta_latents = inner
       .latent_decompressors
       .delta
-      .as_mut()
+      .as_ref()
       .map(|pld| pld.latents());
 
-    // PRIMARY AND SECONDARY LATENTS
+    // PRIMARY LATENTS
     inner.reader_builder.with_reader(|reader| unsafe {
       let pld = inner
         .latent_decompressors
@@ -177,6 +182,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       )
     })?;
 
+    // SECONDARY LATENTS
     if let Some(dyn_pld) = inner.latent_decompressors.secondary.as_mut() {
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
@@ -199,7 +205,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       inner
         .latent_decompressors
         .secondary
-        .as_mut()
+        .as_ref()
         .map(|pld| pld.latents()),
     );
     convert_from_latents_to_numbers(dst);

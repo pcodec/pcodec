@@ -266,7 +266,7 @@ mod tests {
     let base = 4_u32;
     let latents = split_latents(&nums, base);
     let mut primary = latents.primary.downcast::<u32>().unwrap();
-    let mut secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
+    let secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
     assert_eq!(&primary, &vec![2_u32, 0, 1]);
     assert_eq!(&secondary, &vec![0_u32, 1, 1]);
 
@@ -274,7 +274,7 @@ mod tests {
     join_latents(
       base,
       &mut primary,
-      Some(DynLatentSlice::U32(&mut secondary)),
+      Some(DynLatentSlice::U32(&secondary)),
     );
 
     assert_eq!(primary, nums);
