@@ -246,17 +246,14 @@ mod test {
       .collect::<Vec<_>>();
 
     let k: Bitlen = 5;
-    let SplitLatents {
-      primary,
-      mut secondary,
-    } = split_latents(&nums, k);
+    let SplitLatents { primary, secondary } = split_latents(&nums, k);
     let mut primary = primary.downcast::<u64>().unwrap();
     join_latents::<f64>(
       k,
       &mut primary,
       secondary
-        .as_mut()
-        .map(|secondary| DynLatentSlice::U64(secondary.downcast_mut().unwrap())),
+        .as_ref()
+        .map(|secondary| DynLatentSlice::U64(secondary.downcast_ref().unwrap())),
     );
     assert_eq!(uints, primary);
   }

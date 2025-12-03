@@ -8,7 +8,7 @@ use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
-use crate::macros::{define_latent_enum, match_latent_enum};
+use crate::macros::define_latent_enum;
 use crate::metadata::{bins, Bin, DeltaEncoding};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
@@ -439,16 +439,20 @@ impl DynPageLatentDecompressor {
   }
 
   #[inline]
-  pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
-    debug_assert!(
-      match_latent_enum!(self, DynPageLatentDecompressor<L>(inner) => {
-        matches!(inner.write_to, WriteTo::Scratch)
-      })
-    );
+  pub fn latents<'a>(&'a self) -> DynLatentSlice<'a> {
     match self {
-      Self::U16(inner) => DynLatentSlice::U16(&mut *inner.state.latents),
-      Self::U32(inner) => DynLatentSlice::U32(&mut *inner.state.latents),
-      Self::U64(inner) => DynLatentSlice::U64(&mut *inner.state.latents),
+      Self::U16(inner) => {
+        debug_assert!(matches!(inner.write_to, WriteTo::Scratch));
+        DynLatentSlice::U16(&*inner.state.latents)
+      }
+      Self::U32(inner) => {
+        debug_assert!(matches!(inner.write_to, WriteTo::Scratch));
+        DynLatentSlice::U32(&*inner.state.latents)
+      }
+      Self::U64(inner) => {
+        debug_assert!(matches!(inner.write_to, WriteTo::Scratch));
+        DynLatentSlice::U64(&*inner.state.latents)
+      }
     }
   }
 }

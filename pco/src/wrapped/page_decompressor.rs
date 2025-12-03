@@ -100,13 +100,12 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     let page_meta =
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
-    let mode = chunk_meta.mode;
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
 
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
       n,
-      mode,
+      mode: chunk_meta.mode,
       delta_encoding: chunk_meta.delta_encoding,
       reader_builder,
       n_processed: 0,
