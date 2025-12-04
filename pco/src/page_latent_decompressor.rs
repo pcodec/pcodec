@@ -30,18 +30,12 @@ impl<L: Latent> State<L> {
   }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum WriteTo {
-  Scratch,
-  Dst,
-}
-
 #[derive(Clone, Debug)]
 pub struct PageLatentDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
   state_lowers: Vec<L>,
-  needs_ans: bool,
+  maybe_constant_lower: Option<L>,
   maybe_constant_latent: Option<L>,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
@@ -190,13 +184,16 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
 
     assert!(batch_n <= FULL_BATCH_N);
-    if self.needs_ans {
+    if let Some(constant_lower) = self.maybe_constant_lower {
+      dst.fill(constant_lower);
+    } else {
       if batch_n == FULL_BATCH_N {
         self.decompress_full_ans_symbols(reader, dst);
       } else {
         self.decompress_ans_symbols(reader, batch_n, dst);
       }
     }
+
     // We want to read the offsets for each latent type as fast as possible.
     // Depending on the number of bits per offset, we can read them in
     // different chunk sizes. We use the smallest chunk size that can hold
@@ -342,6 +339,11 @@ impl DynPageLatentDecompressor {
       }
     }
 
+    let maybe_constant_lower = if bins.len() == 1 {
+      Some(bins[0].lower)
+    } else {
+      None
+    };
     let maybe_constant_latent =
       if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
         Some(bins[0].lower)
@@ -352,7 +354,7 @@ impl DynPageLatentDecompressor {
     let pld = PageLatentDecompressor {
       bytes_per_offset,
       state_lowers,
-      needs_ans,
+      maybe_constant_lower,
       maybe_constant_latent,
       decoder,
       delta_encoding,

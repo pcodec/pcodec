@@ -12,7 +12,7 @@ use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, LatentVarKey, Mode};
-use crate::page_latent_decompressor::{DynPageLatentDecompressor, WriteTo};
+use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
 use crate::scratch_array::DynScratchArray;
 
@@ -104,7 +104,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       .as_ref()
       .map(|pld| pld.make_external_scratch());
     let secondary_scratch = latent_decompressors
-      .delta
+      .secondary
       .as_ref()
       .map(|pld| pld.make_external_scratch());
 
@@ -151,7 +151,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
         batch_n,
       );
-      let delta_scratch = self.inner.delta_scratch.as_mut().unwrap();
+      let delta_scratch = inner.delta_scratch.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
@@ -188,6 +188,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
 
     // SECONDARY LATENTS
     if let Some(dyn_pld) = inner.latent_decompressors.secondary.as_mut() {
+      let secondary_scratch = inner.secondary_scratch.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
@@ -196,7 +197,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
               &delta_latents,
               reader,
               n_remaining,
-              &mut [],
+              &mut secondary_scratch.downcast_mut::<L>().unwrap().0,
             )
           }
         )
@@ -206,8 +207,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     T::join_latents(
       inner.mode,
       T::transmute_to_latents(dst),
-      self
-        .inner
+      inner
         .secondary_scratch
         .as_ref()
         .map(|scratch| scratch.slice()),
