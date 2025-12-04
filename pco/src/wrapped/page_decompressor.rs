@@ -38,6 +38,7 @@ pub struct PageDecompressor<T: Number, R: BetterBufRead> {
   phantom: PhantomData<T>,
 }
 
+#[inline(never)]
 fn convert_from_latents_to_numbers<T: Number>(dst: &mut [T]) {
   // we wrote the joined latents to dst, so we can convert them in place
   for l_and_dst in dst {
