@@ -14,6 +14,7 @@ use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, LatentVarKey, Mode};
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, WriteTo};
 use crate::progress::Progress;
+use crate::scratch_array::DynScratchArray;
 
 const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
 
@@ -27,6 +28,8 @@ struct PageDecompressorInner<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
   n_processed: usize,
   latent_decompressors: PerLatentVar<DynPageLatentDecompressor>,
+  delta_scratch: Option<DynScratchArray>,
+  secondary_scratch: Option<DynScratchArray>,
 }
 
 /// Holds metadata about a page and supports decompression.
@@ -56,10 +59,6 @@ fn make_latent_decompressors(
   {
     let var_delta_encoding = chunk_meta.delta_encoding.for_latent_var(key);
     let n_in_body = n.saturating_sub(var_delta_encoding.n_latents_per_state());
-    let write_to = match key {
-      LatentVarKey::Primary => WriteTo::Dst,
-      _ => WriteTo::Scratch,
-    };
     let state = match_latent_enum!(
       &chunk_latent_var_meta.bins,
       DynBins<L>(bins) => {
@@ -82,7 +81,6 @@ fn make_latent_decompressors(
           var_delta_encoding,
           page_latent_var_meta.ans_final_state_idxs,
           delta_state,
-          write_to,
         )?
       }
     );
@@ -101,6 +99,14 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
+    let delta_scratch = latent_decompressors
+      .delta
+      .as_ref()
+      .map(|pld| pld.make_external_scratch());
+    let secondary_scratch = latent_decompressors
+      .delta
+      .as_ref()
+      .map(|pld| pld.make_external_scratch());
 
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
@@ -110,6 +116,8 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder,
       n_processed: 0,
       latent_decompressors,
+      delta_scratch,
+      secondary_scratch,
     })
   }
 
@@ -143,6 +151,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
         batch_n,
       );
+      let delta_scratch = self.inner.delta_scratch.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
@@ -153,19 +162,14 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
             // skip straight to the inner PageLatentDecompressor
             pld.decompress_batch_pre_delta(
               reader,
-              limit,
-              &mut [],
+              &mut delta_scratch.downcast_mut::<L>().unwrap().0[..limit],
             )
           }
         );
         Ok(())
       })?;
     }
-    let delta_latents = inner
-      .latent_decompressors
-      .delta
-      .as_ref()
-      .map(|pld| pld.latents());
+    let delta_latents = inner.delta_scratch.as_ref().map(|scratch| scratch.slice());
 
     // PRIMARY LATENTS
     inner.reader_builder.with_reader(|reader| unsafe {
@@ -202,11 +206,11 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     T::join_latents(
       inner.mode,
       T::transmute_to_latents(dst),
-      inner
-        .latent_decompressors
-        .secondary
+      self
+        .inner
+        .secondary_scratch
         .as_ref()
-        .map(|pld| pld.latents()),
+        .map(|scratch| scratch.slice()),
     );
     convert_from_latents_to_numbers(dst);
 

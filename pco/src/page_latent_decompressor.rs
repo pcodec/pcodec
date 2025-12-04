@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::mem;
-use std::ops::{Deref, DerefMut};
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
@@ -8,36 +7,15 @@ use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
-use crate::macros::define_latent_enum;
+use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::{bins, Bin, DeltaEncoding};
+use crate::scratch_array::{DynScratchArray, ScratchArray};
 use crate::{ans, bit_reader, delta, read_write_uint};
-
-// Struct to enforce alignment of the scratch arrays to 64 bytes. This can
-// improve performance for SIMD operations. The primary goal here is to avoid
-// regression by ensuring that the arrays stay "well-aligned", even if the
-// surrounding code is changed.
-#[derive(Clone, Debug)]
-#[repr(align(64))]
-struct ScratchArray<L: Latent>([L; FULL_BATCH_N]);
-
-impl<L: Latent> Deref for ScratchArray<L> {
-  type Target = [L; FULL_BATCH_N];
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-impl<L: Latent> DerefMut for ScratchArray<L> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
-  }
-}
 
 #[derive(Clone, Debug)]
 struct State<L: Latent> {
-  // scratch needs no backup
   offset_bits_csum_scratch: ScratchArray<Bitlen>,
   offset_bits_scratch: ScratchArray<Bitlen>,
-  latents: ScratchArray<L>,
 
   ans_state_idxs: [AnsState; ANS_INTERLEAVING],
   delta_state: Vec<L>,
@@ -46,16 +24,9 @@ struct State<L: Latent> {
 
 impl<L: Latent> State<L> {
   #[inline]
-  unsafe fn set_scratch(
-    &mut self,
-    i: usize,
-    offset_bit_idx: Bitlen,
-    offset_bits: Bitlen,
-    lower: L,
-  ) {
+  unsafe fn set_scratch(&mut self, i: usize, offset_bit_idx: Bitlen, offset_bits: Bitlen) {
     *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
     *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
-    *self.latents.get_unchecked_mut(i) = lower;
   }
 }
 
@@ -71,10 +42,9 @@ pub struct PageLatentDecompressor<L: Latent> {
   bytes_per_offset: usize,
   state_lowers: Vec<L>,
   needs_ans: bool,
-  is_constant: bool,
+  maybe_constant_latent: Option<L>,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
-  write_to: WriteTo,
 
   // mutable state
   state: State<L>,
@@ -92,38 +62,19 @@ macro_rules! impl_specialized_decompress_offsets {
       base_bit_idx: u32,
       offset_bits_csum: &[u32],
       offset_bits: &[u32],
-      write_to: WriteTo,
-      latents: &mut [$t],
       dst: &mut [$t],
     ) {
-      match write_to {
-        WriteTo::Scratch => {
-          for i in 0..FULL_BATCH_N {
-            let bit_idx = base_bit_idx + offset_bits_csum[i];
-            let byte_idx = bit_idx / 8;
-            let bits_past_byte = bit_idx % 8;
-            latents[i] = latents[i].wrapping_add(bit_reader::$read(
-              src,
-              byte_idx as usize,
-              bits_past_byte,
-              offset_bits[i],
-            ) as $t);
-          }
-        }
-        WriteTo::Dst => {
-          let batch_n = dst.len();
-          for i in 0..batch_n {
-            let bit_idx = base_bit_idx + offset_bits_csum[i];
-            let byte_idx = bit_idx / 8;
-            let bits_past_byte = bit_idx % 8;
-            dst[i] = latents[i].wrapping_add(bit_reader::$read(
-              src,
-              byte_idx as usize,
-              bits_past_byte,
-              offset_bits[i],
-            ) as $t);
-          }
-        }
+      let batch_n = dst.len();
+      for i in 0..batch_n {
+        let bit_idx = base_bit_idx + offset_bits_csum[i];
+        let byte_idx = bit_idx / 8;
+        let bits_past_byte = bit_idx % 8;
+        dst[i] = dst[i].wrapping_add(bit_reader::$read(
+          src,
+          byte_idx as usize,
+          bits_past_byte,
+          offset_bits[i],
+        ) as $t);
       }
     }
   };
@@ -139,9 +90,13 @@ impl_specialized_decompress_offsets!(
 );
 
 impl<L: Latent> PageLatentDecompressor<L> {
+  pub fn make_external_scratch(&self) -> ScratchArray<L> {
+    ScratchArray([self.maybe_constant_latent.unwrap_or_default(); FULL_BATCH_N])
+  }
+
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
-  unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader) {
+  unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader, dst: &mut [L]) {
     // At each iteration, this loads a single u64 and has all ANS decoders
     // read a single symbol from it.
     // Therefore it requires that ANS_INTERLEAVING * MAX_BITS_PER_ANS <= 57.
@@ -171,9 +126,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
           let lower = unsafe { *lowers.get_unchecked($state_idx as usize) };
           let offset_bits = node.offset_bits as Bitlen;
-          self
-            .state
-            .set_scratch(i, offset_bit_idx, offset_bits, lower);
+          self.state.set_scratch(i, offset_bit_idx, offset_bits);
+          *dst.get_unchecked_mut(i) = lower;
           bits_past_byte += bits_to_read;
           offset_bit_idx += offset_bits;
           $state_idx = node.next_state_idx_base as AnsState + ans_val;
@@ -193,7 +147,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
   // This implementation handles arbitrary batch size and looks simpler, but is
   // slower, so we only use it at the end of the page.
   #[inline(never)]
-  unsafe fn decompress_ans_symbols(&mut self, reader: &mut BitReader, batch_n: usize) {
+  unsafe fn decompress_ans_symbols(
+    &mut self,
+    reader: &mut BitReader,
+    batch_n: usize,
+    dst: &mut [L],
+  ) {
     let src = reader.src;
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
@@ -210,9 +169,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
       let lower = unsafe { *self.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
-      self
-        .state
-        .set_scratch(i, offset_bit_idx, offset_bits, lower);
+      self.state.set_scratch(i, offset_bit_idx, offset_bits);
+      *dst.get_unchecked_mut(i) = lower;
       bits_past_byte += bits_to_read;
       offset_bit_idx += offset_bits;
       state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;
@@ -225,31 +183,20 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
-  pub unsafe fn decompress_batch_pre_delta(
-    &mut self,
-    reader: &mut BitReader,
-    limit: usize,
-    dst: &mut [L],
-  ) {
-    let batch_n = match self.write_to {
-      WriteTo::Scratch => limit.min(FULL_BATCH_N),
-      WriteTo::Dst => dst.len(),
-    };
-    if batch_n == 0 || (matches!(self.write_to, WriteTo::Scratch) && self.is_constant) {
+  pub unsafe fn decompress_batch_pre_delta(&mut self, reader: &mut BitReader, dst: &mut [L]) {
+    let batch_n = dst.len();
+    if batch_n == 0 {
       return;
     }
 
     assert!(batch_n <= FULL_BATCH_N);
     if self.needs_ans {
       if batch_n == FULL_BATCH_N {
-        self.decompress_full_ans_symbols(reader);
+        self.decompress_full_ans_symbols(reader, dst);
       } else {
-        self.decompress_ans_symbols(reader, batch_n);
+        self.decompress_ans_symbols(reader, batch_n, dst);
       }
-    } else if matches!(self.write_to, WriteTo::Scratch) {
-      self.state.latents.fill(self.state_lowers[0]);
     }
-
     // We want to read the offsets for each latent type as fast as possible.
     // Depending on the number of bits per offset, we can read them in
     // different chunk sizes. We use the smallest chunk size that can hold
@@ -266,18 +213,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
           base_bit_idx as u32,
           &self.state.offset_bits_csum_scratch.0,
           &self.state.offset_bits_scratch.0,
-          self.write_to,
-          mem::transmute::<&mut [L], &mut [$t]>(self.state.latents.0.as_mut_slice()),
           mem::transmute::<&mut [L], &mut [$t]>(dst),
         )
       };
     }
     match (self.bytes_per_offset, L::BITS) {
-      (0, _) => {
-        if matches!(self.write_to, WriteTo::Dst) {
-          dst.copy_from_slice(&self.state.latents[..batch_n])
-        }
-      }
+      (0, _) => (),
       (1..=4, 16) => run!(decompress_offsets_u16_4, u16),
       (1..=4, 32) => run!(decompress_offsets_u32_4, u32),
       (5..=8, 32) => run!(decompress_offsets_u32_8, u32),
@@ -313,21 +254,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let pre_delta_limit =
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
     let pre_delta_len = dst.len().min(pre_delta_limit);
-    self.decompress_batch_pre_delta(
-      reader,
-      pre_delta_limit,
-      &mut dst[..pre_delta_len],
-    );
-
-    let delta_dst = match self.write_to {
-      WriteTo::Scratch => &mut self.state.latents[..dst.len()],
-      WriteTo::Dst => dst,
-    };
+    self.decompress_batch_pre_delta(reader, &mut dst[..pre_delta_len]);
 
     match self.delta_encoding {
       DeltaEncoding::None => Ok(()),
       DeltaEncoding::Consecutive(_) => {
-        delta::decode_consecutive_in_place(&mut self.state.delta_state, delta_dst);
+        delta::decode_consecutive_in_place(&mut self.state.delta_state, dst);
         Ok(())
       }
       DeltaEncoding::Lookback(config) => {
@@ -339,7 +271,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
           lookbacks,
           &mut self.state.delta_state_pos,
           &mut self.state.delta_state,
-          delta_dst,
+          dst,
         );
         if has_oob_lookbacks {
           Err(PcoError::corruption(
@@ -371,7 +303,6 @@ impl DynPageLatentDecompressor {
     delta_encoding: DeltaEncoding,
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
-    write_to: WriteTo,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
@@ -394,7 +325,6 @@ impl DynPageLatentDecompressor {
     let mut state = State {
       offset_bits_csum_scratch: ScratchArray([0; FULL_BATCH_N]),
       offset_bits_scratch: ScratchArray([0; FULL_BATCH_N]),
-      latents: ScratchArray([L::ZERO; FULL_BATCH_N]),
       ans_state_idxs: ans_final_state_idxs,
       delta_state: working_delta_state,
       delta_state_pos,
@@ -408,40 +338,35 @@ impl DynPageLatentDecompressor {
       for i in 0..FULL_BATCH_N {
         state.offset_bits_scratch[i] = bin.offset_bits;
         state.offset_bits_csum_scratch[i] = csum;
-        state.latents[i] = bin.lower;
         csum += bin.offset_bits;
       }
     }
 
-    let is_constant = bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None);
+    let maybe_constant_latent =
+      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
+        Some(bins[0].lower)
+      } else {
+        None
+      };
 
     let pld = PageLatentDecompressor {
       bytes_per_offset,
       state_lowers,
       needs_ans,
-      is_constant,
+      maybe_constant_latent,
       decoder,
       delta_encoding,
       state,
-      write_to,
     };
     Ok(Self::new(Box::new(pld)).unwrap())
   }
 
-  pub fn latents<'a>(&'a self) -> DynLatentSlice<'a> {
-    match self {
-      Self::U16(inner) => {
-        debug_assert!(matches!(inner.write_to, WriteTo::Scratch));
-        DynLatentSlice::U16(&*inner.state.latents)
+  pub fn make_external_scratch(&self) -> DynScratchArray {
+    match_latent_enum!(
+      self,
+      DynPageLatentDecompressor<L>(inner) => {
+        DynScratchArray::new(inner.make_external_scratch()).unwrap()
       }
-      Self::U32(inner) => {
-        debug_assert!(matches!(inner.write_to, WriteTo::Scratch));
-        DynLatentSlice::U32(&*inner.state.latents)
-      }
-      Self::U64(inner) => {
-        debug_assert!(matches!(inner.write_to, WriteTo::Scratch));
-        DynLatentSlice::U64(&*inner.state.latents)
-      }
-    }
+    )
   }
 }
