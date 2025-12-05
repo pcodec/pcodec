@@ -230,10 +230,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
         L::BITS
       ),
     }
-    let state = &mut self.state;
     let final_bit_idx = base_bit_idx
-      + state.offset_bits_csum_scratch[batch_n - 1] as usize
-      + state.offset_bits_scratch[batch_n - 1] as usize;
+      + self.state.offset_bits_csum_scratch[batch_n - 1] as usize
+      + self.state.offset_bits_scratch[batch_n - 1] as usize;
     reader.stale_byte_idx = final_bit_idx / 8;
     reader.bits_past_byte = final_bit_idx as Bitlen % 8;
   }
@@ -245,12 +244,6 @@ impl<L: Latent> PageLatentDecompressor<L> {
     n_remaining_in_page: usize,
     dst: &mut [L],
   ) -> PcoResult<()> {
-    // The data flow here is complicated and worth explaining. A PLD may be
-    // configured to write to either its own internal buffer (latents) or a
-    // provided dst. AND decoding always write to the internal buffers; offsets
-    // get written to the ultimate destination, and then delta encoding is done
-    // in place on the ultimate destination. If ANS or offset decoding or both
-    // are trivial, we can skip steps or fill with a constant value.
     assert!(dst.len() == FULL_BATCH_N);
     let pre_delta_limit =
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
