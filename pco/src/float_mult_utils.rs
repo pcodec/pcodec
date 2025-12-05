@@ -5,6 +5,7 @@ use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, MULT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::PrimaryLatentAndSavings;
 use crate::{int_mult_utils, sampling};
@@ -13,9 +14,9 @@ use crate::{int_mult_utils, sampling};
 pub(crate) fn join_latents<F: Float>(
   base: F,
   primary: &mut [F::L],
-  secondary: Option<&DynLatents>,
+  secondary: Option<DynLatentSlice>,
 ) {
-  let secondary = secondary.unwrap().downcast_ref::<F::L>().unwrap();
+  let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
   for (mult_and_dst, &adj) in primary.iter_mut().zip(secondary.iter()) {
     let unadjusted = F::int_float_from_latent(*mult_and_dst) * base;
     *mult_and_dst = unadjusted

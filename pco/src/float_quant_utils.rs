@@ -2,6 +2,7 @@ use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::int_mult_utils;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
@@ -11,9 +12,9 @@ use std::cmp;
 pub(crate) fn join_latents<F: Float>(
   k: Bitlen,
   primary: &mut [F::L],
-  secondary: Option<&DynLatents>,
+  secondary: Option<DynLatentSlice>,
 ) {
-  let secondary = secondary.unwrap().downcast_ref::<F::L>().unwrap();
+  let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;
@@ -247,7 +248,13 @@ mod test {
     let k: Bitlen = 5;
     let SplitLatents { primary, secondary } = split_latents(&nums, k);
     let mut primary = primary.downcast::<u64>().unwrap();
-    join_latents::<f64>(k, &mut primary, secondary.as_ref());
+    join_latents::<f64>(
+      k,
+      &mut primary,
+      secondary
+        .as_ref()
+        .map(|secondary| DynLatentSlice::U64(secondary.downcast_ref().unwrap())),
+    );
     assert_eq!(uints, primary);
   }
 

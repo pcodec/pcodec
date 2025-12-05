@@ -2,9 +2,10 @@ use std::mem;
 
 use crate::data_types::{unsigneds, ModeAndLatents, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, Mode};
 use crate::{describers, int_mult_utils, ChunkConfig};
 
 macro_rules! impl_signed {
@@ -38,7 +39,7 @@ macro_rules! impl_signed {
       fn to_latent_ordered(self) -> Self::L {
         self.wrapping_sub(Self::MIN) as $latent
       }
-      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<DynLatentSlice>) {
         match mode {
           Mode::Classic => (),
           Mode::IntMult(dyn_latent) => {

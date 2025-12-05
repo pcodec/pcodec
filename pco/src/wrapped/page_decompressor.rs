@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use better_io::BetterBufRead;
@@ -12,17 +11,12 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
+use crate::scratch_array::DynScratchArray;
 
 const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
-
-#[derive(Debug)]
-struct LatentScratch {
-  is_constant: bool,
-  dst: DynLatents,
-}
 
 struct PageDecompressorInner<R: BetterBufRead> {
   // immutable
@@ -34,8 +28,7 @@ struct PageDecompressorInner<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
   n_processed: usize,
   latent_decompressors: PerLatentVar<DynPageLatentDecompressor>,
-  delta_scratch: Option<LatentScratch>,
-  secondary_scratch: Option<LatentScratch>,
+  scratch: PerLatentVar<DynScratchArray>,
 }
 
 /// Holds metadata about a page and supports decompression.
@@ -44,26 +37,12 @@ pub struct PageDecompressor<T: Number, R: BetterBufRead> {
   phantom: PhantomData<T>,
 }
 
+#[inline(never)]
 fn convert_from_latents_to_numbers<T: Number>(dst: &mut [T]) {
   // we wrote the joined latents to dst, so we can convert them in place
   for l_and_dst in dst {
     *l_and_dst = T::from_latent_ordered(l_and_dst.transmute_to_latent());
   }
-}
-
-fn make_latent_scratch(pld: Option<&DynPageLatentDecompressor>) -> Option<LatentScratch> {
-  let pld = pld?;
-
-  match_latent_enum!(
-    pld,
-    DynPageLatentDecompressor<L>(inner) => {
-      let maybe_constant_value = inner.maybe_constant_value;
-      Some(LatentScratch {
-        is_constant: maybe_constant_value.is_some(),
-        dst: DynLatents::new(vec![maybe_constant_value.unwrap_or_default(); FULL_BATCH_N]).unwrap(),
-      })
-    }
-  )
 }
 
 fn make_latent_decompressors(
@@ -119,22 +98,20 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     let page_meta =
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
-    let mode = chunk_meta.mode;
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
-
-    let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
-    let secondary_scratch = make_latent_scratch(latent_decompressors.secondary.as_ref());
+    let scratch = latent_decompressors
+      .as_ref()
+      .map(|_key, pld| pld.make_external_scratch());
 
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
       n,
-      mode,
+      mode: chunk_meta.mode,
       delta_encoding: chunk_meta.delta_encoding,
       reader_builder,
       n_processed: 0,
       latent_decompressors,
-      delta_scratch,
-      secondary_scratch,
+      scratch,
     })
   }
 
@@ -153,23 +130,22 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   }
 
   fn decompress_batch(&mut self, dst: &mut [T]) -> PcoResult<()> {
+    // For hacky performance reasons, we write the primary latents out of place
+    // into the provded `dst`, but we write delta and secondary latents in place
+    // into buffers stored by their respective PLDs. This helps to balance
+    // instructions with memory bandwidth on various types of hardware. Then we
+    // join the primary and secondary latents in place in dst.
     let batch_n = dst.len();
     let inner = &mut self.inner;
-    let n = inner.n;
     let n_remaining = inner.n_remaining();
-    let mode = inner.mode;
 
     // DELTA LATENTS
-    if let Some(LatentScratch {
-      is_constant: false,
-      dst,
-    }) = &mut inner.delta_scratch
-    {
-      let dyn_pld = inner.latent_decompressors.delta.as_mut().unwrap();
+    if let Some(dyn_pld) = inner.latent_decompressors.delta.as_mut() {
       let limit = min(
         n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
         batch_n,
       );
+      let delta_scratch = inner.scratch.delta.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
@@ -180,49 +156,58 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
             // skip straight to the inner PageLatentDecompressor
             pld.decompress_batch_pre_delta(
               reader,
-              &mut dst.downcast_mut::<L>().unwrap()[..limit]
+              limit,
+              &mut delta_scratch.downcast_mut::<L>().unwrap().0,
             )
           }
         );
         Ok(())
       })?;
     }
-    let delta_latents = inner.delta_scratch.as_ref().map(|scratch| &scratch.dst);
+    let delta_latents = inner.scratch.delta.as_ref().map(|scratch| scratch.slice());
 
     // PRIMARY LATENTS
     inner.reader_builder.with_reader(|reader| unsafe {
-      let primary_dst = T::transmute_to_latents(dst);
-      let dyn_pld = inner
+      let pld = inner
         .latent_decompressors
         .primary
         .downcast_mut::<T::L>()
         .unwrap();
-      dyn_pld.decompress_batch(
-        delta_latents,
-        n_remaining,
-        reader,
-        primary_dst,
-      )
+      // As long as dst is long enough, we decompress primary latents directly
+      // into dst to improve performance.
+      let dst_as_latents = T::transmute_to_latents(dst);
+      if batch_n == FULL_BATCH_N {
+        pld.decompress_batch(
+          &delta_latents,
+          reader,
+          n_remaining,
+          dst_as_latents,
+        )?;
+      } else {
+        let primary_scratch = &mut inner.scratch.primary.downcast_mut::<T::L>().unwrap().0;
+        pld.decompress_batch(
+          &delta_latents,
+          reader,
+          n_remaining,
+          primary_scratch,
+        )?;
+        dst_as_latents.copy_from_slice(&primary_scratch[..batch_n]);
+      }
+      Ok(())
     })?;
 
     // SECONDARY LATENTS
-    if let Some(LatentScratch {
-      is_constant: false,
-      dst,
-    }) = &mut inner.secondary_scratch
-    {
-      let dyn_pld = inner.latent_decompressors.secondary.as_mut().unwrap();
+    if let Some(dyn_pld) = inner.latent_decompressors.secondary.as_mut() {
+      let secondary_scratch = inner.scratch.secondary.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
           DynPageLatentDecompressor<L>(pld) => {
-            // We never apply delta encoding to delta latents, so we just
-            // skip straight to the inner PageLatentDecompressor
             pld.decompress_batch(
-              delta_latents,
-              n_remaining,
+              &delta_latents,
               reader,
-              &mut dst.downcast_mut::<L>().unwrap()[..batch_n]
+              n_remaining,
+              &mut secondary_scratch.downcast_mut::<L>().unwrap().0,
             )
           }
         )
@@ -230,14 +215,18 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     }
 
     T::join_latents(
-      mode,
+      inner.mode,
       T::transmute_to_latents(dst),
-      inner.secondary_scratch.as_ref().map(|scratch| &scratch.dst),
+      inner
+        .scratch
+        .secondary
+        .as_ref()
+        .map(|scratch| scratch.slice()),
     );
     convert_from_latents_to_numbers(dst);
 
     inner.n_processed += batch_n;
-    if inner.n_processed == n {
+    if inner.n_processed == inner.n {
       inner.reader_builder.with_reader(|reader| {
         reader.drain_empty_byte("expected trailing bits at end of page to be empty")
       })?;

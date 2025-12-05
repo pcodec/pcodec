@@ -6,6 +6,7 @@ use std::mem;
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, Number};
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::metadata::DynLatents;
 use crate::sampling::{self, PrimaryLatentAndSavings};
 
@@ -36,8 +37,12 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
 }
 
 #[inline(never)]
-pub(crate) fn join_latents<L: Latent>(base: L, primary: &mut [L], secondary: Option<&DynLatents>) {
-  let secondary = secondary.unwrap().downcast_ref::<L>().unwrap();
+pub(crate) fn join_latents<L: Latent>(
+  base: L,
+  primary: &mut [L],
+  secondary: Option<DynLatentSlice>,
+) {
+  let secondary = secondary.unwrap().downcast::<L>().unwrap();
   for (mult_and_dst, &adj) in primary.iter_mut().zip(secondary.iter()) {
     *mult_and_dst = (*mult_and_dst * base).wrapping_add(adj);
   }
@@ -269,7 +274,7 @@ mod tests {
     join_latents(
       base,
       &mut primary,
-      DynLatents::new(secondary).as_ref(),
+      Some(DynLatentSlice::U32(&secondary)),
     );
 
     assert_eq!(primary, nums);

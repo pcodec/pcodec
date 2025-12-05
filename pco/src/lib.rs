@@ -42,6 +42,7 @@ mod compression_intermediates;
 mod compression_table;
 mod constants;
 mod delta;
+mod dyn_latent_slice;
 mod float_mult_utils;
 mod float_quant_utils;
 mod histograms;
@@ -51,6 +52,7 @@ mod page_latent_decompressor;
 mod progress;
 mod read_write_uint;
 mod sampling;
+mod scratch_array;
 mod sort_utils;
 
 #[cfg(test)]

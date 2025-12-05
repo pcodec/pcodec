@@ -56,39 +56,23 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   //    shift by is U::BITS - 8, which is safe.
 
   match READ_BYTES {
-    4 => read_u32_at(src, byte_idx, bits_past_byte, n),
-    8 => read_u64_at(src, byte_idx, bits_past_byte, n),
+    4 => U::from_u32(read_u32_at(src, byte_idx, bits_past_byte, n)),
+    8 => U::from_u64(read_u64_at(src, byte_idx, bits_past_byte, n)),
     15 => read_almost_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   }
 }
 
 #[inline]
-unsafe fn read_u32_at<U: ReadWriteUint>(
-  src: &[u8],
-  byte_idx: usize,
-  bits_past_byte: Bitlen,
-  n: Bitlen,
-) -> U {
+pub unsafe fn read_u32_at(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen, n: Bitlen) -> u32 {
   debug_assert!(n <= 25);
-  U::from_u32(bits::lowest_bits_fast(
-    u32_at(src, byte_idx) >> bits_past_byte,
-    n,
-  ))
+  bits::lowest_bits_fast(u32_at(src, byte_idx) >> bits_past_byte, n)
 }
 
 #[inline]
-unsafe fn read_u64_at<U: ReadWriteUint>(
-  src: &[u8],
-  byte_idx: usize,
-  bits_past_byte: Bitlen,
-  n: Bitlen,
-) -> U {
+pub unsafe fn read_u64_at(src: &[u8], byte_idx: usize, bits_past_byte: Bitlen, n: Bitlen) -> u64 {
   debug_assert!(n <= 57);
-  U::from_u64(bits::lowest_bits_fast(
-    u64_at(src, byte_idx) >> bits_past_byte,
-    n,
-  ))
+  bits::lowest_bits_fast(u64_at(src, byte_idx) >> bits_past_byte, n)
 }
 
 #[inline]
@@ -103,6 +87,16 @@ unsafe fn read_almost_u64x2_at<U: ReadWriteUint>(
   let processed = 56 - bits_past_byte;
   let second_word = U::from_u64(u64_at(src, byte_idx + 7)) << processed;
   bits::lowest_bits(first_word | second_word, n)
+}
+
+#[inline]
+pub unsafe fn read_wide_u64_at(
+  src: &[u8],
+  byte_idx: usize,
+  bits_past_byte: Bitlen,
+  n: Bitlen,
+) -> u64 {
+  read_almost_u64x2_at(src, byte_idx, bits_past_byte, n)
 }
 
 pub struct BitReader<'a> {
