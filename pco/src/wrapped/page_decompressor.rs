@@ -11,7 +11,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, LatentVarKey, Mode};
+use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
 use crate::scratch_array::DynScratchArray;

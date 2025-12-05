@@ -83,8 +83,10 @@ impl_specialized_decompress_offsets!(
 );
 
 impl<L: Latent> PageLatentDecompressor<L> {
-  pub fn make_external_scratch(&self) -> ScratchArray<L> {
-    ScratchArray([self.maybe_constant_latent.unwrap_or_default(); FULL_BATCH_N])
+  pub fn make_external_scratch(&self) -> Box<ScratchArray<L>> {
+    Box::new(ScratchArray(
+      [self.maybe_constant_latent.unwrap_or_default(); FULL_BATCH_N],
+    ))
   }
 
   // This implementation handles only a full batch, but is faster.

@@ -24,17 +24,19 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
   }
 }
 
+type Boxed<L> = Box<ScratchArray<L>>;
+
 define_latent_enum!(
   #[derive(Clone, Debug)]
-  pub DynScratchArray(ScratchArray)
+  pub DynScratchArray(Boxed)
 );
 
 impl DynScratchArray {
   pub fn slice<'a>(&'a self) -> DynLatentSlice<'a> {
     match self {
-      Self::U16(inner) => DynLatentSlice::U16(&**inner),
-      Self::U32(inner) => DynLatentSlice::U32(&**inner),
-      Self::U64(inner) => DynLatentSlice::U64(&**inner),
+      Self::U16(inner) => DynLatentSlice::U16(&inner.0),
+      Self::U32(inner) => DynLatentSlice::U32(&inner.0),
+      Self::U64(inner) => DynLatentSlice::U64(&inner.0),
     }
   }
 }
