@@ -30,7 +30,7 @@ define_latent_enum!(
 );
 
 impl DynScratchArray {
-  pub fn slice(&self) -> DynLatentSlice {
+  pub fn slice<'a>(&'a self) -> DynLatentSlice<'a> {
     match self {
       Self::U16(inner) => DynLatentSlice::U16(&**inner),
       Self::U32(inner) => DynLatentSlice::U32(&**inner),

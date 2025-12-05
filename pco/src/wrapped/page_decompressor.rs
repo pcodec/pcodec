@@ -28,8 +28,7 @@ struct PageDecompressorInner<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
   n_processed: usize,
   latent_decompressors: PerLatentVar<DynPageLatentDecompressor>,
-  delta_scratch: Option<DynScratchArray>,
-  secondary_scratch: Option<DynScratchArray>,
+  scratch: PerLatentVar<DynScratchArray>,
 }
 
 /// Holds metadata about a page and supports decompression.
@@ -100,14 +99,9 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
-    let delta_scratch = latent_decompressors
-      .delta
+    let scratch = latent_decompressors
       .as_ref()
-      .map(|pld| pld.make_external_scratch());
-    let secondary_scratch = latent_decompressors
-      .secondary
-      .as_ref()
-      .map(|pld| pld.make_external_scratch());
+      .map(|_key, pld| pld.make_external_scratch());
 
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
@@ -117,8 +111,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder,
       n_processed: 0,
       latent_decompressors,
-      delta_scratch,
-      secondary_scratch,
+      scratch,
     })
   }
 
@@ -152,7 +145,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
         batch_n,
       );
-      let delta_scratch = inner.delta_scratch.as_mut().unwrap();
+      let delta_scratch = inner.scratch.delta.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
@@ -163,14 +156,15 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
             // skip straight to the inner PageLatentDecompressor
             pld.decompress_batch_pre_delta(
               reader,
-              &mut delta_scratch.downcast_mut::<L>().unwrap().0[..limit],
+              limit,
+              &mut delta_scratch.downcast_mut::<L>().unwrap().0,
             )
           }
         );
         Ok(())
       })?;
     }
-    let delta_latents = inner.delta_scratch.as_ref().map(|scratch| scratch.slice());
+    let delta_latents = inner.scratch.delta.as_ref().map(|scratch| scratch.slice());
 
     // PRIMARY LATENTS
     inner.reader_builder.with_reader(|reader| unsafe {
@@ -179,17 +173,32 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         .primary
         .downcast_mut::<T::L>()
         .unwrap();
-      pld.decompress_batch(
-        &delta_latents,
-        reader,
-        n_remaining,
-        T::transmute_to_latents(dst),
-      )
+      // As long as dst is long enough, we decompress primary latents directly
+      // into dst to improve performance.
+      let dst_as_latents = T::transmute_to_latents(dst);
+      if batch_n == FULL_BATCH_N {
+        pld.decompress_batch(
+          &delta_latents,
+          reader,
+          n_remaining,
+          dst_as_latents,
+        )?;
+      } else {
+        let primary_scratch = &mut inner.scratch.primary.downcast_mut::<T::L>().unwrap().0;
+        pld.decompress_batch(
+          &delta_latents,
+          reader,
+          n_remaining,
+          primary_scratch,
+        )?;
+        dst_as_latents.copy_from_slice(&primary_scratch[..batch_n]);
+      }
+      Ok(())
     })?;
 
     // SECONDARY LATENTS
     if let Some(dyn_pld) = inner.latent_decompressors.secondary.as_mut() {
-      let secondary_scratch = inner.secondary_scratch.as_mut().unwrap();
+      let secondary_scratch = inner.scratch.secondary.as_mut().unwrap();
       inner.reader_builder.with_reader(|reader| unsafe {
         match_latent_enum!(
           dyn_pld,
@@ -209,7 +218,8 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       inner.mode,
       T::transmute_to_latents(dst),
       inner
-        .secondary_scratch
+        .scratch
+        .secondary
         .as_ref()
         .map(|scratch| scratch.slice()),
     );

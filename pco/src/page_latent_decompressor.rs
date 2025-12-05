@@ -58,8 +58,7 @@ macro_rules! impl_specialized_decompress_offsets {
       offset_bits: &[u32],
       dst: &mut [$t],
     ) {
-      let batch_n = dst.len();
-      for i in 0..batch_n {
+      for i in 0..FULL_BATCH_N {
         let bit_idx = base_bit_idx + offset_bits_csum[i];
         let byte_idx = bit_idx / 8;
         let bits_past_byte = bit_idx % 8;
@@ -177,13 +176,17 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
-  pub unsafe fn decompress_batch_pre_delta(&mut self, reader: &mut BitReader, dst: &mut [L]) {
-    let batch_n = dst.len();
-    if batch_n == 0 {
+  pub unsafe fn decompress_batch_pre_delta(
+    &mut self,
+    reader: &mut BitReader,
+    limit: usize,
+    dst: &mut [L],
+  ) {
+    if limit == 0 {
       return;
     }
+    let batch_n = limit.min(FULL_BATCH_N);
 
-    assert!(batch_n <= FULL_BATCH_N);
     if let Some(constant_lower) = self.maybe_constant_lower {
       dst.fill(constant_lower);
     } else {
@@ -248,10 +251,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // get written to the ultimate destination, and then delta encoding is done
     // in place on the ultimate destination. If ANS or offset decoding or both
     // are trivial, we can skip steps or fill with a constant value.
+    assert!(dst.len() == FULL_BATCH_N);
     let pre_delta_limit =
       n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
-    let pre_delta_len = dst.len().min(pre_delta_limit);
-    self.decompress_batch_pre_delta(reader, &mut dst[..pre_delta_len]);
+    self.decompress_batch_pre_delta(reader, pre_delta_limit, dst);
 
     match self.delta_encoding {
       DeltaEncoding::None => Ok(()),
