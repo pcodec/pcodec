@@ -3,6 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
+use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
 use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
@@ -54,20 +55,14 @@ impl<L: Latent> State<L> {
 }
 
 #[derive(Clone, Debug)]
-pub struct PageLatentDecompressor<L: Latent> {
+pub struct PageLatentDecompressor<'a, L: Latent> {
   // known information about this latent variable
-  bytes_per_offset: usize,
-  state_lowers: Vec<L>,
-  needs_ans: bool,
-  decoder: ans::Decoder,
-  delta_encoding: DeltaEncoding,
-  pub maybe_constant_value: Option<L>,
-
+  cld: &'a ChunkLatentDecompressor<L>,
   // mutable state
   state: State<L>,
 }
 
-impl<L: Latent> PageLatentDecompressor<L> {
+impl<'a, L: Latent> PageLatentDecompressor<'a, L> {
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
   unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader) {
@@ -77,13 +72,14 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // Additionally, we're unpacking all ANS states using the fact that
     // ANS_INTERLEAVING == 4.
     let src = reader.src;
+    let cld = &self.cld;
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let ans_nodes = self.decoder.nodes.as_slice();
-    let lowers = self.state_lowers.as_slice();
+    let ans_nodes = cld.decoder.nodes.as_slice();
+    let lowers = cld.state_lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -134,10 +130,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = unsafe { self.decoder.nodes.get_unchecked(state_idx) };
+      let node = unsafe { self.cld.decoder.nodes.get_unchecked(state_idx) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = unsafe { *self.state_lowers.get_unchecked(state_idx) };
+      let lower = unsafe { *self.cld.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state
@@ -212,7 +208,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       return;
     }
 
-    if self.needs_ans {
+    if self.cld.needs_ans {
       let batch_n = dst.len();
       assert!(batch_n <= FULL_BATCH_N);
 
@@ -231,7 +227,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
-    match self.bytes_per_offset {
+    match self.cld.bytes_per_offset {
       // all
       0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
 
@@ -245,7 +241,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
-        self.bytes_per_offset,
+        self.cld.bytes_per_offset,
         L::BITS
       ),
     }
@@ -259,7 +255,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     dst: &mut [L],
   ) -> PcoResult<()> {
     let n_remaining_pre_delta =
-      n_remaining_in_page.saturating_sub(self.delta_encoding.n_latents_per_state());
+      n_remaining_in_page.saturating_sub(self.cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = if dst.len() <= n_remaining_pre_delta {
       dst.len()
     } else {
