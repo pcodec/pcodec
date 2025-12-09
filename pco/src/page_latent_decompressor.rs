@@ -7,7 +7,8 @@ use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
-use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
+use crate::metadata::{bins, Bin, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
@@ -60,7 +61,7 @@ pub struct PageLatentDecompressor<L: Latent> {
   state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
-  delta_encoding: DeltaEncoding,
+  delta_encoding: LatentVarDeltaEncoding,
   pub maybe_constant_value: Option<L>,
 
   // mutable state
@@ -272,12 +273,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     self.decompress_batch_pre_delta(reader, &mut dst[..pre_delta_len]);
 
     match self.delta_encoding {
-      DeltaEncoding::None => Ok(()),
-      DeltaEncoding::Consecutive(_) => {
+      LatentVarDeltaEncoding::NoOp => Ok(()),
+      LatentVarDeltaEncoding::Consecutive(_) => {
         delta::decode_consecutive_in_place(&mut self.state.delta_state, dst);
         Ok(())
       }
-      DeltaEncoding::Lookback(config) => {
+      LatentVarDeltaEncoding::Lookback(config) => {
         let has_oob_lookbacks = delta::decode_with_lookbacks_in_place(
           config,
           delta_latents
@@ -315,7 +316,7 @@ impl DynPageLatentDecompressor {
   pub fn create<L: Latent>(
     ans_size_log: Bitlen,
     bins: &[Bin<L>],
-    delta_encoding: DeltaEncoding,
+    delta_encoding: LatentVarDeltaEncoding,
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
@@ -331,8 +332,10 @@ impl DynPageLatentDecompressor {
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
-      DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
-      DeltaEncoding::Lookback(config) => {
+      LatentVarDeltaEncoding::NoOp | LatentVarDeltaEncoding::Consecutive(_) => {
+        (stored_delta_state, 0)
+      }
+      LatentVarDeltaEncoding::Lookback(config) => {
         delta::new_lookback_window_buffer_and_pos(config, &stored_delta_state)
       }
     };
@@ -360,7 +363,7 @@ impl DynPageLatentDecompressor {
     }
 
     let maybe_constant_value =
-      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
+      if bins::are_trivial(bins) && matches!(delta_encoding, LatentVarDeltaEncoding::NoOp) {
         bins.first().map(|bin| bin.lower)
       } else {
         None

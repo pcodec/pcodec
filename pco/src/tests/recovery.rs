@@ -370,7 +370,7 @@ fn test_lookback_delta_encoding() -> PcoResult<()> {
   )?;
   assert!(matches!(
     meta.delta_encoding,
-    DeltaEncoding::Lookback(_)
+    DeltaEncoding::Lookback { .. }
   ));
   let decompressed = simple_decompress(&compressed)?;
   assert_nums_eq(&decompressed, &nums, "trivial_first_latent")?;

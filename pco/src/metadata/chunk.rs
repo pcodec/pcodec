@@ -54,7 +54,7 @@ impl ChunkMeta {
   pub(crate) fn validate_delta_encoding(&self) -> PcoResult<()> {
     let delta_latent_var = &self.per_latent_var.delta;
     match (&self.delta_encoding, delta_latent_var) {
-      (DeltaEncoding::Lookback(config), Some(latent_var)) => {
+      (DeltaEncoding::Lookback { config, .. }, Some(latent_var)) => {
         let window_n = config.window_n() as DeltaLookback;
         let bins = latent_var.bins.downcast_ref::<DeltaLookback>().unwrap();
         let maybe_corrupt_bin = bins
@@ -69,7 +69,7 @@ impl ChunkMeta {
           Ok(())
         }
       }
-      (DeltaEncoding::None, None) | (DeltaEncoding::Consecutive(_), None) => Ok(()),
+      (DeltaEncoding::NoOp, None) | (DeltaEncoding::Consecutive { .. }, None) => Ok(()),
       _ => unreachable!(),
     }
   }
@@ -148,7 +148,6 @@ mod tests {
   use crate::constants::ANS_INTERLEAVING;
   use crate::data_types::Latent;
   use crate::macros::match_latent_enum;
-  use crate::metadata::delta_encoding::DeltaConsecutiveConfig;
   use crate::metadata::dyn_bins::DynBins;
   use crate::metadata::dyn_latents::DynLatents;
   use crate::metadata::page::PageMeta;
@@ -199,10 +198,10 @@ mod tests {
   fn exact_size_binless() -> PcoResult<()> {
     let meta = ChunkMeta {
       mode: Mode::Classic,
-      delta_encoding: DeltaEncoding::Consecutive(DeltaConsecutiveConfig {
+      delta_encoding: DeltaEncoding::Consecutive {
         order: 5,
         secondary_uses_delta: false,
-      }),
+      },
       per_latent_var: PerLatentVar {
         delta: None,
         primary: ChunkLatentVarMeta {
@@ -220,7 +219,7 @@ mod tests {
   fn exact_size_trivial() -> PcoResult<()> {
     let meta = ChunkMeta {
       mode: Mode::Classic,
-      delta_encoding: DeltaEncoding::None,
+      delta_encoding: DeltaEncoding::NoOp,
       per_latent_var: PerLatentVar {
         delta: None,
         primary: ChunkLatentVarMeta {
@@ -242,10 +241,10 @@ mod tests {
   fn exact_size_float_mult() -> PcoResult<()> {
     let meta = ChunkMeta {
       mode: Mode::FloatMult(DynLatent::U32(777_u32)),
-      delta_encoding: DeltaEncoding::Consecutive(DeltaConsecutiveConfig {
+      delta_encoding: DeltaEncoding::Consecutive {
         order: 3,
         secondary_uses_delta: false,
-      }),
+      },
       per_latent_var: PerLatentVar {
         delta: None,
         primary: ChunkLatentVarMeta {
