@@ -1,7 +1,6 @@
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
 use crate::macros::match_latent_enum;
-use crate::metadata::delta_encoding::LatentVarDeltaEncoding::*;
 use crate::metadata::delta_encoding::{DeltaLookbackConfig, LatentVarDeltaEncoding};
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::DeltaEncoding;
@@ -328,11 +327,11 @@ pub fn encode_in_place(
     latents,
     DynLatents<L>(inner) => {
       let delta_state = match delta_encoding {
-        NoOp => Vec::<L>::new(),
-        Consecutive(order) => {
+        LatentVarDeltaEncoding::NoOp => Vec::<L>::new(),
+        LatentVarDeltaEncoding::Consecutive(order) => {
           encode_consecutive_in_place(*order, &mut inner[range])
         }
-        Lookback(config) => {
+        LatentVarDeltaEncoding::Lookback(config) => {
           let lookbacks = delta_latents.unwrap().downcast_ref::<DeltaLookback>().unwrap();
           encode_with_lookbacks_in_place(*config, lookbacks, &mut inner[range])
         }
