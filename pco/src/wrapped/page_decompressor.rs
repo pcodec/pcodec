@@ -12,7 +12,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, DynBins, DynLatents, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
 
@@ -27,7 +27,7 @@ struct LatentScratch {
 struct PageDecompressorInner<R: BetterBufRead> {
   // immutable
   mode: Mode,
-  delta_encoding: DeltaEncoding,
+  n_latents_per_state: usize,
 
   // mutable
   reader_builder: BitReaderBuilder<R>,
@@ -118,7 +118,11 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     let page_meta =
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
-    let mode = chunk_meta.mode;
+    let mode = chunk_meta.mode.clone();
+    let n_latents_per_state = chunk_meta
+      .delta_encoding
+      .for_latent_var(crate::metadata::LatentVarKey::Primary)
+      .n_latents_per_state();
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
 
     let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
@@ -127,7 +131,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
       mode,
-      delta_encoding: chunk_meta.delta_encoding,
+      n_latents_per_state,
       reader_builder,
       n_remaining: n,
       latent_decompressors,
@@ -150,7 +154,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     let batch_n = dst.len();
     let inner = &mut self.inner;
     let n_remaining = inner.n_remaining;
-    let mode = inner.mode;
+    let mode = &inner.mode;
 
     // DELTA LATENTS
     if let Some(LatentScratch {
@@ -160,7 +164,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     {
       let dyn_pld = inner.latent_decompressors.delta.as_mut().unwrap();
       let limit = min(
-        n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
+        n_remaining.saturating_sub(inner.n_latents_per_state),
         batch_n,
       );
       inner.reader_builder.with_reader(|reader| unsafe {
