@@ -31,6 +31,6 @@ fn test_stack_sizes() {
   );
   assert_eq!(
     mem::size_of::<PageDecompressor<u64, &[u8]>>(),
-    240
+    232
   );
 }
