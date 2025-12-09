@@ -26,13 +26,12 @@ struct LatentScratch {
 
 struct PageDecompressorInner<R: BetterBufRead> {
   // immutable
-  n: usize,
   mode: Mode,
   delta_encoding: DeltaEncoding,
 
   // mutable
   reader_builder: BitReaderBuilder<R>,
-  n_processed: usize,
+  n_remaining: usize,
   latent_decompressors: PerLatentVar<DynPageLatentDecompressor>,
   delta_scratch: Option<LatentScratch>,
   secondary_scratch: Option<LatentScratch>,
@@ -127,19 +126,14 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
 
     // we don't store the whole ChunkMeta because it can get large due to bins
     Ok(Self {
-      n,
       mode,
       delta_encoding: chunk_meta.delta_encoding,
       reader_builder,
-      n_processed: 0,
+      n_remaining: n,
       latent_decompressors,
       delta_scratch,
       secondary_scratch,
     })
-  }
-
-  fn n_remaining(&self) -> usize {
-    self.n - self.n_processed
   }
 }
 
@@ -155,8 +149,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   fn decompress_batch(&mut self, dst: &mut [T]) -> PcoResult<()> {
     let batch_n = dst.len();
     let inner = &mut self.inner;
-    let n = inner.n;
-    let n_remaining = inner.n_remaining();
+    let n_remaining = inner.n_remaining;
     let mode = inner.mode;
 
     // DELTA LATENTS
@@ -236,8 +229,8 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     );
     convert_from_latents_to_numbers(dst);
 
-    inner.n_processed += batch_n;
-    if inner.n_processed == n {
+    inner.n_remaining -= batch_n;
+    if inner.n_remaining == 0 {
       inner.reader_builder.with_reader(|reader| {
         reader.drain_empty_byte("expected trailing bits at end of page to be empty")
       })?;
@@ -254,7 +247,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
   pub fn decompress(&mut self, num_dst: &mut [T]) -> PcoResult<Progress> {
-    let n_remaining = self.inner.n_remaining();
+    let n_remaining = self.inner.n_remaining;
     if !num_dst.len().is_multiple_of(FULL_BATCH_N) && num_dst.len() < n_remaining {
       return Err(PcoError::invalid_argument(format!(
         "num_dst's length must either be a multiple of {} or be \
@@ -276,7 +269,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
 
     Ok(Progress {
       n_processed,
-      finished: self.inner.n_remaining() == 0,
+      finished: self.inner.n_remaining == 0,
     })
   }
 
