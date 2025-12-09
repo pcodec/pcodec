@@ -21,7 +21,7 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
 
   ChunkMeta {
     mode: Mode::Classic,
-    delta_encoding: DeltaEncoding::None,
+    delta_encoding: DeltaEncoding::NoOp,
     per_latent_var: PerLatentVar {
       delta: None,
       primary,
