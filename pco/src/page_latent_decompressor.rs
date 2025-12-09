@@ -3,12 +3,13 @@ use std::ops::{Deref, DerefMut};
 
 use crate::ans::{AnsState, Spec};
 use crate::bit_reader::BitReader;
-use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
+use crate::chunk_latent_decompressor::{self, ChunkLatentDecompressor};
 use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
-use crate::metadata::{bins, Bin, DeltaEncoding, DynLatents};
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
+use crate::metadata::{bins, Bin, DynLatents};
 use crate::{ans, bit_reader, delta, read_write_uint};
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
@@ -58,6 +59,7 @@ impl<L: Latent> State<L> {
 pub struct PageLatentDecompressor<'a, L: Latent> {
   // known information about this latent variable
   cld: &'a ChunkLatentDecompressor<L>,
+
   // mutable state
   state: State<L>,
 }
@@ -267,13 +269,13 @@ impl<'a, L: Latent> PageLatentDecompressor<'a, L> {
     };
     self.decompress_batch_pre_delta(reader, &mut dst[..pre_delta_len]);
 
-    match self.delta_encoding {
-      DeltaEncoding::None => Ok(()),
-      DeltaEncoding::Consecutive(_) => {
+    match self.cld.delta_encoding {
+      LatentVarDeltaEncoding::NoOp => Ok(()),
+      LatentVarDeltaEncoding::Consecutive(_) => {
         delta::decode_consecutive_in_place(&mut self.state.delta_state, dst);
         Ok(())
       }
-      DeltaEncoding::Lookback(config) => {
+      LatentVarDeltaEncoding::Lookback(config) => {
         let has_oob_lookbacks = delta::decode_with_lookbacks_in_place(
           config,
           delta_latents
@@ -299,36 +301,27 @@ impl<'a, L: Latent> PageLatentDecompressor<'a, L> {
 // Because the size of PageLatentDecompressor is enormous (largely due to
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
-// TODO: consider an arena for these?
-type BoxedPageLatentDecompressor<L> = Box<PageLatentDecompressor<L>>;
+// TODO: consider an arena for the scratch arrays?
+type BoxedPageLatentDecompressor<'a, L> = Box<PageLatentDecompressor<'a, L>>;
 
 define_latent_enum!(
   #[derive()]
   pub DynPageLatentDecompressor(BoxedPageLatentDecompressor)
 );
 
-impl DynPageLatentDecompressor {
+impl<'a> DynPageLatentDecompressor {
   pub fn create<L: Latent>(
-    ans_size_log: Bitlen,
+    cld: &'a ChunkLatentDecompressor<L>,
     bins: &[Bin<L>],
-    delta_encoding: DeltaEncoding,
+    delta_encoding: LatentVarDeltaEncoding,
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
-    let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
-    let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
-    let weights = bins::weights(bins);
-    let ans_spec = Spec::from_weights(ans_size_log, weights)?;
-    let state_lowers = ans_spec
-      .state_symbols
-      .iter()
-      .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
-      .collect();
-    let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
-
     let (working_delta_state, delta_state_pos) = match delta_encoding {
-      DeltaEncoding::None | DeltaEncoding::Consecutive(_) => (stored_delta_state, 0),
-      DeltaEncoding::Lookback(config) => {
+      LatentVarDeltaEncoding::NoOp | LatentVarDeltaEncoding::Consecutive(_) => {
+        (stored_delta_state, 0)
+      }
+      LatentVarDeltaEncoding::Lookback(config) => {
         delta::new_lookback_window_buffer_and_pos(config, &stored_delta_state)
       }
     };
@@ -342,8 +335,7 @@ impl DynPageLatentDecompressor {
       delta_state_pos,
     };
 
-    let needs_ans = bins.len() != 1;
-    if !needs_ans {
+    if !cld.needs_ans {
       // we optimize performance by setting state once and never again
       let bin = &bins[0];
       let mut csum = 0;
@@ -355,22 +347,7 @@ impl DynPageLatentDecompressor {
       }
     }
 
-    let maybe_constant_value =
-      if bins::are_trivial(bins) && matches!(delta_encoding, DeltaEncoding::None) {
-        bins.first().map(|bin| bin.lower)
-      } else {
-        None
-      };
-
-    let pld = PageLatentDecompressor {
-      bytes_per_offset,
-      state_lowers,
-      needs_ans,
-      decoder,
-      delta_encoding,
-      maybe_constant_value,
-      state,
-    };
+    let pld = PageLatentDecompressor { cld, state };
     Ok(Self::new(Box::new(pld)).unwrap())
   }
 }

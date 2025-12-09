@@ -13,8 +13,8 @@ fn test_stack_sizes() {
     mem::size_of::<ChunkLatentCompressor<u64>>(),
     144
   );
-  assert_eq!(mem::size_of::<ChunkDecompressor<u64>>(), 168);
-  assert_eq!(mem::size_of::<ChunkCompressor>(), 624);
+  assert_eq!(mem::size_of::<ChunkDecompressor<u64>>(), 160);
+  assert_eq!(mem::size_of::<ChunkCompressor>(), 616);
 
   // decompression
   assert_eq!(
@@ -31,6 +31,6 @@ fn test_stack_sizes() {
   );
   assert_eq!(
     mem::size_of::<PageDecompressor<u64, &[u8]>>(),
-    256
+    240
   );
 }

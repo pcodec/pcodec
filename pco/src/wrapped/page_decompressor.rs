@@ -6,15 +6,17 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
+use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::constants::{FULL_BATCH_N, PAGE_PADDING};
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, DynBins, DynLatents, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
+use crate::standalone::ChunkDecompressor;
 
 const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
 
@@ -27,8 +29,6 @@ struct LatentScratch {
 struct PageDecompressorInner<R: BetterBufRead> {
   // immutable
   n: usize,
-  mode: Mode,
-  delta_encoding: DeltaEncoding,
 
   // mutable
   reader_builder: BitReaderBuilder<R>,
@@ -120,6 +120,10 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
       reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
 
     let mode = chunk_meta.mode.clone();
+    let n_latents_per_state = chunk_meta
+      .delta_encoding
+      .for_latent_var(crate::metadata::LatentVarKey::Primary)
+      .n_latents_per_state();
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
 
     let delta_scratch = make_latent_scratch(latent_decompressors.delta.as_ref());
@@ -129,7 +133,7 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
     Ok(Self {
       n,
       mode,
-      delta_encoding: chunk_meta.delta_encoding.clone(),
+      n_latents_per_state,
       reader_builder,
       n_processed: 0,
       latent_decompressors,
@@ -143,11 +147,16 @@ impl<R: BetterBufRead> PageDecompressorInner<R> {
   }
 }
 
-impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
+impl<'a, T: Number, R: BetterBufRead> PageDecompressor<T, R> {
   #[inline(never)]
-  pub(crate) fn new(src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
+  pub(crate) fn new(
+    src: R,
+    chunk_meta: &ChunkMeta,
+    clds: &'a PerLatentVar<DynChunkLatentDecompressor>,
+    n: usize,
+  ) -> PcoResult<Self> {
     Ok(Self {
-      inner: PageDecompressorInner::new(src, chunk_meta, n)?,
+      inner: PageDecompressorInner::new(src, chunk_meta, clds, n)?,
       phantom: PhantomData::<T>,
     })
   }
@@ -167,7 +176,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     {
       let dyn_pld = inner.latent_decompressors.delta.as_mut().unwrap();
       let limit = min(
-        n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
+        n_remaining.saturating_sub(inner.n_latents_per_state),
         batch_n,
       );
       inner.reader_builder.with_reader(|reader| unsafe {
