@@ -140,6 +140,82 @@ macro_rules! build_dtype_macros {
           }
         }
       };
+      (#[$enum_attrs: meta] $vis: vis $name: ident<$life:lifetime>($container: ident)) => {
+        #[$enum_attrs]
+        #[non_exhaustive]
+        $vis enum $name<'a> {
+          $($variant($container<$life, $t>),)+
+        }
+
+        impl<'a> $name<'a> {
+          #[inline]
+          pub fn new<S: $constraint>(inner: $container<S>) -> Option<Self> {
+            let type_id = std::any::TypeId::of::<S>();
+            $(
+              if type_id == std::any::TypeId::of::<$t>() {
+                // Transmute doesn't work for containers whose size depends on T,
+                // so we use a hack from
+                // https://users.rust-lang.org/t/transmuting-a-generic-array/45645/6
+                let ptr = &inner as *const $container<S> as *const $container<$t>;
+                let typed = unsafe { ptr.read() };
+                std::mem::forget(inner);
+                return Some($name::$variant(typed));
+              }
+            )+
+            None
+          }
+
+          pub fn downcast<T: $constraint>(self) -> Option<$container<'a, T>> {
+            match self {
+              $(
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    // same hack from `new`
+                    let ptr = &inner as *const $container<$t> as *const $container<T>;
+                    let typed = unsafe { ptr.read() };
+                    std::mem::forget(inner);
+                    Some(typed)
+                  } else {
+                    None
+                  }
+                }
+              )+
+            }
+          }
+
+          pub fn downcast_ref<T: $constraint>(&self) -> Option<&$container<'a, T>> {
+            match self {
+              $(
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    unsafe {
+                      Some(std::mem::transmute::<_, &$container<T>>(inner))
+                    }
+                  } else {
+                    None
+                  }
+                }
+              )+
+            }
+          }
+
+          pub fn downcast_mut<T: $constraint>(&mut self) -> Option<&mut $container<'a, T>> {
+            match self {
+              $(
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    unsafe {
+                      Some(std::mem::transmute::<_, &mut $container<T>>(inner))
+                    }
+                  } else {
+                    None
+                  }
+                }
+              )+
+            }
+          }
+        }
+      };
     }
 
     $(#[$matcher_attrs])*
@@ -188,9 +264,15 @@ mod tests {
     }
   );
 
+  type Slice<'a, T> = &'a [T];
+
   define_enum!(
     #[derive(Clone, Debug)]
     MyEnum(Vec)
+  );
+  define_enum!(
+    #[derive()]
+    MySlice<'a>(Slice)
   );
 
   type Counter<T> = HashMap<T, usize>;
@@ -213,6 +295,18 @@ mod tests {
     assert_eq!(bit_size, 80);
     let x = x.downcast::<u16>().unwrap();
     assert_eq!(x[0], 1);
+  }
+
+  #[test]
+  fn test_lifetimes() {
+    let data: Vec<u32> = vec![1, 2, 3];
+    let slice = MySlice::new(&data).unwrap();
+    let sum = match_enum!(&slice, MySlice<L>(inner) => {
+      inner.iter().copied().sum::<L>() as u32
+    });
+    assert_eq!(sum, 6);
+    let downcasted = slice.downcast::<u32>().unwrap();
+    assert_eq!(downcasted, &data);
   }
 
   #[test]

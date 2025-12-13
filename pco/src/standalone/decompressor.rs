@@ -7,6 +7,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
+use crate::wrapped::PageDecompressorState;
 use crate::{bit_reader, wrapped};
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
@@ -211,7 +212,7 @@ impl FileDecompressor {
       .with_reader(|reader| unsafe { Ok(reader.read_usize(BITS_TO_ENCODE_N_ENTRIES) + 1) })?;
     let src = reader_builder.into_inner();
     let (inner_cd, src) = self.inner.chunk_decompressor::<T, R>(src)?;
-    let inner_pd = inner_cd.page_decompressor(src, n)?;
+    let inner_pd = PageDecompressorState::new(src, &inner_cd.inner, n)?;
 
     let res = ChunkDecompressor {
       inner_cd,
@@ -246,7 +247,7 @@ impl FileDecompressor {
 /// Holds metadata about a chunk and supports decompression.
 pub struct ChunkDecompressor<T: Number, R: BetterBufRead> {
   inner_cd: wrapped::ChunkDecompressor<T>,
-  inner_pd: wrapped::PageDecompressor<T, R>,
+  inner_pd: wrapped::PageDecompressorState<R>,
   n: usize,
   n_processed: usize,
 }
@@ -254,7 +255,7 @@ pub struct ChunkDecompressor<T: Number, R: BetterBufRead> {
 impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// Returns pre-computed information about the chunk.
   pub fn meta(&self) -> &ChunkMeta {
-    &self.inner_cd.meta
+    self.inner_cd.meta()
   }
 
   /// Returns the count of numbers in the chunk.
@@ -270,7 +271,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
   pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    let progress = self.inner_pd.decompress(dst)?;
+    let progress = self.inner_pd.decompress(&self.inner_cd.inner, dst)?;
 
     self.n_processed += progress.n_processed;
 

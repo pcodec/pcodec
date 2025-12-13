@@ -5,25 +5,47 @@ use crate::chunk_latent_decompressor::{ChunkLatentDecompressor, DynChunkLatentDe
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVarBuilder;
-use crate::metadata::{ChunkMeta, PerLatentVar};
+use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
 use crate::wrapped::PageDecompressor;
+
+#[derive(Clone, Debug)]
+pub struct ChunkDecompressorInner {
+  pub(crate) meta: ChunkMeta,
+  pub(crate) per_latent_var: PerLatentVar<DynChunkLatentDecompressor>,
+}
+
+impl ChunkDecompressorInner {
+  fn new(meta: ChunkMeta) -> PcoResult<Self> {
+    meta.validate_delta_encoding()?;
+
+    let mut builder = PerLatentVarBuilder::default();
+    for (key, latent_var) in meta.per_latent_var.as_ref().enumerated() {
+      let delta_encoding = meta.delta_encoding.for_latent_var(key);
+      let cld = DynChunkLatentDecompressor::create(latent_var, delta_encoding)?;
+      builder.set(key, cld);
+    }
+    let per_latent_var = builder.into();
+
+    Ok(Self {
+      meta,
+      per_latent_var,
+    })
+  }
+
+  pub fn n_latents_per_delta_state(&self) -> usize {
+    self
+      .meta
+      .delta_encoding
+      .for_latent_var(LatentVarKey::Primary)
+      .n_latents_per_state()
+  }
+}
 
 /// Holds metadata about a chunk and can produce page decompressors.
 #[derive(Clone, Debug)]
 pub struct ChunkDecompressor<T: Number> {
-  pub(crate) meta: ChunkMeta,
-  pub(crate) per_latent_var: PerLatentVar<DynChunkLatentDecompressor>,
+  pub(crate) inner: ChunkDecompressorInner,
   phantom: PhantomData<T>,
-}
-
-fn make_clds(meta: &ChunkMeta) -> PcoResult<PerLatentVar<DynChunkLatentDecompressor>> {
-  let mut builder = PerLatentVarBuilder::default();
-  for (key, latent_var) in meta.per_latent_var.as_ref().enumerated() {
-    let delta_encoding = meta.delta_encoding.for_latent_var(key);
-    let cld = DynChunkLatentDecompressor::create(latent_var, delta_encoding)?;
-    builder.set(key, cld);
-  }
-  Ok(builder.into())
 }
 
 impl<T: Number> ChunkDecompressor<T> {
@@ -35,20 +57,18 @@ impl<T: Number> ChunkDecompressor<T> {
         meta.mode
       )));
     }
-    meta.validate_delta_encoding()?;
 
-    let per_latent_var = make_clds(&meta)?;
+    let inner = ChunkDecompressorInner::new(meta)?;
 
     Ok(Self {
-      meta,
-      per_latent_var,
+      inner,
       phantom: PhantomData,
     })
   }
 
   /// Returns pre-computed information about the chunk.
   pub fn meta(&self) -> &ChunkMeta {
-    &self.meta
+    &self.inner.meta
   }
 
   /// Reads metadata for a page and returns a `PageDecompressor` and the
@@ -60,6 +80,6 @@ impl<T: Number> ChunkDecompressor<T> {
     src: R,
     n: usize,
   ) -> PcoResult<PageDecompressor<T, R>> {
-    PageDecompressor::<T, R>::new(src, &self.meta, &self.per_latent_var, n)
+    PageDecompressor::<T, R>::new(src, self, n)
   }
 }
