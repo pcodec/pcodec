@@ -1,13 +1,12 @@
 use crate::macros::{define_latent_enum, match_latent_enum};
-use crate::metadata::{ChunkLatentVarMeta, ChunkMeta, DynBins, LatentVarKey};
+use crate::metadata::{ChunkLatentVarMeta, DynBins};
 use crate::{
-  ans::{self, AnsState, Spec},
-  constants::{Bitlen, ANS_INTERLEAVING},
+  ans::{self, Spec},
+  constants::Bitlen,
   data_types::Latent,
-  delta,
   errors::PcoResult,
   metadata::{bins, delta_encoding::LatentVarDeltaEncoding, Bin},
-  read_write_uint, FULL_BATCH_N,
+  read_write_uint,
 };
 
 #[derive(Clone, Debug)]
@@ -74,7 +73,7 @@ impl DynChunkLatentDecompressor {
       DynBins<L>(bins) => {
         let inner = ChunkLatentDecompressor::new(
           latent_var.ans_size_log,
-          &bins,
+          bins,
           delta_encoding,
         )?;
         DynChunkLatentDecompressor::new(inner).unwrap()

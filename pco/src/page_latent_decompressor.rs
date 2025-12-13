@@ -1,16 +1,16 @@
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
-use crate::ans::{AnsState, Spec};
+use crate::ans::AnsState;
 use crate::bit_reader::BitReader;
-use crate::chunk_latent_decompressor::{self, ChunkLatentDecompressor, DynChunkLatentDecompressor};
+use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
 use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::define_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
-use crate::metadata::{bins, Bin, DynBins, DynLatents};
-use crate::{ans, bit_reader, delta, read_write_uint};
+use crate::metadata::DynLatents;
+use crate::{bit_reader, delta};
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
 // improve performance for SIMD operations. The primary goal here is to avoid

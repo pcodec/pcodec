@@ -13,7 +13,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::{ChunkMeta, DynBins, DynLatents, Mode};
+use crate::metadata::DynLatents;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::progress::Progress;
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
@@ -64,8 +64,8 @@ fn make_latent_scratch(cld: Option<&DynChunkLatentDecompressor>) -> Option<Laten
   )
 }
 
-fn make_latent_decompressors<'a>(
-  cd: &'a ChunkDecompressorInner,
+fn make_latent_decompressors(
+  cd: &ChunkDecompressorInner,
   page_meta: &PageMeta,
   n: usize,
 ) -> PcoResult<PerLatentVar<DynPageLatentDecompressor>> {
@@ -227,13 +227,6 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     Ok(())
   }
 
-  /// Reads the next decompressed numbers into the destination, returning
-  /// progress into the page and advancing along the compressed data.
-  ///
-  /// Will return an error if corruptions or insufficient data are found.
-  ///
-  /// `dst` must have length either a multiple of 256 or be at least the count
-  /// of numbers remaining in the page.
   pub fn decompress<T: Number>(
     &mut self,
     cd: &ChunkDecompressorInner,
@@ -280,8 +273,15 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
     })
   }
 
+  /// Reads the next decompressed numbers into the destination, returning
+  /// progress into the page and advancing along the compressed data.
+  ///
+  /// Will return an error if corruptions or insufficient data are found.
+  ///
+  /// `dst` must have length either a multiple of 256 or be at least the count
+  /// of numbers remaining in the page.
   pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    self.inner.decompress(&self.cd, dst)
+    self.inner.decompress(self.cd, dst)
   }
 
   /// Returns the rest of the compressed data source.

@@ -1,7 +1,7 @@
 use better_io::BetterBufRead;
 use std::marker::PhantomData;
 
-use crate::chunk_latent_decompressor::{ChunkLatentDecompressor, DynChunkLatentDecompressor};
+use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVarBuilder;
@@ -79,7 +79,7 @@ impl<T: Number> ChunkDecompressor<T> {
     &self,
     src: R,
     n: usize,
-  ) -> PcoResult<PageDecompressor<T, R>> {
+  ) -> PcoResult<PageDecompressor<'_, T, R>> {
     PageDecompressor::<T, R>::new(src, self, n)
   }
 }
