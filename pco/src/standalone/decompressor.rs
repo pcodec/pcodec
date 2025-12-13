@@ -216,7 +216,7 @@ impl FileDecompressor {
 
     let res = ChunkDecompressor {
       inner_cd,
-      inner_pd,
+      page_state: inner_pd,
       n,
       n_processed: 0,
     };
@@ -247,7 +247,7 @@ impl FileDecompressor {
 /// Holds metadata about a chunk and supports decompression.
 pub struct ChunkDecompressor<T: Number, R: BetterBufRead> {
   inner_cd: wrapped::ChunkDecompressor<T>,
-  inner_pd: wrapped::PageDecompressorState<R>,
+  page_state: wrapped::PageDecompressorState<R>,
   n: usize,
   n_processed: usize,
 }
@@ -271,7 +271,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
   pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    let progress = self.inner_pd.decompress(&self.inner_cd.inner, dst)?;
+    let progress = self.page_state.decompress(&self.inner_cd.inner, dst)?;
 
     self.n_processed += progress.n_processed;
 
@@ -280,7 +280,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
 
   /// Returns the rest of the compressed data source.
   pub fn into_src(self) -> R {
-    self.inner_pd.into_src()
+    self.page_state.into_src()
   }
 
   // a helper for some internal things

@@ -1,6 +1,5 @@
 use std::cmp::min;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 use better_io::BetterBufRead;
 
@@ -37,9 +36,8 @@ pub(crate) struct PageDecompressorState<R: BetterBufRead> {
 
 /// Holds metadata about a page and supports decompression.
 pub struct PageDecompressor<'a, T: Number, R: BetterBufRead> {
-  cd: &'a ChunkDecompressorInner,
-  inner: PageDecompressorState<R>,
-  phantom: PhantomData<T>,
+  cd: &'a ChunkDecompressor<T>,
+  state: PageDecompressorState<R>,
 }
 
 fn convert_from_latents_to_numbers<T: Number>(dst: &mut [T]) {
@@ -155,7 +153,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
             // Delta latents only line up with pre-delta length of the other
             // latents.
             // We never apply delta encoding to delta latents, so we just
-            // skip straight to the self PageLatentDecompressor
+            // skip straight to the pre-delta routine.
             pld.decompress_batch_pre_delta(
               reader,
               cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
@@ -267,9 +265,8 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   #[inline(never)]
   pub(crate) fn new(src: R, cd: &'a ChunkDecompressor<T>, n: usize) -> PcoResult<Self> {
     Ok(Self {
-      cd: &cd.inner,
-      inner: PageDecompressorState::new(src, &cd.inner, n)?,
-      phantom: PhantomData::<T>,
+      cd,
+      state: PageDecompressorState::new(src, &cd.inner, n)?,
     })
   }
 
@@ -281,11 +278,11 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
   pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    self.inner.decompress(self.cd, dst)
+    self.state.decompress(&self.cd.inner, dst)
   }
 
   /// Returns the rest of the compressed data source.
   pub fn into_src(self) -> R {
-    self.inner.into_src()
+    self.state.into_src()
   }
 }
