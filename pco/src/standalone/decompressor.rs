@@ -7,7 +7,6 @@ use crate::errors::{PcoError, PcoResult};
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
-use crate::wrapped::PageDecompressorState;
 use crate::{bit_reader, wrapped};
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
@@ -212,7 +211,7 @@ impl FileDecompressor {
       .with_reader(|reader| unsafe { Ok(reader.read_usize(BITS_TO_ENCODE_N_ENTRIES) + 1) })?;
     let src = reader_builder.into_inner();
     let (inner_cd, src) = self.inner.chunk_decompressor::<T, R>(src)?;
-    let inner_pd = PageDecompressorState::new(src, &inner_cd.inner, n)?;
+    let inner_pd = wrapped::PageDecompressorState::new(src, &inner_cd.inner, n)?;
 
     let res = ChunkDecompressor {
       inner_cd,

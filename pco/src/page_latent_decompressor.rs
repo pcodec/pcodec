@@ -336,9 +336,9 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
 // TODO: consider an arena for the scratch arrays?
-type BoxedPageLatentDecompressor<L> = Box<PageLatentDecompressor<L>>;
+type Boxed<L> = Box<PageLatentDecompressor<L>>;
 
 define_latent_enum!(
   #[derive()]
-  pub DynPageLatentDecompressor(BoxedPageLatentDecompressor)
+  pub DynPageLatentDecompressor(Boxed)
 );
