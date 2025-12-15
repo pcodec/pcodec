@@ -73,6 +73,7 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
+          #[allow(clippy::forget_non_drop)]
           pub fn new<S: $constraint>(inner: $container<S>) -> Self {
             let type_id = std::any::TypeId::of::<S>();
             $(
@@ -89,6 +90,7 @@ macro_rules! build_dtype_macros {
             unreachable!();
           }
 
+          #[allow(clippy::forget_non_drop)]
           pub fn downcast<T: $constraint>(self) -> Option<$container<T>> {
             match self {
               $(
