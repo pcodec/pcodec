@@ -39,16 +39,16 @@ impl DynArray {
 
   pub fn add(&self, other: &DynArray) -> DynArray {
     match_an_enum!(self, DynArray<T>(inner) => {
-      let other_inner = other.downcast_ref::<T>().unwrap();
+      let other_inner = other.downcast_ref::<T>();
       let added = inner.iter().zip(other_inner).map(|(a, b)| a + b).collect::<Vec<_>>();
-      DynArray::new(added).unwrap()
+      DynArray::new(added)
     })
   }
 }
 
 // we could also use `DynArray::I32()` here, but just to show we can convert generics:
-let x_dynamic = DynArray::new(vec![1_i32, 2, 3]).unwrap();
-let x_doubled_generic = x_dynamic.add(&x_dynamic).downcast::<i32>().unwrap();
+let x_dynamic = DynArray::new(vec![1_i32, 2, 3]);
+let x_doubled_generic = x_dynamic.add(&x_dynamic).downcast::<i32>();
 assert_eq!(x_doubled_generic, vec![2, 4, 6]);
 ```
 
@@ -167,3 +167,7 @@ e.g. `type MyContainer<T: MyConstraint> = Vec<Foo<T>>`.
 It is also mandatory that you place exactly one attribute when defining each
 enum, e.g. with a `#[derive(Clone, Debug)]`.
 If you don't want any attributes, you can just do `#[derive()]`.
+
+As of v2.0, we assume the variant<=>trait impl mapping is bijective, so it
+highly recommended that users keep their constraint trait either private or
+sealed.

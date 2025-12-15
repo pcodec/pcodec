@@ -16,6 +16,7 @@ macro_rules! build_dtype_macros {
   ) => {
     $(#[$definer_attrs])*
     macro_rules! $definer {
+      // Enum with neither data nor descriminants
       (#[$enum_attrs: meta] $vis: vis $name: ident) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -25,17 +26,18 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
-          pub fn new<T: $constraint>() -> Option<Self> {
+          pub fn new<T: $constraint>() -> Self {
             let type_id = std::any::TypeId::of::<T>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
-                return Some($name::$variant);
+                return $name::$variant;
               }
             )+
-            None
+            unreachable!()
           }
         }
       };
+      // Enum with descriminants
       (#[$enum_attrs: meta] #[repr($desc_t: ty)] $vis: vis $name: ident = $desc_val: ident) => {
         #[$enum_attrs]
         #[repr($desc_t)]
@@ -46,14 +48,14 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
-          pub fn new<T: $constraint>() -> Option<Self> {
+          pub fn new<T: $constraint>() -> Self {
             let type_id = std::any::TypeId::of::<T>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
-                return Some($name::$variant);
+                return $name::$variant;
               }
             )+
-            None
+            unreachable!()
           }
 
           pub fn from_descriminant(desc: $desc_t) -> Option<Self> {
@@ -64,6 +66,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
+      // Enum with data in a container type
       (#[$enum_attrs: meta] $vis: vis $name: ident($container: ident)) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -73,7 +76,7 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
-          pub fn new<S: $constraint>(inner: $container<S>) -> Option<Self> {
+          pub fn new<S: $constraint>(inner: $container<S>) -> Self {
             let type_id = std::any::TypeId::of::<S>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
@@ -83,13 +86,13 @@ macro_rules! build_dtype_macros {
                 let ptr = &inner as *const $container<S> as *const $container<$t>;
                 let typed = unsafe { ptr.read() };
                 std::mem::forget(inner);
-                return Some($name::$variant(typed));
+                return $name::$variant(typed);
               }
             )+
-            None
+            unreachable!()
           }
 
-          pub fn downcast<T: $constraint>(self) -> Option<$container<T>> {
+          pub fn downcast<T: $constraint>(self) -> $container<T> {
             match self {
               $(
                 Self::$variant(inner) => {
@@ -98,41 +101,41 @@ macro_rules! build_dtype_macros {
                     let ptr = &inner as *const $container<$t> as *const $container<T>;
                     let typed = unsafe { ptr.read() };
                     std::mem::forget(inner);
-                    Some(typed)
+                    typed
                   } else {
-                    None
+                    unreachable!()
                   }
                 }
               )+
             }
           }
 
-          pub fn downcast_ref<T: $constraint>(&self) -> Option<&$container<T>> {
+          pub fn downcast_ref<T: $constraint>(&self) -> &$container<T> {
             match self {
               $(
                 Self::$variant(inner) => {
                   if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
                     unsafe {
-                      Some(std::mem::transmute::<_, &$container<T>>(inner))
+                      std::mem::transmute::<_, &$container<T>>(inner)
                     }
                   } else {
-                    None
+                    unreachable!()
                   }
                 }
               )+
             }
           }
 
-          pub fn downcast_mut<T: $constraint>(&mut self) -> Option<&mut $container<T>> {
+          pub fn downcast_mut<T: $constraint>(&mut self) -> &mut $container<T> {
             match self {
               $(
                 Self::$variant(inner) => {
                   if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
                     unsafe {
-                      Some(std::mem::transmute::<_, &mut $container<T>>(inner))
+                      std::mem::transmute::<_, &mut $container<T>>(inner)
                     }
                   } else {
-                    None
+                    unreachable!()
                   }
                 }
               )+
@@ -203,7 +206,7 @@ mod tests {
   // we use this helper just to prove that we can handle generic types, not
   // just concrete types
   fn generic_new<T: Constraint>(inner: Vec<T>) -> MyEnum {
-    MyEnum::new(inner).unwrap()
+    MyEnum::new(inner)
   }
 
   #[test]
@@ -211,7 +214,7 @@ mod tests {
     let x = generic_new(vec![1_u16, 1, 2, 3, 5]);
     let bit_size = match_enum!(&x, MyEnum<L>(inner) => { inner.len() * L::BITS as usize });
     assert_eq!(bit_size, 80);
-    let x = x.downcast::<u16>().unwrap();
+    let x = x.downcast::<u16>();
     assert_eq!(x[0], 1);
   }
 
@@ -219,6 +222,6 @@ mod tests {
   fn test_multiple_enums_defined_in_same_scope() {
     // This was really tested during compilation, but I'm just using the new
     // enum here to ensure the code doesn't die.
-    AnotherContainerEnumInSameScope::new(HashMap::<u16, usize>::new()).unwrap();
+    AnotherContainerEnumInSameScope::new(HashMap::<u16, usize>::new());
   }
 }
