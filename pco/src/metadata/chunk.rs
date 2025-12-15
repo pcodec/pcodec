@@ -171,7 +171,7 @@ mod tests {
         let delta_moments = match_latent_enum!(
           &latent_var_meta.bins,
           DynBins<L>(_bins) => {
-            DynLatents::new(vec![L::ZERO; delta_encoding.n_latents_per_state()]).unwrap()
+            DynLatents::new(vec![L::ZERO; delta_encoding.n_latents_per_state()])
           }
         );
         PageLatentVarMeta {

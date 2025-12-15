@@ -50,8 +50,8 @@ pub(crate) fn split_latents<F: Float>(page_nums: &[F], config: FloatMultConfig<F
   }
 
   SplitLatents {
-    primary: DynLatents::new(primary).unwrap(),
-    secondary: Some(DynLatents::new(adjustments).unwrap()),
+    primary: DynLatents::new(primary),
+    secondary: Some(DynLatents::new(adjustments)),
   }
 }
 

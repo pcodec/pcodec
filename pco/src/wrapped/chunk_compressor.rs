@@ -207,7 +207,7 @@ fn delta_encode_and_build_page_infos(
   let mut delta_latents = delta_encoding.latent_type().map(|ltype| {
     match_latent_enum!(
       ltype,
-      LatentType<L> => { DynLatents::new(Vec::<L>::with_capacity(n)).unwrap() }
+      LatentType<L> => { DynLatents::new(Vec::<L>::with_capacity(n)) }
     )
   });
   for &page_n in n_per_page {
@@ -241,7 +241,7 @@ fn delta_encode_and_build_page_infos(
         delta_latents,
         DynLatents<L>(delta_latents) => {
           let page_delta_latents = page_delta_latents.unwrap().downcast::<L>().unwrap();
-          let delta_state = DeltaState::new(Vec::<L>::new()).unwrap();
+          let delta_state = DeltaState::new(Vec::<L>::new());
           let range = delta_latents.len()..delta_latents.len() + page_delta_latents.len();
           per_latent_var.delta = Some(PageInfoVar { delta_state, range });
           delta_latents.extend(&page_delta_latents);
@@ -304,9 +304,9 @@ fn new_candidate_w_split_and_delta_encoding(
         let bin_counts = trained.counts.to_vec();
         let clc = DynChunkLatentCompressor::new(
           ChunkLatentCompressor::new(trained, &bins, latents)?
-        ).unwrap();
+        );
         let var_meta = ChunkLatentVarMeta {
-          bins: DynBins::new(bins).unwrap(),
+          bins: DynBins::new(bins),
           ans_size_log,
         };
         (var_meta, clc, bin_counts)
@@ -360,7 +360,7 @@ fn choose_delta_sample(
         sample.extend(primary_latents.iter().skip(i).take(group_size));
         i += group_size;
       }
-      DynLatents::new(sample).unwrap()
+      DynLatents::new(sample)
     }
   )
 }
@@ -511,7 +511,7 @@ fn fallback_chunk_compressor(
         latent_var_meta.bins.downcast_ref::<L>().unwrap(),
         latents,
       )?;
-      (meta, DynChunkLatentCompressor::new(clc).unwrap())
+      (meta, DynChunkLatentCompressor::new(clc))
     }
   );
 
@@ -542,11 +542,7 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
   }
 
   let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
-  if candidate.should_fallback(
-    LatentType::new::<T::L>().unwrap(),
-    n,
-    bin_counts,
-  ) {
+  if candidate.should_fallback(LatentType::new::<T::L>(), n, bin_counts) {
     let split_latents = data_types::split_latents_classic(nums);
     return fallback_chunk_compressor(split_latents, config);
   }
@@ -721,7 +717,7 @@ impl ChunkCompressor {
       match_latent_enum!(
         clc,
         DynChunkLatentCompressor<L>(inner) => {
-          DynChunkLatentCompressorScratch::new(inner.build_scratch()).unwrap()
+          DynChunkLatentCompressorScratch::new(inner.build_scratch())
         }
       )
     });
@@ -800,7 +796,7 @@ mod tests {
 
   #[test]
   fn test_choose_delta_sample() {
-    let latents = DynLatents::new(vec![0_u32, 1]).unwrap();
+    let latents = DynLatents::new(vec![0_u32, 1]);
     assert_eq!(
       choose_delta_sample(&latents, 100, 0)
         .downcast::<u32>()
@@ -814,7 +810,7 @@ mod tests {
       vec![0, 1]
     );
 
-    let latents = DynLatents::new((0..300).collect::<Vec<u32>>()).unwrap();
+    let latents = DynLatents::new((0..300).collect::<Vec<u32>>());
     let sample = choose_delta_sample(&latents, 100, 1)
       .downcast::<u32>()
       .unwrap();
@@ -822,7 +818,7 @@ mod tests {
     assert_eq!(&sample[..3], &[0, 1, 2]);
     assert_eq!(&sample[197..], &[297, 298, 299]);
 
-    let latents = DynLatents::new((0..8).collect::<Vec<u32>>()).unwrap();
+    let latents = DynLatents::new((0..8).collect::<Vec<u32>>());
     assert_eq!(
       choose_delta_sample(&latents, 2, 2)
         .downcast::<u32>()

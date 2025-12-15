@@ -15,8 +15,7 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
       weight: 1,
       lower: L::ZERO,
       offset_bits: L::BITS,
-    }])
-    .unwrap(),
+    }]),
   };
 
   ChunkMeta {

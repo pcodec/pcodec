@@ -208,7 +208,7 @@ pub trait Number:
 }
 
 pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
-  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect()).unwrap();
+  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect());
   SplitLatents {
     primary,
     secondary: None,

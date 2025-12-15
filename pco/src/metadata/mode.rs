@@ -159,11 +159,11 @@ impl Mode {
   }
 
   pub(crate) fn float_mult<F: Float>(base: F) -> Self {
-    FloatMult(DynLatent::new(base.to_latent_ordered()).unwrap())
+    FloatMult(DynLatent::new(base.to_latent_ordered()))
   }
 
   pub(crate) fn int_mult<L: Latent>(base: L) -> Self {
-    IntMult(DynLatent::new(base).unwrap())
+    IntMult(DynLatent::new(base))
   }
 
   pub(crate) fn exact_bit_size(&self) -> Bitlen {
@@ -196,12 +196,8 @@ mod tests {
   #[test]
   fn test_bit_size() {
     check_bit_size(Mode::Classic);
-    check_bit_size(Mode::IntMult(
-      DynLatent::new(77_u32).unwrap(),
-    ));
-    check_bit_size(Mode::FloatMult(
-      DynLatent::new(77_u32).unwrap(),
-    ));
+    check_bit_size(Mode::IntMult(DynLatent::new(77_u32)));
+    check_bit_size(Mode::FloatMult(DynLatent::new(77_u32)));
     check_bit_size(Mode::FloatQuant(7));
   }
 }
