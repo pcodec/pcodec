@@ -76,7 +76,7 @@ impl DynChunkLatentDecompressor {
           bins,
           delta_encoding,
         )?;
-        DynChunkLatentDecompressor::new(inner).unwrap()
+        DynChunkLatentDecompressor::new(inner)
       }
     );
     Ok(res)

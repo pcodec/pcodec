@@ -309,7 +309,7 @@ pub fn compute_delta_latent_var(
         primary_latents,
         DynLatents<L>(inner) => {
           let latents = &mut inner[range];
-          DynLatents::new(choose_lookbacks(*config, latents)).unwrap()
+          DynLatents::new(choose_lookbacks(*config, latents))
         }
       );
       Some(res)
@@ -336,7 +336,7 @@ pub fn encode_in_place(
           encode_with_lookbacks_in_place(*config, lookbacks, &mut inner[range])
         }
       };
-      DynLatents::new(delta_state).unwrap()
+      DynLatents::new(delta_state)
     }
   )
 }

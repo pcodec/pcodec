@@ -28,7 +28,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
     )),
     ModeSpec::TryIntMult(base_u64) => {
       let base = T::L::from_u64(base_u64);
-      let mode = Mode::IntMult(DynLatent::new(base).unwrap());
+      let mode = Mode::IntMult(DynLatent::new(base));
       let latents = int_mult_utils::split_latents(nums, base);
       Ok((mode, latents))
     }

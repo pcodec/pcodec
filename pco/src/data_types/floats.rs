@@ -445,7 +445,7 @@ mod tests {
 
     // INT MULT
     assert!(!f32::mode_is_valid(&Mode::IntMult(
-      DynLatent::new(77_u32).unwrap()
+      DynLatent::new(77_u32)
     )));
   }
 

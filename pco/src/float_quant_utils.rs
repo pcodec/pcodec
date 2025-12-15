@@ -62,8 +62,8 @@ pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatent
   }
 
   SplitLatents {
-    primary: DynLatents::new(primary).unwrap(),
-    secondary: Some(DynLatents::new(secondary).unwrap()),
+    primary: DynLatents::new(primary),
+    secondary: Some(DynLatents::new(secondary)),
   }
 }
 

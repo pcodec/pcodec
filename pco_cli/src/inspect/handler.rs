@@ -94,7 +94,7 @@ fn build_latent_var_summaries<T: Number>(meta: &ChunkMeta) -> BTreeMap<String, L
         for bin in bins {
           bin_summaries.push(BinSummary {
             weight: bin.weight,
-            lower: format!("{}{}", describer.latent(DynLatent::new(bin.lower).unwrap()), unit),
+            lower: format!("{}{}", describer.latent(DynLatent::new(bin.lower)), unit),
             offset_bits: bin.offset_bits,
           });
           let weight = bin.weight as f64;

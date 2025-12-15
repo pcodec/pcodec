@@ -91,7 +91,7 @@ impl ChunkLatentVarMeta {
   pub(crate) fn latent_type(&self) -> LatentType {
     match_latent_enum!(
       &self.bins,
-      DynBins<L>(_inner) => { LatentType::new::<L>().unwrap() }
+      DynBins<L>(_inner) => { LatentType::new::<L>() }
     )
   }
 
@@ -138,7 +138,7 @@ impl ChunkLatentVarMeta {
           )?;
         }
 
-        DynBins::new(bins).unwrap()
+        DynBins::new(bins)
       }
     );
 

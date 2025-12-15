@@ -56,7 +56,7 @@ fn make_latent_scratch(cld: Option<&DynChunkLatentDecompressor>) -> Option<Laten
       let maybe_constant_value = inner.maybe_constant_value;
       Some(LatentScratch {
         is_constant: maybe_constant_value.is_some(),
-        dst: DynLatents::new(vec![maybe_constant_value.unwrap_or_default(); FULL_BATCH_N]).unwrap(),
+        dst: DynLatents::new(vec![maybe_constant_value.unwrap_or_default(); FULL_BATCH_N]),
       })
     }
   )
@@ -95,7 +95,7 @@ fn make_latent_decompressors(
           cld,
           page_latent_var_meta.ans_final_state_idxs,
           delta_state,
-        )?)).unwrap()
+        )?))
       }
     );
 

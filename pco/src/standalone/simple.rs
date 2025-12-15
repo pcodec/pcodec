@@ -25,7 +25,7 @@ pub fn simple_compress_into<T: Number, W: Write>(
 ) -> PcoResult<W> {
   let file_compressor = FileCompressor::default()
     .with_n_hint(nums.len())
-    .with_uniform_type(NumberType::new::<T>());
+    .with_uniform_type(Some(NumberType::new::<T>()));
   dst = file_compressor.write_header(dst)?;
 
   // here we use the paging spec to determine chunks; each chunk has 1 page

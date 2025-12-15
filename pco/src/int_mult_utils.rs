@@ -30,8 +30,8 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
   }
 
   SplitLatents {
-    primary: DynLatents::new(mults).unwrap(),
-    secondary: Some(DynLatents::new(adjs).unwrap()),
+    primary: DynLatents::new(mults),
+    secondary: Some(DynLatents::new(adjs)),
   }
 }
 
@@ -269,7 +269,7 @@ mod tests {
     join_latents(
       base,
       &mut primary,
-      DynLatents::new(secondary).as_ref(),
+      Some(&DynLatents::new(secondary)),
     );
 
     assert_eq!(primary, nums);
