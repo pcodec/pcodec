@@ -97,8 +97,8 @@ impl Mode {
       0 => Classic,
       1 => {
         if version.used_old_gcds() {
-          return Err(PcoError::compatibility(
-            "unable to decompress data from v0.0.0 of pco with different GCD encoding",
+          return Err(PcoError::corruption(
+            "unable to decompress data from yanked v0.0.0 of pco with different GCD encoding",
           ));
         }
 
