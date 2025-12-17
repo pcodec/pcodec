@@ -22,8 +22,7 @@ impl FileDecompressor {
   /// Reads a short header and returns a `FileDecompressor` and the remaining
   /// input.
   ///
-  /// Will return an error if any version incompatibilities or
-  /// insufficient data are found.
+  /// Will return an error if any corruptions or insufficient data are found.
   pub fn new<R: BetterBufRead>(mut src: R) -> PcoResult<(Self, R)> {
     bit_reader::ensure_buf_read_capacity(&mut src, HEADER_PADDING);
     let mut reader_builder = BitReaderBuilder::new(src, HEADER_PADDING, 0);
@@ -41,8 +40,7 @@ impl FileDecompressor {
   /// Reads a chunk's metadata and returns a `ChunkDecompressor` and the
   /// remaining input.
   ///
-  /// Will return an error if version incompatibilities, corruptions, or
-  /// insufficient data are found.
+  /// Will return an error if corruptions or insufficient data are found.
   pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
     &self,
     mut src: R,

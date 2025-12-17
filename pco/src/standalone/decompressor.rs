@@ -77,8 +77,7 @@ impl FileDecompressor {
   /// Reads a short header and returns a `FileDecompressor` and the
   /// remaining input.
   ///
-  /// Will return an error if any corruptions, version incompatibilities, or
-  /// insufficient data are found.
+  /// Will return an error if any corruptions or insufficient data are found.
   pub fn new<R: BetterBufRead>(mut src: R) -> PcoResult<(Self, R)> {
     bit_reader::ensure_buf_read_capacity(&mut src, STANDALONE_HEADER_PADDING);
     let mut reader_builder = BitReaderBuilder::new(src, STANDALONE_HEADER_PADDING, 0);
@@ -115,7 +114,7 @@ impl FileDecompressor {
       })?;
 
     if standalone_version > CURRENT_STANDALONE_VERSION {
-      return Err(PcoError::compatibility(format!(
+      return Err(PcoError::corruption(format!(
         "file's standalone version ({}) exceeds max supported ({}); consider upgrading pco",
         standalone_version, CURRENT_STANDALONE_VERSION,
       )));
@@ -225,8 +224,8 @@ impl FileDecompressor {
   /// Takes in compressed bytes (after the header, at the start of the chunks)
   /// and returns a vector of numbers.
   ///
-  /// Will return an error if there are any compatibility, corruption,
-  /// or insufficient data issues.
+  /// Will return an error if there are any corruption or insufficient data
+  /// issues.
   ///
   /// This function exists (in addition to the [standalone
   /// functions][crate::standalone]) because the user may want to peek at the

@@ -9,7 +9,7 @@ use crate::errors::{PcoError, PcoResult};
 ///
 /// During compression, this gets stored in the file.
 /// Version can affect the encoding of the rest of the file, so older versions
-/// of pco might return compatibility errors when running on data compressed
+/// of pco might return corruption errors when running on data compressed
 /// by newer versions.
 ///
 /// You will not need to manually instantiate this.
@@ -28,7 +28,7 @@ impl FormatVersion {
   pub(crate) fn read_from(reader: &mut BitReader) -> PcoResult<Self> {
     let version = reader.read_aligned_bytes(1)?[0];
     if version > CURRENT_FORMAT_VERSION {
-      return Err(PcoError::compatibility(format!(
+      return Err(PcoError::corruption(format!(
         "file's format version ({}) exceeds max supported ({}); consider upgrading pco",
         version, CURRENT_FORMAT_VERSION,
       )));

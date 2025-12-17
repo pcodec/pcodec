@@ -88,8 +88,8 @@ pub fn simple_compress<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult
 /// Takes in compressed bytes and writes numbers to the destination, returning
 /// progress into the file.
 ///
-/// Will return an error if there are any compatibility, corruption,
-/// or insufficient data issues.
+/// Will return an error if there are any corruption or or insufficient data
+/// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
 pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoResult<Progress> {
@@ -154,8 +154,8 @@ pub fn simpler_compress<T: Number>(nums: &[T], compression_level: usize) -> PcoR
 
 /// Takes in compressed bytes and returns a vector of numbers.
 ///
-/// Will return an error if there are any compatibility, corruption,
-/// or insufficient data issues.
+/// Will return an error if there are any corruption, or insufficient data
+/// issues.
 pub fn simple_decompress<T: Number>(src: &[u8]) -> PcoResult<Vec<T>> {
   let (file_decompressor, src) = FileDecompressor::new(src)?;
   file_decompressor.simple_decompress(src)
