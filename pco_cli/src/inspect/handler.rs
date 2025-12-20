@@ -130,6 +130,15 @@ fn build_latent_var_summaries<T: Number>(meta: &ChunkMeta) -> BTreeMap<String, L
   summaries
 }
 
+fn short_debug_str<T: std::fmt::Debug>(val: &T) -> String {
+  let res = format!("{:?}", val);
+  if res.len() > 60 {
+    format!("{}...{}", &res[..45], &res[res.len() - 15..])
+  } else {
+    res
+  }
+}
+
 impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
   fn inspect(&self, opt: &InspectOpt, src: &[u8]) -> Result<()> {
     let mut prev_src_len_val = src.len();
@@ -181,8 +190,8 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       chunks.push(ChunkSummary {
         idx,
         n: chunk_ns[idx],
-        mode: format!("{:.100}", format!("{:?}", meta.mode)),
-        delta_encoding: format!("{:?}", meta.delta_encoding),
+        mode: short_debug_str(&meta.mode),
+        delta_encoding: short_debug_str(&meta.delta_encoding),
         latent_vars,
       });
     }
