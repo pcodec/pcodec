@@ -107,7 +107,7 @@ pub(crate) fn match_int_modes<L: Latent>(
       })
     }
     Mode::Dict(_) => {
-      let primary = if matches!(meta.delta_encoding, DeltaEncoding::None) {
+      let primary = if matches!(meta.delta_encoding, DeltaEncoding::NoOp) {
         Box::new(IntDescriber {
           description: "index".to_string(),
           units: "".to_string(),
@@ -115,11 +115,11 @@ pub(crate) fn match_int_modes<L: Latent>(
           is_signed: false,
         })
       } else {
-        centered_delta_describer::<L>(format!("index delta"), "".to_string())
+        centered_delta_describer::<L>("index delta".to_string(), "".to_string())
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: None,
       })

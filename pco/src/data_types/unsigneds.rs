@@ -45,12 +45,12 @@ pub fn choose_mode_and_split_latents<T: Number>(
       for (i, &val) in ordered_unique.iter().enumerate() {
         index_hashmap.insert(val, i as u32);
       }
-      let mode = Mode::Dict(DynLatents::new(ordered_unique).unwrap());
+      let mode = Mode::Dict(DynLatents::new(ordered_unique));
       let indices = nums
         .iter()
         .map(|&num| T::L::from_u32(*index_hashmap.get(&num.to_latent_ordered()).unwrap()))
         .collect();
-      let latents = DynLatents::new(indices).unwrap();
+      let latents = DynLatents::new(indices);
       Ok((
         mode,
         SplitLatents {
