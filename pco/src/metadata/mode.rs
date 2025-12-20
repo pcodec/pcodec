@@ -1,6 +1,8 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
-use crate::constants::{Bitlen, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K};
+use crate::constants::{
+  Bitlen, BITS_TO_ENCODE_DICT_LEN, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K,
+};
 use crate::data_types::{Float, Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
@@ -115,7 +117,7 @@ impl Mode {
         FloatQuant(k)
       }
       4 => {
-        let n_unique = reader.read_usize(24);
+        let n_unique = reader.read_usize(BITS_TO_ENCODE_DICT_LEN);
         let dict = match_latent_enum!(
           latent_type,
           LatentType<L> => { DynLatents::read_uncompressed_from::<L>(reader, n_unique) }
@@ -153,7 +155,7 @@ impl Mode {
         writer.write_uint(k, BITS_TO_ENCODE_QUANTIZE_K);
       }
       Dict(dict) => {
-        writer.write_usize(dict.len(), 24);
+        writer.write_usize(dict.len(), BITS_TO_ENCODE_DICT_LEN);
         dict.write_uncompressed_to(writer);
       }
     };
@@ -185,7 +187,7 @@ impl Mode {
       Classic => 0,
       IntMult(base) | FloatMult(base) => base.bits(),
       FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K,
-      Dict(dict) => 24 + dict.bit_size() as Bitlen,
+      Dict(dict) => BITS_TO_ENCODE_DICT_LEN + dict.bit_size() as Bitlen,
     };
     BITS_TO_ENCODE_MODE_VARIANT + payload_bits
   }

@@ -1,3 +1,4 @@
+use std::cmp;
 use std::collections::HashMap;
 
 use super::ModeAndLatents;
@@ -39,7 +40,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
         *counts.entry(num.to_latent_ordered()).or_insert(0_u32) += 1;
       }
       let mut counts = counts.into_iter().collect::<Vec<(T::L, u32)>>();
-      counts.sort_by_key(|&(_, count)| count);
+      counts.sort_by_key(|&(_, count)| cmp::Reverse(count));
       let ordered_unique = counts.into_iter().map(|(x, _)| x).collect::<Vec<_>>();
       let mut index_hashmap = HashMap::new();
       for (i, &val) in ordered_unique.iter().enumerate() {

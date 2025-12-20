@@ -328,7 +328,7 @@ macro_rules! impl_float_number {
       fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
           Mode::Classic => true,
-          &Mode::FloatMult(dyn_latent) => {
+          Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
@@ -368,7 +368,7 @@ macro_rules! impl_float_number {
       fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
         match mode {
           Mode::Classic => (),
-          &Mode::FloatMult(dyn_latent) => {
+          Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
             float_mult_utils::join_latents(base, primary, secondary)
           }
