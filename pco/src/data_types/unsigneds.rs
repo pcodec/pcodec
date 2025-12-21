@@ -38,7 +38,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
 pub fn join_latents<L: Latent>(mode: &Mode, primary: &mut [L], secondary: Option<&DynLatents>) {
   match mode {
     Mode::Classic => (),
-    Mode::Dict(dict) => dict_utils::join_latents(primary, &dict),
+    Mode::Dict(dict) => dict_utils::join_latents(primary, dict),
     Mode::IntMult(dyn_latent) => {
       let base = *dyn_latent.downcast_ref::<L>().unwrap();
       int_mult_utils::join_latents(base, primary, secondary)
