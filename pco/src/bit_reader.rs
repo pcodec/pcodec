@@ -308,6 +308,9 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
     self.bits_past_byte = final_bit_idx as Bitlen % 8;
   }
 
+  /// Makes a BitReader that is guaranteed to be able to read at least
+  /// `self.padding` bytes. Reading more than that many bytes can cause a
+  /// segfault (very bad!).
   pub fn with_reader<Y, F: FnOnce(&mut BitReader) -> PcoResult<Y>>(
     &mut self,
     f: F,
