@@ -43,6 +43,7 @@ mod compression_intermediates;
 mod compression_table;
 mod constants;
 mod delta;
+mod dict_utils;
 mod float_mult_utils;
 mod float_quant_utils;
 mod histograms;

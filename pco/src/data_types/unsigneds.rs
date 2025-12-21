@@ -1,14 +1,11 @@
-use std::cmp;
-use std::collections::HashMap;
-
 use super::ModeAndLatents;
 use crate::constants::Bitlen;
-use crate::data_types::{split_latents_classic, Latent, Number, SplitLatents};
+use crate::data_types::{split_latents_classic, Latent, Number};
 use crate::describers::LatentDescriber;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
-use crate::{describers, int_mult_utils, ChunkConfig, ModeSpec};
+use crate::{describers, dict_utils, int_mult_utils, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
   nums: &[T],
@@ -34,32 +31,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
       let latents = int_mult_utils::split_latents(nums, base);
       Ok((mode, latents))
     }
-    ModeSpec::TryDict => {
-      let mut counts = HashMap::new();
-      for &num in nums {
-        *counts.entry(num.to_latent_ordered()).or_insert(0_u32) += 1;
-      }
-      let mut counts = counts.into_iter().collect::<Vec<(T::L, u32)>>();
-      counts.sort_by_key(|&(_, count)| cmp::Reverse(count));
-      let ordered_unique = counts.into_iter().map(|(x, _)| x).collect::<Vec<_>>();
-      let mut index_hashmap = HashMap::new();
-      for (i, &val) in ordered_unique.iter().enumerate() {
-        index_hashmap.insert(val, i as u32);
-      }
-      let mode = Mode::Dict(DynLatents::new(ordered_unique));
-      let indices = nums
-        .iter()
-        .map(|&num| T::L::from_u32(*index_hashmap.get(&num.to_latent_ordered()).unwrap()))
-        .collect();
-      let latents = DynLatents::new(indices);
-      Ok((
-        mode,
-        SplitLatents {
-          primary: latents,
-          secondary: None,
-        },
-      ))
-    }
+    ModeSpec::TryDict => dict_utils::configure_and_split_latents(nums),
   }
 }
 
@@ -117,14 +89,6 @@ impl_latent!(u16);
 impl_latent!(u32);
 impl_latent!(u64);
 
-pub fn join_dict<L: Latent>(primary: &mut [L], dict: &DynLatents) {
-  let dict = dict.downcast_ref::<L>().unwrap();
-  for latent in primary.iter_mut() {
-    let index = latent.to_u64() as usize;
-    *latent = dict[index];
-  }
-}
-
 macro_rules! impl_unsigned_number {
   ($t: ty, $header_byte: expr) => {
     impl Number for $t {
@@ -163,7 +127,7 @@ macro_rules! impl_unsigned_number {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             int_mult_utils::join_latents(base, primary, secondary)
           }
-          Mode::Dict(dict) => join_dict(primary, &dict),
+          Mode::Dict(dict) => dict_utils::join_latents(primary, &dict),
           _ => unreachable!("impossible mode for unsigned ints"),
         }
       }

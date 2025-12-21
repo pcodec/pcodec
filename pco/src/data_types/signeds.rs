@@ -5,7 +5,7 @@ use crate::describers::LatentDescriber;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
-use crate::{describers, int_mult_utils, ChunkConfig};
+use crate::{describers, dict_utils, int_mult_utils, ChunkConfig};
 
 macro_rules! impl_signed {
   ($t: ty, $latent: ty, $header_byte: expr) => {
@@ -45,9 +45,7 @@ macro_rules! impl_signed {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             int_mult_utils::join_latents(base, primary, secondary)
           }
-          Mode::Dict(dict) => {
-            unsigneds::join_dict(primary, dict);
-          }
+          Mode::Dict(dict) => dict_utils::join_latents(primary, dict),
           _ => unreachable!("impossible mode for signed ints"),
         }
       }

@@ -12,7 +12,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::float_mult_utils::FloatMultConfig;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
-use crate::{describers, float_mult_utils, float_quant_utils, sampling, ChunkConfig};
+use crate::{describers, dict_utils, float_mult_utils, float_quant_utils, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
   // We can compress infinities, nans, and baby floats, but we can't learn
@@ -64,9 +64,10 @@ fn choose_mode_and_split_latents<F: Float>(
       Mode::FloatQuant(k),
       float_quant_utils::split_latents(nums, k),
     )),
-    ModeSpec::TryIntMult(_) | ModeSpec::TryDict => Err(PcoError::invalid_argument(
+    ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
     )),
+    ModeSpec::TryDict => dict_utils::configure_and_split_latents(nums),
   }
 }
 

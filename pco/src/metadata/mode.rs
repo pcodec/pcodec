@@ -31,6 +31,8 @@ use std::io::Write;
 //   less-significant bits drawn from a second, very low-entropy distribution
 //   (e.g. in the common case, one that always produces zeros).
 //
+// Dict: The data is drawn from a relatively small set of unique values.
+//
 // Note the differences between int mult and float mult,
 // which have equivalent formulas.
 
@@ -78,6 +80,10 @@ pub enum Mode {
   /// Formula: `num = from_bits(quantums << k + adjustment)`
   /// (warning: this formula is especially simplified)
   FloatQuant(Bitlen),
+  /// Contains a "dictionary" of unique values as metadata, and represents each
+  /// number as an index into that dictionary.
+  ///
+  /// Formula: `num = dictionary[index]`
   Dict(DynLatents),
 }
 
