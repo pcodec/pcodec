@@ -369,12 +369,13 @@ macro_rules! impl_float_number {
       fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
         match mode {
           Mode::Classic => (),
+          Mode::Dict(dict) => dict_utils::join_latents(primary, dict),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
             float_mult_utils::join_latents(base, primary, secondary)
           }
           Mode::FloatQuant(k) => float_quant_utils::join_latents::<Self>(*k, primary, secondary),
-          _ => unreachable!("impossible mode for floats"),
+          Mode::IntMult(_) => unreachable!("impossible mode for floats"),
         }
       }
 

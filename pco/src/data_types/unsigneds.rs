@@ -35,6 +35,20 @@ pub fn choose_mode_and_split_latents<T: Number>(
   }
 }
 
+pub fn join_latents<L: Latent>(mode: &Mode, primary: &mut [L], secondary: Option<&DynLatents>) {
+  match mode {
+    Mode::Classic => (),
+    Mode::Dict(dict) => dict_utils::join_latents(primary, &dict),
+    Mode::IntMult(dyn_latent) => {
+      let base = *dyn_latent.downcast_ref::<L>().unwrap();
+      int_mult_utils::join_latents(base, primary, secondary)
+    }
+    Mode::FloatMult(_) | Mode::FloatQuant(_) => {
+      unreachable!("impossible mode for unsigned ints")
+    }
+  }
+}
+
 pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
   match mode {
     Mode::Classic | Mode::Dict(_) => true,
@@ -121,15 +135,7 @@ macro_rules! impl_unsigned_number {
         self
       }
       fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        match mode {
-          Mode::Classic => (),
-          Mode::IntMult(dyn_latent) => {
-            let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary)
-          }
-          Mode::Dict(dict) => dict_utils::join_latents(primary, &dict),
-          _ => unreachable!("impossible mode for unsigned ints"),
-        }
+        join_latents(mode, primary, secondary)
       }
 
       fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
