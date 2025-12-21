@@ -1,4 +1,6 @@
-use crate::bit_reader::BitReader;
+use better_io::BetterBufRead;
+
+use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::bit_writer::BitWriter;
 use crate::constants::{
   Bitlen, BITS_TO_ENCODE_DICT_LEN, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K,
@@ -88,55 +90,60 @@ pub enum Mode {
 }
 
 impl Mode {
-  pub(crate) unsafe fn read_from(
-    reader: &mut BitReader,
+  pub(crate) unsafe fn read_from<R: BetterBufRead>(
+    reader_builder: &mut BitReaderBuilder<R>,
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let read_latent = |reader| {
-      match_latent_enum!(
-        latent_type,
-        LatentType<L> => {
-          DynLatent::read_uncompressed_from::<L>(reader)
-        }
-      )
-    };
-
-    let mode = match reader.read_bitlen(BITS_TO_ENCODE_MODE_VARIANT) {
-      0 => Classic,
-      1 => {
-        if version.used_old_gcds() {
-          return Err(PcoError::corruption(
-            "unable to decompress data from yanked v0.0.0 of pco with different GCD encoding",
-          ));
-        }
-
-        let base = read_latent(reader);
-        IntMult(base)
-      }
-      2 => {
-        let base_latent = read_latent(reader);
-        FloatMult(base_latent)
-      }
-      3 => {
-        let k = reader.read_bitlen(BITS_TO_ENCODE_QUANTIZE_K);
-        FloatQuant(k)
-      }
-      4 => {
-        let n_unique = reader.read_usize(BITS_TO_ENCODE_DICT_LEN);
-        let dict = match_latent_enum!(
+    let mut mode = reader_builder.with_reader(|reader| {
+      let read_latent = |reader| {
+        match_latent_enum!(
           latent_type,
-          LatentType<L> => { DynLatents::read_uncompressed_from::<L>(reader, n_unique) }
-        );
-        Dict(dict)
-      }
-      value => {
-        return Err(PcoError::corruption(format!(
-          "unknown mode value {}",
-          value
-        )))
-      }
-    };
+          LatentType<L> => {
+            DynLatent::read_uncompressed_from::<L>(reader)
+          }
+        )
+      };
+
+      let mode = match reader.read_bitlen(BITS_TO_ENCODE_MODE_VARIANT) {
+        0 => Classic,
+        1 => {
+          if version.used_old_gcds() {
+            return Err(PcoError::corruption(
+              "unable to decompress data from yanked v0.0.0 of pco with different GCD encoding",
+            ));
+          }
+
+          let base = read_latent(reader);
+          IntMult(base)
+        }
+        2 => {
+          let base_latent = read_latent(reader);
+          FloatMult(base_latent)
+        }
+        3 => {
+          let k = reader.read_bitlen(BITS_TO_ENCODE_QUANTIZE_K);
+          FloatQuant(k)
+        }
+        4 => {
+          let n_unique = reader.read_usize(BITS_TO_ENCODE_DICT_LEN);
+          let dict = match_latent_enum!(
+            latent_type,
+            LatentType<L> => { DynLatents::read_uncompressed_from::<L>(reader, n_unique) }
+          );
+          Dict(dict)
+        }
+        value => {
+          return Err(PcoError::corruption(format!(
+            "unknown mode value {}",
+            value
+          )))
+        }
+      };
+      Ok(mode)
+    })?;
+    // if let Some(dyn_latents)
+
     Ok(mode)
   }
 

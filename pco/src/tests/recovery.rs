@@ -384,7 +384,7 @@ fn test_lookback_delta_encoding() -> PcoResult<()> {
 #[test]
 fn test_dict() -> PcoResult<()> {
   let mut nums = Vec::<i64>::new();
-  for i in 0..200 {
+  for i in 0..2000 {
     for _ in 0..5 {
       nums.push(i * i);
     }
@@ -395,13 +395,10 @@ fn test_dict() -> PcoResult<()> {
       .with_mode_spec(ModeSpec::TryDict)
       .with_delta_spec(DeltaSpec::None),
   )?;
-  let Mode::Dict(dict) = &meta.mode else {
-    panic!("expected to compress with dict mode");
+  let Mode::Dict(DynLatents::U64(dict)) = &meta.mode else {
+    panic!("expected to compress with a dictionary of u64s");
   };
-  let DynLatents::U64(dict) = dict else {
-    panic!("expected u64 latents")
-  };
-  assert_eq!(dict.len(), 200); // 200 unique values
+  assert_eq!(dict.len(), 2000); // this many unique values
   let decompressed = simple_decompress(&compressed)?;
   assert_nums_eq(&decompressed, &nums, "dict mode")?;
   Ok(())

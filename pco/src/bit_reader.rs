@@ -313,8 +313,10 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
     f: F,
   ) -> PcoResult<Y> {
     let mut reader = self.build()?;
+    let orig_bit_idx = reader.bit_idx();
     let res = f(&mut reader)?;
     let final_bit_idx = reader.bit_idx_safe()?;
+    debug_assert!(final_bit_idx - orig_bit_idx <= 8 * self.padding);
     self.update(final_bit_idx);
     Ok(res)
   }

@@ -79,12 +79,9 @@ impl ChunkMeta {
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let (mode, delta_encoding) = reader_builder.with_reader(|reader| {
-      let mode = Mode::read_from(reader, version, latent_type)?;
-      let delta_encoding = DeltaEncoding::read_from(version, reader)?;
-
-      Ok((mode, delta_encoding))
-    })?;
+    let mode = Mode::read_from(reader_builder, version, latent_type)?;
+    let delta_encoding =
+      reader_builder.with_reader(|reader| DeltaEncoding::read_from(version, reader))?;
 
     let delta = if let Some(delta_latent_type) = delta_encoding.latent_type() {
       Some(ChunkLatentVarMeta::read_from::<R>(
