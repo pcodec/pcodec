@@ -1,10 +1,10 @@
 use better_io::BetterBufRead;
 
-use crate::bit_reader::{BitReader, BitReaderBuilder};
+use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
 use crate::constants::{
   Bitlen, BITS_TO_ENCODE_DICT_LEN, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K,
-  CHUNK_META_PADDING, MAX_SUPPORTED_PRECISION, MAX_SUPPORTED_PRECISION_BYTES,
+  CHUNK_META_PADDING, MAX_SUPPORTED_PRECISION_BYTES,
 };
 use crate::data_types::{Float, Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
@@ -152,7 +152,7 @@ impl Mode {
       dict.read_uncompressed_in_place(
         reader_builder,
         CHUNK_META_PADDING / MAX_SUPPORTED_PRECISION_BYTES,
-      );
+      )?;
     }
 
     Ok(mode)
