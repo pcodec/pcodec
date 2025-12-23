@@ -73,14 +73,14 @@ impl ChunkMeta {
     }
   }
 
-  pub(crate) unsafe fn read_from<R: BetterBufRead>(
+  pub(crate) fn read_from<R: BetterBufRead>(
     reader_builder: &mut BitReaderBuilder<R>,
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
     let (mode, delta_encoding) = reader_builder.with_reader(
       (Mode::MAX_BIT_SIZE + DeltaEncoding::MAX_BIT_SIZE).div_ceil(8) + OVERSHOOT_PADDING,
-      |reader| {
+      |reader| unsafe {
         let mode = Mode::read_from(reader, version, latent_type)?;
         let delta_encoding = DeltaEncoding::read_from(reader, version)?;
         Ok((mode, delta_encoding))

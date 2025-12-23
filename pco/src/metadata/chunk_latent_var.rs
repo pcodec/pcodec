@@ -14,15 +14,15 @@ use better_io::BetterBufRead;
 use std::cmp::min;
 use std::io::Write;
 
-const FULL_BIN_BATCH_SIZE: usize = 128;
+const FULL_BIN_BATCH_LEN: usize = 128;
 
-unsafe fn read_bin_batch<L: Latent, R: BetterBufRead>(
+fn read_bin_batch<L: Latent, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   ans_size_log: Bitlen,
   dst: &mut [Bin<L>],
 ) -> PcoResult<()> {
-  let reader_capacity = dst.len() * (5 + L::BITS as usize) + OVERSHOOT_PADDING;
-  reader_builder.with_reader(reader_capacity, |reader| {
+  let max_size: usize = dst.len() * (5 + L::BITS as usize) + OVERSHOOT_PADDING;
+  reader_builder.with_reader(max_size, |reader| unsafe {
     let offset_bits_bits = bits_to_encode_offset_bits::<L>();
     for bin in dst {
       let weight = reader.read_uint::<Weight>(ans_size_log) + 1;
@@ -57,7 +57,7 @@ unsafe fn write_bins<L: Latent, W: Write>(
 ) -> PcoResult<()> {
   writer.write_usize(bins.len(), BITS_TO_ENCODE_N_BINS);
   let offset_bits_bits = bits_to_encode_offset_bits::<L>();
-  for bin_batch in bins.chunks(FULL_BIN_BATCH_SIZE) {
+  for bin_batch in bins.chunks(FULL_BIN_BATCH_LEN) {
     for bin in bin_batch {
       writer.write_uint(bin.weight - 1, ans_size_log);
       writer.write_uint(bin.lower, L::BITS);
@@ -96,13 +96,13 @@ impl ChunkLatentVarMeta {
     )
   }
 
-  pub(crate) unsafe fn read_from<R: BetterBufRead>(
+  pub(crate) fn read_from<R: BetterBufRead>(
     reader_builder: &mut BitReaderBuilder<R>,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
     let (ans_size_log, n_bins) = reader_builder.with_reader(
       BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + OVERSHOOT_PADDING,
-      |reader| {
+      |reader| unsafe {
         let ans_size_log = reader.read_bitlen(BITS_TO_ENCODE_ANS_SIZE_LOG);
         let n_bins = reader.read_usize(BITS_TO_ENCODE_N_BINS);
         Ok((ans_size_log, n_bins))
@@ -135,8 +135,8 @@ impl ChunkLatentVarMeta {
         unsafe { bins.set_len(n_bins) };
         // we read in small batches because a latent variable could
         // theoretically contain up to about 300kB of bins
-        for start in (0..n_bins).step_by(FULL_BIN_BATCH_SIZE) {
-          let end = min(start + FULL_BIN_BATCH_SIZE, n_bins);
+        for start in (0..n_bins).step_by(FULL_BIN_BATCH_LEN) {
+          let end = min(start + FULL_BIN_BATCH_LEN, n_bins);
           read_bin_batch::<L, R>(
             reader_builder,
             ans_size_log,
