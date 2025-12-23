@@ -241,7 +241,7 @@ impl<'a> BitReader<'a> {
 }
 
 pub struct BitReaderBuilder<R: BetterBufRead> {
-  padding: usize,
+  pub padding: usize,
   inner: R,
   eof_buffer: Vec<u8>,
   reached_eof: bool,

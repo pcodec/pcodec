@@ -12,11 +12,7 @@ define_latent_enum!(
   pub DynLatents(Vec)
 );
 
-unsafe fn read<L: Latent>(reader: &mut BitReader, dst: &mut [L]) {
-  for x in dst.iter_mut() {
-    *x = reader.read_uint::<L>(L::BITS);
-  }
-}
+unsafe fn read<L: Latent>(reader: &mut BitReader, dst: &mut [L]) {}
 
 impl DynLatents {
   pub(crate) fn len(&self) -> usize {
@@ -44,7 +40,9 @@ impl DynLatents {
         let n = inner.len();
         for start in (0..n).step_by(n_per_reader) {
           reader_builder.with_reader(|reader| unsafe {
-            read(reader, &mut inner[start..(start + n_per_reader).min(n)]);
+            for x in inner[start..(start + n_per_reader).min(n)].iter_mut() {
+              *x = reader.read_uint::<L>(L::BITS);
+            }
             Ok(())
           })?;
         }
@@ -54,11 +52,16 @@ impl DynLatents {
     Ok(())
   }
 
-  pub(crate) unsafe fn read_uncompressed_from<L: Latent>(reader: &mut BitReader, n: usize) -> Self {
+  pub(crate) unsafe fn read_uncompressed_from<R: BetterBufRead, L: Latent>(
+    reader_builder: &mut BitReaderBuilder<R>,
+    n: usize,
+    n_per_reader: usize,
+  ) -> PcoResult<Self> {
     let mut uninitialized = Vec::<L>::with_capacity(n);
     uninitialized.set_len(n);
-    read(reader, &mut uninitialized);
-    Self::new(uninitialized)
+    let mut res = Self::new(uninitialized);
+    res.read_uncompressed_in_place(reader_builder, n_per_reader)?;
+    Ok(res)
   }
 
   pub(crate) unsafe fn write_uncompressed_to<W: Write>(&self, writer: &mut BitWriter<W>) {
