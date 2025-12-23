@@ -4,7 +4,7 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
-use crate::constants::{CHUNK_META_PADDING, HEADER_PADDING};
+use crate::constants::HEADER_CAPACITY;
 use crate::data_types::{LatentType, Number};
 use crate::errors::PcoResult;
 use crate::metadata::chunk::ChunkMeta;
@@ -25,9 +25,9 @@ impl FileDecompressor {
   /// Will return an error if any version incompatibilities or
   /// insufficient data are found.
   pub fn new<R: BetterBufRead>(mut src: R) -> PcoResult<(Self, R)> {
-    bit_reader::ensure_buf_read_capacity(&mut src, HEADER_PADDING);
-    let mut reader_builder = BitReaderBuilder::new(src, HEADER_PADDING, 0);
-    let format_version = reader_builder.with_reader(FormatVersion::read_from)?;
+    bit_reader::ensure_buf_read_capacity(&mut src, HEADER_CAPACITY);
+    let mut reader_builder = BitReaderBuilder::new(src, 0);
+    let format_version = reader_builder.with_reader(HEADER_CAPACITY, FormatVersion::read_from)?;
     Ok((
       Self { format_version },
       reader_builder.into_inner(),
@@ -45,10 +45,9 @@ impl FileDecompressor {
   /// insufficient data are found.
   pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
     &self,
-    mut src: R,
+    src: R,
   ) -> PcoResult<(ChunkDecompressor<T>, R)> {
-    bit_reader::ensure_buf_read_capacity(&mut src, CHUNK_META_PADDING);
-    let mut reader_builder = BitReaderBuilder::new(src, CHUNK_META_PADDING, 0);
+    let mut reader_builder = BitReaderBuilder::new(src, 0);
     let latent_type = LatentType::new::<T::L>().unwrap();
     let chunk_meta = unsafe {
       ChunkMeta::read_from::<R>(

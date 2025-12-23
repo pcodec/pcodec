@@ -6,7 +6,7 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
-use crate::constants::{FULL_BATCH_N, PAGE_PADDING};
+use crate::constants::{BATCH_LATENT_VAR_CAPACITY, FULL_BATCH_N, OVERSHOOT_PADDING};
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
@@ -113,10 +113,12 @@ fn make_latent_decompressors(
 impl<R: BetterBufRead> PageDecompressorInner<R> {
   pub(crate) fn new(mut src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
     bit_reader::ensure_buf_read_capacity(&mut src, PERFORMANT_BUF_READ_CAPACITY);
-    let mut reader_builder = BitReaderBuilder::new(src, PAGE_PADDING, 0);
+    let mut reader_builder = BitReaderBuilder::new(src, 0);
 
-    let page_meta =
-      reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, chunk_meta) })?;
+    let page_meta = reader_builder.with_reader(
+      chunk_meta.exact_page_meta_size() + OVERSHOOT_PADDING,
+      |reader| unsafe { PageMeta::read_from(reader, chunk_meta) },
+    )?;
 
     let mode = chunk_meta.mode;
     let latent_decompressors = make_latent_decompressors(chunk_meta, &page_meta, n)?;
@@ -163,40 +165,44 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
         n_remaining.saturating_sub(inner.delta_encoding.n_latents_per_state()),
         batch_n,
       );
-      inner.reader_builder.with_reader(|reader| unsafe {
-        match_latent_enum!(
-          dyn_pld,
-          DynPageLatentDecompressor<L>(pld) => {
-            // Delta latents only line up with pre-delta length of the other
-            // latents.
-            // We never apply delta encoding to delta latents, so we just
-            // skip straight to the inner PageLatentDecompressor
-            pld.decompress_batch_pre_delta(
-              reader,
-              &mut dst.downcast_mut::<L>().unwrap()[..limit]
-            )
-          }
-        );
-        Ok(())
-      })?;
+      inner
+        .reader_builder
+        .with_reader(BATCH_LATENT_VAR_CAPACITY, |reader| unsafe {
+          match_latent_enum!(
+            dyn_pld,
+            DynPageLatentDecompressor<L>(pld) => {
+              // Delta latents only line up with pre-delta length of the other
+              // latents.
+              // We never apply delta encoding to delta latents, so we just
+              // skip straight to the inner PageLatentDecompressor
+              pld.decompress_batch_pre_delta(
+                reader,
+                &mut dst.downcast_mut::<L>().unwrap()[..limit]
+              )
+            }
+          );
+          Ok(())
+        })?;
     }
     let delta_latents = inner.delta_scratch.as_ref().map(|scratch| &scratch.dst);
 
     // PRIMARY LATENTS
-    inner.reader_builder.with_reader(|reader| unsafe {
-      let primary_dst = T::transmute_to_latents(dst);
-      let dyn_pld = inner
-        .latent_decompressors
-        .primary
-        .downcast_mut::<T::L>()
-        .unwrap();
-      dyn_pld.decompress_batch(
-        delta_latents,
-        n_remaining,
-        reader,
-        primary_dst,
-      )
-    })?;
+    inner
+      .reader_builder
+      .with_reader(BATCH_LATENT_VAR_CAPACITY, |reader| unsafe {
+        let primary_dst = T::transmute_to_latents(dst);
+        let dyn_pld = inner
+          .latent_decompressors
+          .primary
+          .downcast_mut::<T::L>()
+          .unwrap();
+        dyn_pld.decompress_batch(
+          delta_latents,
+          n_remaining,
+          reader,
+          primary_dst,
+        )
+      })?;
 
     // SECONDARY LATENTS
     if let Some(LatentScratch {
@@ -205,21 +211,23 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     }) = &mut inner.secondary_scratch
     {
       let dyn_pld = inner.latent_decompressors.secondary.as_mut().unwrap();
-      inner.reader_builder.with_reader(|reader| unsafe {
-        match_latent_enum!(
-          dyn_pld,
-          DynPageLatentDecompressor<L>(pld) => {
-            // We never apply delta encoding to delta latents, so we just
-            // skip straight to the inner PageLatentDecompressor
-            pld.decompress_batch(
-              delta_latents,
-              n_remaining,
-              reader,
-              &mut dst.downcast_mut::<L>().unwrap()[..batch_n]
-            )
-          }
-        )
-      })?;
+      inner
+        .reader_builder
+        .with_reader(BATCH_LATENT_VAR_CAPACITY, |reader| unsafe {
+          match_latent_enum!(
+            dyn_pld,
+            DynPageLatentDecompressor<L>(pld) => {
+              // We never apply delta encoding to delta latents, so we just
+              // skip straight to the inner PageLatentDecompressor
+              pld.decompress_batch(
+                delta_latents,
+                n_remaining,
+                reader,
+                &mut dst.downcast_mut::<L>().unwrap()[..batch_n]
+              )
+            }
+          )
+        })?;
     }
 
     T::join_latents(
@@ -231,7 +239,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
 
     inner.n_remaining -= batch_n;
     if inner.n_remaining == 0 {
-      inner.reader_builder.with_reader(|reader| {
+      inner.reader_builder.with_reader(1, |reader| {
         reader.drain_empty_byte("expected trailing bits at end of page to be empty")
       })?;
     }

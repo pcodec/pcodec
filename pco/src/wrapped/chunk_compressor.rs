@@ -6,8 +6,8 @@ use crate::chunk_latent_compressor::{
 use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
-  Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_COMPRESSION_LEVEL, MAX_DELTA_ENCODING_ORDER,
-  MAX_ENTRIES, OVERSHOOT_PADDING, PAGE_PADDING,
+  Bitlen, Weight, BATCH_LATENT_VAR_CAPACITY, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_COMPRESSION_LEVEL,
+  MAX_DELTA_ENCODING_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, LatentType, Number};
@@ -740,7 +740,7 @@ impl ChunkCompressor {
       )));
     }
 
-    let mut writer = BitWriter::new(dst, PAGE_PADDING);
+    let mut writer = BitWriter::new(dst, BATCH_LATENT_VAR_CAPACITY);
 
     let dissected_page = self.dissect_page(page_idx, scratch)?;
     let page_info = &self.page_infos[page_idx];

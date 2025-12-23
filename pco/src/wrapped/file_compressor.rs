@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use crate::bit_writer::BitWriter;
-use crate::constants::HEADER_PADDING;
+use crate::constants::HEADER_CAPACITY;
 use crate::data_types::Number;
 use crate::errors::PcoResult;
 use crate::metadata::format_version::FormatVersion;
@@ -53,7 +53,7 @@ impl FileCompressor {
   ///
   /// Will return an error if the provided `Write` errors.
   pub fn write_header<W: Write>(&self, dst: W) -> PcoResult<W> {
-    let mut writer = BitWriter::new(dst, HEADER_PADDING);
+    let mut writer = BitWriter::new(dst, HEADER_CAPACITY);
     self.format_version.write_to(&mut writer)?;
     writer.flush()?;
     Ok(writer.into_inner())

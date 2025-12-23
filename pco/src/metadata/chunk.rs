@@ -4,7 +4,7 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
-use crate::constants::DeltaLookback;
+use crate::constants::{DeltaLookback, OVERSHOOT_PADDING};
 use crate::data_types::LatentType;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
@@ -79,12 +79,14 @@ impl ChunkMeta {
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let (mode, delta_encoding) = reader_builder.with_reader(|reader| {
-      let mode = Mode::read_from(reader, version, latent_type)?;
-      let delta_encoding = DeltaEncoding::read_from(version, reader)?;
-
-      Ok((mode, delta_encoding))
-    })?;
+    let (mode, delta_encoding) = reader_builder.with_reader(
+      Mode::MAX_ENCODED_SIZE + DeltaEncoding::MAX_ENCODED_SIZE + OVERSHOOT_PADDING,
+      |reader| {
+        let mode = Mode::read_from(reader, version, latent_type)?;
+        let delta_encoding = DeltaEncoding::read_from(reader, version)?;
+        Ok((mode, delta_encoding))
+      },
+    )?;
 
     let delta = if let Some(delta_latent_type) = delta_encoding.latent_type() {
       Some(ChunkLatentVarMeta::read_from::<R>(
@@ -115,7 +117,7 @@ impl ChunkMeta {
       secondary,
     };
 
-    reader_builder.with_reader(|reader| {
+    reader_builder.with_reader(1, |reader| {
       reader.drain_empty_byte("nonzero bits in end of final byte of chunk metadata")
     })?;
 
