@@ -1,7 +1,7 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::constants::{
-  Bitlen, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K, MAX_SUPPORTED_PRECISION_BYTES,
+  Bitlen, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K, MAX_SUPPORTED_PRECISION,
 };
 use crate::data_types::{Float, Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
@@ -81,8 +81,8 @@ pub enum Mode {
 }
 
 impl Mode {
-  pub(crate) const MAX_ENCODED_SIZE: usize =
-    BITS_TO_ENCODE_MODE_VARIANT as usize + MAX_SUPPORTED_PRECISION_BYTES;
+  pub(crate) const MAX_ENCODED_BITS: usize =
+    (BITS_TO_ENCODE_MODE_VARIANT + MAX_SUPPORTED_PRECISION) as usize;
 
   pub(crate) unsafe fn read_from(
     reader: &mut BitReader,
@@ -193,8 +193,8 @@ mod tests {
       mode.write_to(&mut writer);
     }
     let true_bit_size = writer.bit_idx();
-    assert_eq!(mode.exact_bit_size() as usize, true_bit_size,);
-    assert!(true_bit_size <= 8 * Mode::MAX_ENCODED_SIZE);
+    assert_eq!(mode.exact_bit_size() as usize, true_bit_size);
+    assert!(true_bit_size <= Mode::MAX_ENCODED_BITS);
   }
 
   #[test]

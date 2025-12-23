@@ -73,9 +73,10 @@ pub enum DeltaEncoding {
 }
 
 impl DeltaEncoding {
-  pub(crate) const MAX_ENCODED_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
+  pub(crate) const MAX_ENCODED_BITS: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
     + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG
-    + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG) as usize;
+    + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG
+    + 1) as usize;
 
   unsafe fn read_from_pre_v3(reader: &mut BitReader) -> Self {
     let order = reader.read_usize(BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
@@ -236,7 +237,7 @@ mod tests {
       encoding.exact_bit_size() as usize,
       true_bit_size,
     );
-    assert!(true_bit_size <= DeltaEncoding::MAX_ENCODED_SIZE * 8);
+    assert!(true_bit_size <= DeltaEncoding::MAX_ENCODED_BITS);
   }
 
   #[test]

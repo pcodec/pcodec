@@ -2,9 +2,7 @@ use std::fmt::Debug;
 
 use better_io::BetterBufRead;
 
-use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
-use crate::constants::HEADER_CAPACITY;
 use crate::data_types::{LatentType, Number};
 use crate::errors::PcoResult;
 use crate::metadata::chunk::ChunkMeta;
@@ -24,10 +22,12 @@ impl FileDecompressor {
   ///
   /// Will return an error if any version incompatibilities or
   /// insufficient data are found.
-  pub fn new<R: BetterBufRead>(mut src: R) -> PcoResult<(Self, R)> {
-    bit_reader::ensure_buf_read_capacity(&mut src, HEADER_CAPACITY);
+  pub fn new<R: BetterBufRead>(src: R) -> PcoResult<(Self, R)> {
     let mut reader_builder = BitReaderBuilder::new(src, 0);
-    let format_version = reader_builder.with_reader(HEADER_CAPACITY, FormatVersion::read_from)?;
+    let format_version = reader_builder.with_reader(
+      FormatVersion::MAX_ENCODED_SIZE,
+      FormatVersion::read_from,
+    )?;
     Ok((
       Self { format_version },
       reader_builder.into_inner(),

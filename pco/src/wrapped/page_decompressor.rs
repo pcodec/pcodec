@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 
 use better_io::BetterBufRead;
 
-use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
 use crate::constants::{BATCH_LATENT_VAR_CAPACITY, FULL_BATCH_N, OVERSHOOT_PADDING};
 use crate::data_types::Number;
@@ -15,8 +14,6 @@ use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, DynLatents, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::progress::Progress;
-
-const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
 
 #[derive(Debug)]
 struct LatentScratch {
@@ -111,8 +108,7 @@ fn make_latent_decompressors(
 }
 
 impl<R: BetterBufRead> PageDecompressorInner<R> {
-  pub(crate) fn new(mut src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
-    bit_reader::ensure_buf_read_capacity(&mut src, PERFORMANT_BUF_READ_CAPACITY);
+  pub(crate) fn new(src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
     let mut reader_builder = BitReaderBuilder::new(src, 0);
 
     let page_meta = reader_builder.with_reader(

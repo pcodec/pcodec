@@ -80,7 +80,7 @@ impl ChunkMeta {
     latent_type: LatentType,
   ) -> PcoResult<Self> {
     let (mode, delta_encoding) = reader_builder.with_reader(
-      Mode::MAX_ENCODED_SIZE + DeltaEncoding::MAX_ENCODED_SIZE + OVERSHOOT_PADDING,
+      (Mode::MAX_ENCODED_BITS + DeltaEncoding::MAX_ENCODED_BITS).div_ceil(8) + OVERSHOOT_PADDING,
       |reader| {
         let mode = Mode::read_from(reader, version, latent_type)?;
         let delta_encoding = DeltaEncoding::read_from(reader, version)?;

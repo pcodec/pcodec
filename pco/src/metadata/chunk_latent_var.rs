@@ -21,7 +21,7 @@ unsafe fn read_bin_batch<L: Latent, R: BetterBufRead>(
   ans_size_log: Bitlen,
   dst: &mut [Bin<L>],
 ) -> PcoResult<()> {
-  let reader_capacity = dst.len() * (4 + 2 * L::BITS as usize) + OVERSHOOT_PADDING;
+  let reader_capacity = dst.len() * (5 + L::BITS as usize) + OVERSHOOT_PADDING;
   reader_builder.with_reader(reader_capacity, |reader| {
     let offset_bits_bits = bits_to_encode_offset_bits::<L>();
     for bin in dst {

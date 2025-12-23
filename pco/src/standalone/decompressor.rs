@@ -8,7 +8,7 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::standalone::NumberTypeOrTermination;
-use crate::{bit_reader, wrapped};
+use crate::wrapped;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -80,8 +80,7 @@ impl FileDecompressor {
   ///
   /// Will return an error if any corruptions, version incompatibilities, or
   /// insufficient data are found.
-  pub fn new<R: BetterBufRead>(mut src: R) -> PcoResult<(Self, R)> {
-    bit_reader::ensure_buf_read_capacity(&mut src, STANDALONE_HEADER_PADDING);
+  pub fn new<R: BetterBufRead>(src: R) -> PcoResult<(Self, R)> {
     let mut reader_builder = BitReaderBuilder::new(src, 0);
     // Do this part first so we check for insufficient data before returning a
     // confusing corruption error.
@@ -171,14 +170,12 @@ impl FileDecompressor {
   /// data are found.
   pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
     &self,
-    mut src: R,
+    src: R,
   ) -> PcoResult<MaybeChunkDecompressor<T, R>> {
-    bit_reader::ensure_buf_read_capacity(&mut src, STANDALONE_CHUNK_PREAMBLE_PADDING);
     let mut reader_builder = BitReaderBuilder::new(src, 0);
-    let type_or_termination_byte = reader_builder
-      .with_reader(STANDALONE_CHUNK_PREAMBLE_PADDING, |reader| {
-        Ok(reader.read_aligned_bytes(1)?[0])
-      })?;
+    let type_or_termination_byte = reader_builder.with_reader(1, |reader| {
+      Ok(reader.read_aligned_bytes(1)?[0])
+    })?;
     if type_or_termination_byte == MAGIC_TERMINATION_BYTE {
       return Ok(MaybeChunkDecompressor::EndOfData(
         reader_builder.into_inner(),
