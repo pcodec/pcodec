@@ -240,7 +240,7 @@ impl<'a> BitReader<'a> {
   }
 }
 
-// High level idea behing a BitReaderBuilder: without fail, produce BitReaders
+// High level idea behind a BitReaderBuilder: without fail, produce BitReaders
 // with at least the requested number of bytes available. The user's provided
 // BetterBufRead might not have enough capacity, so when we get to the end, we
 // populate an eof_buffer with the last bit of data and some extra padding.
@@ -252,12 +252,12 @@ pub struct BitReaderBuilder<R: BetterBufRead> {
 }
 
 impl<R: BetterBufRead> BitReaderBuilder<R> {
-  pub fn new(inner: R, bits_past_byte: Bitlen) -> Self {
+  pub fn new(inner: R) -> Self {
     Self {
       inner,
       eof_buffer: vec![],
       bytes_into_eof_buffer: 0,
-      bits_past_byte,
+      bits_past_byte: 0,
     }
   }
 
@@ -277,8 +277,8 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
       // if not, try to use the current eof_buffer if it has enough data left
       &self.eof_buffer[self.bytes_into_eof_buffer..]
     } else {
-      // if neither has enough capacity, make a new eof buffer with at least 2x
-      // the requested bytes to avoid any antagonistic O(n^2) behavior
+      // if neither has enough capacity, make a new eof buffer with at 2x the
+      // requested bytes for amortized linear behavior with antagonistic reads
       self.eof_buffer = vec![0; 2 * n_bytes];
       self.eof_buffer[..inner_src.len()].copy_from_slice(inner_src);
       self.bytes_into_eof_buffer = 0;
@@ -324,7 +324,9 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
 fn ensure_buf_read_capacity<R: BetterBufRead>(src: &mut R, required: usize) {
   if let Some(current_capacity) = src.capacity() {
     if current_capacity < required {
-      src.resize_capacity(required);
+      // double the required capacity to ensure amortized linear behavior with
+      // antagonistic reads
+      src.resize_capacity(2 * required);
     }
   }
 }
@@ -365,7 +367,11 @@ mod tests {
   fn test_bit_reader_builder() -> PcoResult<()> {
     let src = (0..7).collect::<Vec<_>>();
     let capacity = 4 + OVERSHOOT_PADDING;
-    let mut reader_builder = BitReaderBuilder::new(src.as_slice(), 1);
+    let mut reader_builder = BitReaderBuilder::new(src.as_slice());
+    reader_builder.with_reader(1, |reader| unsafe {
+      assert!(!reader.read_bool());
+      Ok(())
+    })?;
     reader_builder.with_reader(capacity, |reader| unsafe {
       assert_eq!(&reader.src[0..4], &vec![0, 1, 2, 3]);
       assert_eq!(reader.bit_idx(), 1);

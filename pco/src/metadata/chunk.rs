@@ -27,15 +27,14 @@ pub struct ChunkMeta {
 }
 
 impl ChunkMeta {
-  pub(crate) fn exact_size(&self) -> usize {
+  pub(crate) fn max_size(&self) -> usize {
     let bits_for_latent_vars = self
       .per_latent_var
       .as_ref()
       .map(|_, var_meta| var_meta.exact_bit_size())
       .sum();
-    let n_bits = self.mode.exact_bit_size() as usize
-      + self.delta_encoding.exact_bit_size() as usize
-      + bits_for_latent_vars;
+    let n_bits =
+      Mode::MAX_BIT_SIZE as usize + DeltaEncoding::MAX_BIT_SIZE as usize + bits_for_latent_vars;
     n_bits.div_ceil(8)
   }
 
@@ -80,7 +79,7 @@ impl ChunkMeta {
     latent_type: LatentType,
   ) -> PcoResult<Self> {
     let (mode, delta_encoding) = reader_builder.with_reader(
-      (Mode::MAX_ENCODED_BITS + DeltaEncoding::MAX_ENCODED_BITS).div_ceil(8) + OVERSHOOT_PADDING,
+      (Mode::MAX_BIT_SIZE + DeltaEncoding::MAX_BIT_SIZE).div_ceil(8) + OVERSHOOT_PADDING,
       |reader| {
         let mode = Mode::read_from(reader, version, latent_type)?;
         let delta_encoding = DeltaEncoding::read_from(reader, version)?;
@@ -157,13 +156,13 @@ mod tests {
   use crate::metadata::page_latent_var::PageLatentVarMeta;
   use crate::metadata::{Bin, DynLatent};
 
-  fn check_exact_sizes(meta: &ChunkMeta) -> PcoResult<()> {
+  fn check_sizes(meta: &ChunkMeta) -> PcoResult<()> {
     let buffer_size = 8192;
     let mut dst = Vec::new();
     let mut writer = BitWriter::new(&mut dst, buffer_size);
     unsafe { meta.write_to(&mut writer)? };
     writer.flush()?;
-    assert_eq!(meta.exact_size(), dst.len());
+    assert!(dst.len() <= meta.max_size());
 
     // page meta size
     let mut dst = Vec::new();
@@ -215,7 +214,7 @@ mod tests {
       },
     };
 
-    check_exact_sizes(&meta)
+    check_sizes(&meta)
   }
 
   #[test]
@@ -237,7 +236,7 @@ mod tests {
       },
     };
 
-    check_exact_sizes(&meta)
+    check_sizes(&meta)
   }
 
   #[test]
@@ -283,6 +282,6 @@ mod tests {
       },
     };
 
-    check_exact_sizes(&meta)
+    check_sizes(&meta)
   }
 }

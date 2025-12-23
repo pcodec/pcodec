@@ -25,7 +25,7 @@ pub const BITS_TO_ENCODE_QUANTIZE_K: Bitlen = 8;
 // + 9 because we might read an extra u64 (8 bytes), plus 1 for good measure
 pub const OVERSHOOT_PADDING: usize = 9;
 // enough for one full batch of latents
-pub const BATCH_LATENT_VAR_CAPACITY: usize =
+pub const MAX_BATCH_LATENT_VAR_SIZE: usize =
   FULL_BATCH_N * (MAX_SUPPORTED_PRECISION_BYTES + MAX_ANS_BYTES) + OVERSHOOT_PADDING;
 
 // cutoffs and legal parameter values

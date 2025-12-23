@@ -81,7 +81,7 @@ pub enum Mode {
 }
 
 impl Mode {
-  pub(crate) const MAX_ENCODED_BITS: usize =
+  pub(crate) const MAX_BIT_SIZE: usize =
     (BITS_TO_ENCODE_MODE_VARIANT + MAX_SUPPORTED_PRECISION) as usize;
 
   pub(crate) unsafe fn read_from(
@@ -170,15 +170,6 @@ impl Mode {
   pub(crate) fn int_mult<L: Latent>(base: L) -> Self {
     IntMult(DynLatent::new(base).unwrap())
   }
-
-  pub(crate) fn exact_bit_size(&self) -> Bitlen {
-    let payload_bits = match self {
-      Classic => 0,
-      IntMult(base) | FloatMult(base) => base.bits(),
-      FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K,
-    };
-    BITS_TO_ENCODE_MODE_VARIANT + payload_bits
-  }
 }
 
 #[cfg(test)]
@@ -193,8 +184,7 @@ mod tests {
       mode.write_to(&mut writer);
     }
     let true_bit_size = writer.bit_idx();
-    assert_eq!(mode.exact_bit_size() as usize, true_bit_size);
-    assert!(true_bit_size <= Mode::MAX_ENCODED_BITS);
+    assert!(true_bit_size <= Mode::MAX_BIT_SIZE);
   }
 
   #[test]

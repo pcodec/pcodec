@@ -23,7 +23,7 @@ impl FileDecompressor {
   /// Will return an error if any version incompatibilities or
   /// insufficient data are found.
   pub fn new<R: BetterBufRead>(src: R) -> PcoResult<(Self, R)> {
-    let mut reader_builder = BitReaderBuilder::new(src, 0);
+    let mut reader_builder = BitReaderBuilder::new(src);
     let format_version = reader_builder.with_reader(
       FormatVersion::MAX_ENCODED_SIZE,
       FormatVersion::read_from,
@@ -47,7 +47,7 @@ impl FileDecompressor {
     &self,
     src: R,
   ) -> PcoResult<(ChunkDecompressor<T>, R)> {
-    let mut reader_builder = BitReaderBuilder::new(src, 0);
+    let mut reader_builder = BitReaderBuilder::new(src);
     let latent_type = LatentType::new::<T::L>().unwrap();
     let chunk_meta = unsafe {
       ChunkMeta::read_from::<R>(

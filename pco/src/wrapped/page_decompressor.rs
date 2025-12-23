@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use better_io::BetterBufRead;
 
 use crate::bit_reader::BitReaderBuilder;
-use crate::constants::{BATCH_LATENT_VAR_CAPACITY, FULL_BATCH_N, OVERSHOOT_PADDING};
+use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
@@ -109,7 +109,7 @@ fn make_latent_decompressors(
 
 impl<R: BetterBufRead> PageDecompressorInner<R> {
   pub(crate) fn new(src: R, chunk_meta: &ChunkMeta, n: usize) -> PcoResult<Self> {
-    let mut reader_builder = BitReaderBuilder::new(src, 0);
+    let mut reader_builder = BitReaderBuilder::new(src);
 
     let page_meta = reader_builder.with_reader(
       chunk_meta.exact_page_meta_size() + OVERSHOOT_PADDING,
@@ -163,7 +163,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       );
       inner
         .reader_builder
-        .with_reader(BATCH_LATENT_VAR_CAPACITY, |reader| unsafe {
+        .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
           match_latent_enum!(
             dyn_pld,
             DynPageLatentDecompressor<L>(pld) => {
@@ -185,7 +185,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
     // PRIMARY LATENTS
     inner
       .reader_builder
-      .with_reader(BATCH_LATENT_VAR_CAPACITY, |reader| unsafe {
+      .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
         let primary_dst = T::transmute_to_latents(dst);
         let dyn_pld = inner
           .latent_decompressors
@@ -209,7 +209,7 @@ impl<T: Number, R: BetterBufRead> PageDecompressor<T, R> {
       let dyn_pld = inner.latent_decompressors.secondary.as_mut().unwrap();
       inner
         .reader_builder
-        .with_reader(BATCH_LATENT_VAR_CAPACITY, |reader| unsafe {
+        .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
           match_latent_enum!(
             dyn_pld,
             DynPageLatentDecompressor<L>(pld) => {

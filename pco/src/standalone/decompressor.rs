@@ -81,7 +81,7 @@ impl FileDecompressor {
   /// Will return an error if any corruptions, version incompatibilities, or
   /// insufficient data are found.
   pub fn new<R: BetterBufRead>(src: R) -> PcoResult<(Self, R)> {
-    let mut reader_builder = BitReaderBuilder::new(src, 0);
+    let mut reader_builder = BitReaderBuilder::new(src);
     // Do this part first so we check for insufficient data before returning a
     // confusing corruption error.
     let header = reader_builder.with_reader(MAGIC_HEADER.len(), |reader| {
@@ -172,7 +172,7 @@ impl FileDecompressor {
     &self,
     src: R,
   ) -> PcoResult<MaybeChunkDecompressor<T, R>> {
-    let mut reader_builder = BitReaderBuilder::new(src, 0);
+    let mut reader_builder = BitReaderBuilder::new(src);
     let type_or_termination_byte = reader_builder.with_reader(1, |reader| {
       Ok(reader.read_aligned_bytes(1)?[0])
     })?;

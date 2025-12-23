@@ -7,7 +7,7 @@ use crate::compression_intermediates::TrainedBins;
 use crate::compression_table::CompressionTable;
 use crate::constants::Bitlen;
 use crate::constants::ANS_INTERLEAVING;
-use crate::constants::BATCH_LATENT_VAR_CAPACITY;
+use crate::constants::MAX_BATCH_LATENT_VAR_SIZE;
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
@@ -289,7 +289,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     batch_start: usize,
     writer: &mut BitWriter<W>,
   ) -> PcoResult<()> {
-    assert!(writer.buf.len() >= BATCH_LATENT_VAR_CAPACITY);
+    assert!(writer.buf.len() >= MAX_BATCH_LATENT_VAR_SIZE);
     writer.flush()?;
 
     if batch_start >= page_dissected_var.offsets.len() {

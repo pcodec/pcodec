@@ -73,7 +73,7 @@ pub enum DeltaEncoding {
 }
 
 impl DeltaEncoding {
-  pub(crate) const MAX_ENCODED_BITS: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
+  pub(crate) const MAX_BIT_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
     + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG
     + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG
     + 1) as usize;
@@ -207,17 +207,6 @@ impl DeltaEncoding {
       Lookback(config) => 1 << config.state_n_log,
     }
   }
-
-  pub(crate) fn exact_bit_size(&self) -> Bitlen {
-    let payload_bits = match self {
-      None => 0,
-      // For nontrivial encodings, we have a +1 bit for whether the
-      // secondary latent is delta-encoded or not.
-      Consecutive(_) => BITS_TO_ENCODE_DELTA_ENCODING_ORDER + 1,
-      Lookback(_) => BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG + 1,
-    };
-    BITS_TO_ENCODE_DELTA_ENCODING_VARIANT + payload_bits
-  }
 }
 
 #[cfg(test)]
@@ -233,11 +222,7 @@ mod tests {
       encoding.write_to(&mut writer);
     }
     let true_bit_size = writer.bit_idx();
-    assert_eq!(
-      encoding.exact_bit_size() as usize,
-      true_bit_size,
-    );
-    assert!(true_bit_size <= DeltaEncoding::MAX_ENCODED_BITS);
+    assert!(true_bit_size <= DeltaEncoding::MAX_BIT_SIZE);
   }
 
   #[test]
