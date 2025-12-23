@@ -4,6 +4,7 @@ use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::bit_writer::BitWriter;
 use crate::constants::{
   Bitlen, BITS_TO_ENCODE_DICT_LEN, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K,
+  CHUNK_META_PADDING, MAX_SUPPORTED_PRECISION, MAX_SUPPORTED_PRECISION_BYTES,
 };
 use crate::data_types::{Float, Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
@@ -127,9 +128,11 @@ impl Mode {
         }
         4 => {
           let n_unique = reader.read_usize(BITS_TO_ENCODE_DICT_LEN);
+          // leave dictionary uninitialized for now because our reader might not
+          // be long enough
           let dict = match_latent_enum!(
             latent_type,
-            LatentType<L> => { DynLatents::read_uncompressed_from::<L>(reader, n_unique) }
+            LatentType<L> => { DynLatents::new::<L>(vec![L::ZERO; n_unique]) }
           );
           Dict(dict)
         }
@@ -140,9 +143,17 @@ impl Mode {
           )))
         }
       };
+
       Ok(mode)
     })?;
-    // if let Some(dyn_latents)
+
+    if let Mode::Dict(dict) = &mut mode {
+      // we need to initialize the dictionary for real
+      dict.read_uncompressed_in_place(
+        reader_builder,
+        CHUNK_META_PADDING / MAX_SUPPORTED_PRECISION_BYTES,
+      );
+    }
 
     Ok(mode)
   }
