@@ -49,13 +49,11 @@ impl FileDecompressor {
   ) -> PcoResult<(ChunkDecompressor<T>, R)> {
     let mut reader_builder = BitReaderBuilder::new(src);
     let latent_type = LatentType::new::<T::L>().unwrap();
-    let chunk_meta = unsafe {
-      ChunkMeta::read_from::<R>(
-        &mut reader_builder,
-        &self.format_version,
-        latent_type,
-      )?
-    };
+    let chunk_meta = ChunkMeta::read_from::<R>(
+      &mut reader_builder,
+      &self.format_version,
+      latent_type,
+    )?;
     let cd = ChunkDecompressor::new(chunk_meta)?;
     Ok((cd, reader_builder.into_inner()))
   }
