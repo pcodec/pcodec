@@ -222,3 +222,17 @@ fn v0_4_5_uniform_type() -> PcoResult<()> {
   assert_compatible(version, name, &nums)?;
   Ok(())
 }
+
+#[test]
+fn v1_0_0_dict() -> PcoResult<()> {
+  // v1.0.0 introduced dict mode
+  let version = "1.0.0";
+  let name = "dict";
+  let nums = vec![8924659283, 234897984367, 9827358920].repeat(1000);
+  let config = ChunkConfig::default()
+    .with_mode_spec(ModeSpec::TryDict)
+    .with_delta_spec(DeltaSpec::None);
+  simple_write_if_version_matches::<u64>(version, name, &nums, &config)?;
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}

@@ -21,7 +21,7 @@ impl DynLatents {
     )
   }
 
-  pub(crate) fn bit_size(&self) -> usize {
+  pub(crate) fn exact_bit_size(&self) -> usize {
     match_latent_enum!(
       self,
       DynLatents<T>(inner) => { inner.len() * T::BITS as usize}
@@ -54,9 +54,9 @@ impl DynLatents {
 
   pub(crate) unsafe fn read_short_uncompressed_from<L: Latent>(
     reader: &mut BitReader,
-    n: usize,
+    len: usize,
   ) -> PcoResult<Self> {
-    let mut latents = vec![L::ZERO; n];
+    let mut latents = vec![L::ZERO; len];
     for x in &mut latents {
       *x = reader.read_uint::<L>(L::BITS)
     }

@@ -38,7 +38,8 @@ const FIXED_READ_SIZE: usize = BITS_TO_ENCODE_MODE_VARIANT.div_ceil(8) as usize
 //   less-significant bits drawn from a second, very low-entropy distribution
 //   (e.g. in the common case, one that always produces zeros).
 //
-// Dict: The data is drawn from a relatively small set of unique values.
+// Dict: The data is drawn from a relatively large (but still substantially
+//   smaller than n) set of unique values.
 //
 // Note the differences between int mult and float mult,
 // which have equivalent formulas.
@@ -142,7 +143,7 @@ impl Mode {
         }
         value => {
           return Err(PcoError::corruption(format!(
-            "unknown mode value {}",
+            "unknown mode variant {}",
             value
           )))
         }
@@ -187,6 +188,7 @@ impl Mode {
   }
 
   pub(crate) fn primary_latent_type(&self, number_latent_type: LatentType) -> LatentType {
+    // TODO make dict use u32 all the time
     match self {
       Classic | FloatMult(_) | FloatQuant(_) | IntMult(_) | Dict(_) => number_latent_type,
     }
@@ -210,10 +212,10 @@ impl Mode {
   pub(crate) fn exact_bit_size(&self) -> usize {
     let payload_bits = match self {
       Mode::Classic => 0,
-      Mode::Dict(dict) => BITS_TO_ENCODE_DICT_LEN as usize + dict.bit_size(),
-      Mode::FloatMult(base) => base.bits() as usize,
+      Mode::Dict(dict) => BITS_TO_ENCODE_DICT_LEN as usize + dict.exact_bit_size(),
+      Mode::FloatMult(base) => base.exact_bit_size() as usize,
       Mode::FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K as usize,
-      Mode::IntMult(base) => base.bits() as usize,
+      Mode::IntMult(base) => base.exact_bit_size() as usize,
     };
     BITS_TO_ENCODE_MODE_VARIANT as usize + payload_bits
   }
@@ -222,7 +224,7 @@ impl Mode {
 #[cfg(test)]
 mod tests {
   use crate::bit_writer::BitWriter;
-  use crate::metadata::{DynLatent, Mode};
+  use crate::metadata::{DynLatent, DynLatents, Mode};
 
   fn check_bit_size(mode: Mode) {
     let mut bytes = Vec::new();
@@ -237,6 +239,10 @@ mod tests {
   #[test]
   fn test_bit_size() {
     check_bit_size(Mode::Classic);
+    check_bit_size(Mode::Dict(DynLatents::new::<u32>(vec![])));
+    check_bit_size(Mode::Dict(DynLatents::new::<u64>(vec![
+      1, 77, 1111,
+    ])));
     check_bit_size(Mode::IntMult(DynLatent::new(77_u32)));
     check_bit_size(Mode::FloatMult(DynLatent::new(77_u32)));
     check_bit_size(Mode::FloatQuant(7));

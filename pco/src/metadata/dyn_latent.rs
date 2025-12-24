@@ -26,7 +26,7 @@ impl DynLatent {
     );
   }
 
-  pub(crate) fn bits(&self) -> Bitlen {
+  pub(crate) fn exact_bit_size(&self) -> Bitlen {
     match_latent_enum!(
       &self,
       DynLatent<L>(_latent) => {

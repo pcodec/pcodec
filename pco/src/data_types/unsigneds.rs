@@ -163,6 +163,11 @@ mod tests {
     // CLASSIC
     assert!(u32::mode_is_valid(&Mode::Classic));
 
+    // DICT
+    assert!(u32::mode_is_valid(&Mode::Dict(
+      DynLatents::new(vec![1_u32, 3])
+    )));
+
     // INT MULT
     for base in [1_u32, 77, u32::MAX] {
       assert!(u32::mode_is_valid(&Mode::int_mult(base)))
