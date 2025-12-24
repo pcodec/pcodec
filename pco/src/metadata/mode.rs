@@ -4,7 +4,7 @@ use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
 use crate::constants::{
   Bitlen, BITS_TO_ENCODE_DICT_LEN, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K,
-  CHUNK_META_PADDING, MAX_SUPPORTED_PRECISION_BYTES,
+  MAX_SUPPORTED_PRECISION_BYTES, OVERSHOOT_PADDING,
 };
 use crate::data_types::{Float, Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
@@ -14,6 +14,10 @@ use crate::metadata::format_version::FormatVersion;
 use crate::metadata::{DynLatents, Mode::*};
 use std::fmt::Debug;
 use std::io::Write;
+
+const FIXED_READ_SIZE: usize = BITS_TO_ENCODE_MODE_VARIANT.div_ceil(8) as usize
+  + MAX_SUPPORTED_PRECISION_BYTES
+  + OVERSHOOT_PADDING;
 
 // Internally, here's how we should model each mode:
 //
@@ -91,12 +95,12 @@ pub enum Mode {
 }
 
 impl Mode {
-  pub(crate) unsafe fn read_from<R: BetterBufRead>(
+  pub(crate) fn read_from<R: BetterBufRead>(
     reader_builder: &mut BitReaderBuilder<R>,
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let mut mode = reader_builder.with_reader(|reader| {
+    let mut mode = reader_builder.with_reader(FIXED_READ_SIZE, |reader| unsafe {
       let read_latent = |reader| {
         match_latent_enum!(
           latent_type,
@@ -148,11 +152,8 @@ impl Mode {
     })?;
 
     if let Mode::Dict(dict) = &mut mode {
-      // we need to initialize the dictionary for real
-      dict.read_uncompressed_in_place(
-        reader_builder,
-        CHUNK_META_PADDING / MAX_SUPPORTED_PRECISION_BYTES,
-      )?;
+      // initialize the dictionary for real
+      dict.read_long_uncompressed_in_place(reader_builder)?;
     }
 
     Ok(mode)
@@ -206,14 +207,15 @@ impl Mode {
     IntMult(DynLatent::new(base))
   }
 
-  pub(crate) fn exact_bit_size(&self) -> Bitlen {
+  pub(crate) fn exact_bit_size(&self) -> usize {
     let payload_bits = match self {
-      Classic => 0,
-      IntMult(base) | FloatMult(base) => base.bits(),
-      FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K,
-      Dict(dict) => BITS_TO_ENCODE_DICT_LEN + dict.bit_size() as Bitlen,
+      Mode::Classic => 0,
+      Mode::Dict(dict) => BITS_TO_ENCODE_DICT_LEN as usize + dict.bit_size(),
+      Mode::FloatMult(base) => base.bits() as usize,
+      Mode::FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K as usize,
+      Mode::IntMult(base) => base.bits() as usize,
     };
-    BITS_TO_ENCODE_MODE_VARIANT + payload_bits
+    BITS_TO_ENCODE_MODE_VARIANT as usize + payload_bits
   }
 }
 
@@ -228,10 +230,8 @@ mod tests {
     unsafe {
       mode.write_to(&mut writer);
     }
-    assert_eq!(
-      mode.exact_bit_size() as usize,
-      writer.bit_idx()
-    );
+    let true_bit_size = writer.bit_idx();
+    assert_eq!(mode.exact_bit_size(), true_bit_size);
   }
 
   #[test]

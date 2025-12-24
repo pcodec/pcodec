@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
-use crate::metadata::per_latent_var::PerLatentVarBuilder;
 use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
 use crate::wrapped::PageDecompressor;
 
@@ -18,13 +17,10 @@ impl ChunkDecompressorInner {
   fn new(meta: ChunkMeta) -> PcoResult<Self> {
     meta.validate_delta_encoding()?;
 
-    let mut builder = PerLatentVarBuilder::default();
-    for (key, latent_var) in meta.per_latent_var.as_ref().enumerated() {
+    let per_latent_var = meta.per_latent_var.as_ref().map_result(|key, latent_var| {
       let delta_encoding = meta.delta_encoding.for_latent_var(key);
-      let cld = DynChunkLatentDecompressor::create(latent_var, delta_encoding)?;
-      builder.set(key, cld);
-    }
-    let per_latent_var = builder.into();
+      DynChunkLatentDecompressor::create(latent_var, delta_encoding)
+    })?;
 
     Ok(Self {
       meta,

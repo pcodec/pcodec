@@ -3,7 +3,7 @@ use better_io::BetterBufRead;
 use crate::ans::AnsState;
 use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::bit_writer::BitWriter;
-use crate::constants::{Bitlen, ANS_INTERLEAVING, MAX_SUPPORTED_PRECISION_BYTES};
+use crate::constants::{Bitlen, ANS_INTERLEAVING, OVERSHOOT_PADDING};
 use crate::data_types::LatentType;
 use crate::delta::DeltaState;
 use crate::errors::PcoResult;
@@ -27,8 +27,8 @@ impl PageLatentVarMeta {
     }
   }
 
-  pub unsafe fn read_from<R: BetterBufRead>(
-    reader_builder: &mut BitReaderBuilder<R>,
+  pub unsafe fn read_from(
+    reader: &mut BitReader,
     latent_type: LatentType,
     n_latents_per_delta_state: usize,
     ans_size_log: Bitlen,
@@ -36,16 +36,13 @@ impl PageLatentVarMeta {
     let delta_state = match_latent_enum!(
       latent_type,
       LatentType<L> => {
-        DynLatents::read_uncompressed_from::<R, L>(reader_builder, n_latents_per_delta_state, reader_builder.padding / MAX_SUPPORTED_PRECISION_BYTES)
+        DynLatents::read_short_uncompressed_from::<L>(reader, n_latents_per_delta_state)
       }
     )?;
     let mut ans_final_state_idxs = [0; ANS_INTERLEAVING];
-    reader_builder.with_reader(|reader| {
-      for state in &mut ans_final_state_idxs {
-        *state = reader.read_uint::<AnsState>(ans_size_log);
-      }
-      Ok(())
-    });
+    for state in &mut ans_final_state_idxs {
+      *state = reader.read_uint::<AnsState>(ans_size_log);
+    }
 
     Ok(Self {
       delta_state,

@@ -240,58 +240,55 @@ impl<'a> BitReader<'a> {
   }
 }
 
+// High level idea behind a BitReaderBuilder: without fail, produce BitReaders
+// with at least the requested number of bytes available. The user's provided
+// BetterBufRead might not have enough capacity, so when we get to the end, we
+// populate an eof_buffer with the last bit of data and some extra padding.
 pub struct BitReaderBuilder<R: BetterBufRead> {
-  pub padding: usize,
   inner: R,
   eof_buffer: Vec<u8>,
-  reached_eof: bool,
   bytes_into_eof_buffer: usize,
   bits_past_byte: Bitlen,
 }
 
 impl<R: BetterBufRead> BitReaderBuilder<R> {
-  pub fn new(inner: R, padding: usize, bits_past_byte: Bitlen) -> Self {
+  pub fn new(inner: R) -> Self {
     Self {
-      padding,
       inner,
       eof_buffer: vec![],
-      reached_eof: false,
       bytes_into_eof_buffer: 0,
-      bits_past_byte,
+      bits_past_byte: 0,
     }
   }
 
-  fn build<'a>(&'a mut self) -> io::Result<BitReader<'a>> {
-    // could make n_bytes configurably smaller if it matters for some reason
-    let n_bytes_to_read = self.padding;
-    if !self.reached_eof {
-      self.inner.fill_or_eof(n_bytes_to_read)?;
-      let inner_bytes = self.inner.buffer();
+  fn build<'a>(&'a mut self, n_bytes: usize) -> io::Result<BitReader<'a>> {
+    ensure_buf_read_capacity(&mut self.inner, n_bytes);
 
-      if inner_bytes.len() < n_bytes_to_read {
-        self.reached_eof = true;
-        self.eof_buffer = vec![0; inner_bytes.len() + self.padding];
-        self.eof_buffer[..inner_bytes.len()].copy_from_slice(inner_bytes);
-      }
-    }
-
-    let src = if self.reached_eof {
+    let inner_src = self.inner.fill_or_eof(n_bytes)?;
+    let src = if inner_src.len() >= n_bytes {
+      // first, try to use the inner BetterBufRead if it has enough data left
+      inner_src
+    } else if self
+      .eof_buffer
+      .len()
+      .saturating_sub(self.bytes_into_eof_buffer)
+      >= n_bytes
+    {
+      // if not, try to use the current eof_buffer if it has enough data left
       &self.eof_buffer[self.bytes_into_eof_buffer..]
     } else {
-      self.inner.buffer()
+      // if neither has enough capacity, make a new eof buffer with at 2x the
+      // requested bytes for amortized linear behavior with antagonistic reads
+      self.eof_buffer = vec![0; 2 * n_bytes];
+      self.eof_buffer[..inner_src.len()].copy_from_slice(inner_src);
+      self.bytes_into_eof_buffer = 0;
+      &self.eof_buffer
     };
 
-    // we've reached the end of file buffer
-    let unpadded_bytes = if self.reached_eof {
-      self.eof_buffer.len() - self.padding - self.bytes_into_eof_buffer
-    } else {
-      src.len()
-    };
-    let bits_past_byte = self.bits_past_byte;
     Ok(BitReader::new(
       src,
-      unpadded_bytes,
-      bits_past_byte,
+      inner_src.len(),
+      self.bits_past_byte,
     ))
   }
 
@@ -299,13 +296,11 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
     self.inner
   }
 
-  fn update(&mut self, final_bit_idx: usize) {
-    let bytes_consumed = final_bit_idx / 8;
+  fn update(&mut self, reader_bit_idx: usize) {
+    let bytes_consumed = reader_bit_idx / 8;
     self.inner.consume(bytes_consumed);
-    if self.reached_eof {
-      self.bytes_into_eof_buffer += bytes_consumed;
-    }
-    self.bits_past_byte = final_bit_idx as Bitlen % 8;
+    self.bytes_into_eof_buffer += bytes_consumed;
+    self.bits_past_byte = reader_bit_idx as Bitlen % 8;
   }
 
   /// Makes a BitReader that is guaranteed to be able to read at least
@@ -313,30 +308,35 @@ impl<R: BetterBufRead> BitReaderBuilder<R> {
   /// segfault (very bad!).
   pub fn with_reader<Y, F: FnOnce(&mut BitReader) -> PcoResult<Y>>(
     &mut self,
+    n_bytes: usize,
     f: F,
   ) -> PcoResult<Y> {
-    let mut reader = self.build()?;
+    let mut reader = self.build(n_bytes)?;
     let orig_bit_idx = reader.bit_idx();
     let res = f(&mut reader)?;
     let final_bit_idx = reader.bit_idx_safe()?;
-    debug_assert!(final_bit_idx - orig_bit_idx <= 8 * self.padding);
+    debug_assert!(final_bit_idx - orig_bit_idx <= 8 * n_bytes);
     self.update(final_bit_idx);
     Ok(res)
   }
 }
 
-pub fn ensure_buf_read_capacity<R: BetterBufRead>(src: &mut R, required: usize) {
+fn ensure_buf_read_capacity<R: BetterBufRead>(src: &mut R, required: usize) {
   if let Some(current_capacity) = src.capacity() {
     if current_capacity < required {
-      src.resize_capacity(required);
+      // double the required capacity to ensure amortized linear behavior with
+      // antagonistic reads
+      src.resize_capacity(2 * required);
     }
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use crate::constants::OVERSHOOT_PADDING;
-  use crate::errors::{ErrorKind, PcoResult};
+  use crate::{
+    constants::OVERSHOOT_PADDING,
+    errors::{ErrorKind, PcoResult},
+  };
 
   use super::*;
 
@@ -366,14 +366,19 @@ mod tests {
   #[test]
   fn test_bit_reader_builder() -> PcoResult<()> {
     let src = (0..7).collect::<Vec<_>>();
-    let mut reader_builder = BitReaderBuilder::new(src.as_slice(), 4 + OVERSHOOT_PADDING, 1);
-    reader_builder.with_reader(|reader| unsafe {
+    let capacity = 4 + OVERSHOOT_PADDING;
+    let mut reader_builder = BitReaderBuilder::new(src.as_slice());
+    reader_builder.with_reader(1, |reader| unsafe {
+      assert!(!reader.read_bool());
+      Ok(())
+    })?;
+    reader_builder.with_reader(capacity, |reader| unsafe {
       assert_eq!(&reader.src[0..4], &vec![0, 1, 2, 3]);
       assert_eq!(reader.bit_idx(), 1);
       assert_eq!(reader.read_usize(16), 1 << 7); // not 1 << 8, because we started at bit_idx 1
       Ok(())
     })?;
-    reader_builder.with_reader(|reader| unsafe {
+    reader_builder.with_reader(capacity, |reader| unsafe {
       assert_eq!(&reader.src[0..4], &vec![2, 3, 4, 5]);
       assert_eq!(reader.bit_idx(), 1);
       assert_eq!(reader.read_usize(7), 1);
@@ -382,7 +387,7 @@ mod tests {
       Ok(())
     })?;
     let err = reader_builder
-      .with_reader(|reader| unsafe {
+      .with_reader(capacity, |reader| unsafe {
         assert!(reader.src.len() >= 4); // because of padding
         reader.read_usize(9); // this overshoots the end of the data by 1 bit
         Ok(())

@@ -3,10 +3,9 @@ use std::fmt::Debug;
 
 use better_io::BetterBufRead;
 
-use crate::bit_reader;
 use crate::bit_reader::BitReaderBuilder;
 use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
-use crate::constants::{FULL_BATCH_N, PAGE_PADDING};
+use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
@@ -17,8 +16,6 @@ use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecom
 use crate::progress::Progress;
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
 use crate::wrapped::ChunkDecompressor;
-
-const PERFORMANT_BUF_READ_CAPACITY: usize = 8192;
 
 #[derive(Debug)]
 struct LatentScratch {
@@ -67,50 +64,46 @@ fn make_latent_decompressors(
   page_meta: &PageMeta,
   n: usize,
 ) -> PcoResult<PerLatentVar<DynPageLatentDecompressor>> {
-  let mut builder = PerLatentVarBuilder::default();
-  for (key, (dyn_cld, page_latent_var_meta)) in cd
-    .per_latent_var
+  let n_in_body = n.saturating_sub(cd.n_latents_per_delta_state());
+  cd.per_latent_var
     .as_ref()
     .zip_exact(page_meta.per_latent_var.as_ref())
-    .enumerated()
-  {
-    let n_in_body = n.saturating_sub(cd.n_latents_per_delta_state());
-    let state = match_latent_enum!(
-      &dyn_cld,
-      DynChunkLatentDecompressor<L>(cld) => {
-        let delta_state = page_latent_var_meta
-          .delta_state
-          .downcast_ref::<L>()
-          .unwrap()
-          .clone();
+    .map_result(|key, (dyn_cld, page_latent_var_meta)| {
+      let state = match_latent_enum!(
+        &dyn_cld,
+        DynChunkLatentDecompressor<L>(cld) => {
+          let delta_state = page_latent_var_meta
+            .delta_state
+            .downcast_ref::<L>()
+            .unwrap()
+            .clone();
 
-        if cld.n_bins == 0 && n_in_body > 0 {
-          return Err(PcoError::corruption(format!(
-            "unable to decompress chunk with no bins and {} latents",
-            n_in_body
-          )));
+          if cld.n_bins == 0 && n_in_body > 0 {
+            return Err(PcoError::corruption(format!(
+              "unable to decompress chunk with no bins and {} latents",
+              n_in_body
+            )));
+          }
+
+          let pld = PageLatentDecompressor::new(
+            cld,
+            page_latent_var_meta.ans_final_state_idxs,
+            delta_state,
+          )?;
+          DynPageLatentDecompressor::new(Box::new(pld))
         }
-
-        DynPageLatentDecompressor::new(Box::new(PageLatentDecompressor::new(
-          cld,
-          page_latent_var_meta.ans_final_state_idxs,
-          delta_state,
-        )?))
-      }
-    );
-
-    builder.set(key, state);
-  }
-  Ok(builder.into())
+      );
+      Ok(state)
+    })
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
-  pub(crate) fn new(mut src: R, cd: &ChunkDecompressorInner, n: usize) -> PcoResult<Self> {
-    bit_reader::ensure_buf_read_capacity(&mut src, PERFORMANT_BUF_READ_CAPACITY);
-    let mut reader_builder = BitReaderBuilder::new(src, PAGE_PADDING, 0);
-
-    let page_meta =
-      reader_builder.with_reader(|reader| unsafe { PageMeta::read_from(reader, &cd.meta) })?;
+  pub(crate) fn new(src: R, cd: &ChunkDecompressorInner, n: usize) -> PcoResult<Self> {
+    let mut reader_builder = BitReaderBuilder::new(src);
+    let page_meta = reader_builder.with_reader(
+      cd.meta.exact_page_meta_size() + OVERSHOOT_PADDING,
+      |reader| unsafe { PageMeta::read_from(reader, &cd.meta) },
+    )?;
 
     let latent_decompressors = make_latent_decompressors(cd, &page_meta, n)?;
 
@@ -146,42 +139,46 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
         n_remaining.saturating_sub(cd.n_latents_per_delta_state()),
         batch_n,
       );
-      self.reader_builder.with_reader(|reader| unsafe {
-        match_latent_enum!(
-          dyn_pld,
-          DynPageLatentDecompressor<L>(pld) => {
-            // Delta latents only line up with pre-delta length of the other
-            // latents.
-            // We never apply delta encoding to delta latents, so we just
-            // skip straight to the pre-delta routine.
-            pld.decompress_batch_pre_delta(
-              reader,
-              cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
-              &mut dst.downcast_mut::<L>().unwrap()[..limit]
-            )
-          }
-        );
-        Ok(())
-      })?;
+      self
+        .reader_builder
+        .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
+          match_latent_enum!(
+            dyn_pld,
+            DynPageLatentDecompressor<L>(pld) => {
+              // Delta latents only line up with pre-delta length of the other
+              // latents.
+              // We never apply delta encoding to delta latents, so we just
+              // skip straight to the pre-delta routine.
+              pld.decompress_batch_pre_delta(
+                reader,
+                cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
+                &mut dst.downcast_mut::<L>().unwrap()[..limit]
+              )
+            }
+          );
+          Ok(())
+        })?;
     }
     let delta_latents = self.delta_scratch.as_ref().map(|scratch| &scratch.dst);
 
     // PRIMARY LATENTS
-    self.reader_builder.with_reader(|reader| unsafe {
-      let primary_dst = T::transmute_to_latents(dst);
-      let dyn_pld = self
-        .latent_decompressors
-        .primary
-        .downcast_mut::<T::L>()
-        .unwrap();
-      dyn_pld.decompress_batch(
-        reader,
-        cd.per_latent_var.primary.downcast_ref::<T::L>().unwrap(),
-        delta_latents,
-        n_remaining,
-        primary_dst,
-      )
-    })?;
+    self
+      .reader_builder
+      .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
+        let primary_dst = T::transmute_to_latents(dst);
+        let dyn_pld = self
+          .latent_decompressors
+          .primary
+          .downcast_mut::<T::L>()
+          .unwrap();
+        dyn_pld.decompress_batch(
+          reader,
+          cd.per_latent_var.primary.downcast_ref::<T::L>().unwrap(),
+          delta_latents,
+          n_remaining,
+          primary_dst,
+        )
+      })?;
 
     // SECONDARY LATENTS
     if let Some(LatentScratch {
@@ -190,22 +187,24 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     }) = &mut self.secondary_scratch
     {
       let dyn_pld = self.latent_decompressors.secondary.as_mut().unwrap();
-      self.reader_builder.with_reader(|reader| unsafe {
-        match_latent_enum!(
-          dyn_pld,
-          DynPageLatentDecompressor<L>(pld) => {
-            // We never apply delta encoding to delta latents, so we just
-            // skip straight to the self PageLatentDecompressor
-            pld.decompress_batch(
-              reader,
-              cd.per_latent_var.secondary.as_ref().unwrap().downcast_ref::<L>().unwrap(),
-              delta_latents,
-              n_remaining,
-              &mut dst.downcast_mut::<L>().unwrap()[..batch_n]
-            )
-          }
-        )
-      })?;
+      self
+        .reader_builder
+        .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
+          match_latent_enum!(
+            dyn_pld,
+            DynPageLatentDecompressor<L>(pld) => {
+              // We never apply delta encoding to delta latents, so we just
+              // skip straight to the self PageLatentDecompressor
+              pld.decompress_batch(
+                reader,
+                cd.per_latent_var.secondary.as_ref().unwrap().downcast_ref::<L>().unwrap(),
+                delta_latents,
+                n_remaining,
+                &mut dst.downcast_mut::<L>().unwrap()[..batch_n]
+              )
+            }
+          )
+        })?;
     }
 
     T::join_latents(
@@ -217,7 +216,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
     self.n_remaining -= batch_n;
     if self.n_remaining == 0 {
-      self.reader_builder.with_reader(|reader| {
+      self.reader_builder.with_reader(1, |reader| {
         reader.drain_empty_byte("expected trailing bits at end of page to be empty")
       })?;
     }

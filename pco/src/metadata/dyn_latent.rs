@@ -13,15 +13,6 @@ define_latent_enum!(
 );
 
 impl DynLatent {
-  pub(crate) fn bits(&self) -> Bitlen {
-    match_latent_enum!(
-      &self,
-      DynLatent<L>(_latent) => {
-        L::BITS
-      }
-    )
-  }
-
   pub(crate) unsafe fn read_uncompressed_from<L: Latent>(reader: &mut BitReader) -> Self {
     DynLatent::new(reader.read_uint::<L>(L::BITS))
   }
@@ -33,5 +24,14 @@ impl DynLatent {
         writer.write_uint(*latent, L::BITS);
       }
     );
+  }
+
+  pub(crate) fn bits(&self) -> Bitlen {
+    match_latent_enum!(
+      &self,
+      DynLatent<L>(_latent) => {
+        L::BITS
+      }
+    )
   }
 }

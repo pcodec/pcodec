@@ -5,30 +5,25 @@ use std::io::Result;
 /// Supports all of these:
 /// * zero-copy reads from data that is already in memory (`&[u8]`)
 /// * resizable capacity so `BetterBufRead` can be passed between programs that
-///   require reading different lengths of data at once
-/// * ensuring that the buffer contains at least the requested length of data
-///   (unless we've reached the end of the file)
+///   require reading different contiguous lengths of data
+/// * provides at least the requested length of data, unless we've reached the
+///   end of the file
 ///
 /// In contrast, programs that use a [`BufRead`][std::io::BufRead] often copy
 /// to yet another internal buffer in order to guarantee an appropriate size.
 /// This reduces performance and inevitably makes implementations more
 /// complicated.
 pub trait BetterBufRead {
-  /// Fills the internal buffer with at least `n_bytes` if possible, or as many
-  /// as possible if the end of the file is reached.
+  /// Returns at least `n_bytes` if possible, or as many as possible if the end
+  /// of the file is reached.
+  /// Always returns all buffered data available.
   ///
   /// Depending on the implementation, this may return an IO error for either
   /// of these reasons:
   /// * `n_bytes` exceeds the current capacity
   /// * errors crop up when reading from the source
-  fn fill_or_eof(&mut self, n_bytes: usize) -> Result<()>;
-  /// Returns all data available in memory.
-  ///
-  /// This may be smaller than the last `n_bytes` read during `fill_or_eof`,
-  /// but only if EOF was reached; and it may be larger than that depending on
-  /// the implementation.
-  fn buffer(&self) -> &[u8];
-  /// Advances by `n_bytes`, reducing the size of the available data to read.
+  fn fill_or_eof(&mut self, n_bytes: usize) -> Result<&[u8]>;
+  /// Advances by `n_bytes`, reducing the size of the available data.
   ///
   /// Panics if `n_bytes` is greater than the buffer's length.
   fn consume(&mut self, n_bytes: usize);
@@ -48,13 +43,8 @@ pub trait BetterBufRead {
 
 impl BetterBufRead for &[u8] {
   #[inline]
-  fn fill_or_eof(&mut self, _bytes_requested: usize) -> Result<()> {
-    Ok(())
-  }
-
-  #[inline]
-  fn buffer(&self) -> &[u8] {
-    self
+  fn fill_or_eof(&mut self, _bytes_requested: usize) -> Result<&[u8]> {
+    Ok(self)
   }
 
   #[inline]
@@ -76,16 +66,16 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_slice_reads() {
+  fn test_slice_reads() -> Result<()> {
     let data = vec![0_u8, 1, 2, 3, 4, 5, 6, 7];
     let mut slice = data.as_slice();
-    assert_eq!(slice.buffer(), &data);
+    assert_eq!(slice.fill_or_eof(10)?, &data);
     slice.consume(1);
-    assert_eq!(slice.buffer(), &data[1..]);
-    slice.fill_or_eof(33).unwrap();
+    assert_eq!(slice.fill_or_eof(10)?, &data[1..]);
     slice.resize_capacity(0);
-    assert_eq!(slice.buffer(), &data[1..]);
+    assert_eq!(slice.fill_or_eof(33)?, &data[1..]);
     slice.consume(2);
-    assert_eq!(slice.buffer(), &data[3..]);
+    assert_eq!(slice.fill_or_eof(10)?, &data[3..]);
+    Ok(())
   }
 }
