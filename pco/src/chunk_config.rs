@@ -63,7 +63,7 @@ pub enum DeltaSpec {
   ///
   /// This is best if your data is in a random order or adjacent numbers have
   /// no relation to each other.
-  None,
+  NoOp,
   /// Tries taking nth order consecutive deltas.
   ///
   /// Supports a delta encoding order up to 7.
