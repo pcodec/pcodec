@@ -1,6 +1,5 @@
 use better_io::BetterBufRead;
 
-use crate::bit_reader;
 use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::constants::{Bitlen, OVERSHOOT_PADDING};
 use crate::data_types::{Number, NumberType};
