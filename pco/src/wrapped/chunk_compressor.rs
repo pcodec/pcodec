@@ -27,6 +27,7 @@ use crate::wrapped::guarantee;
 use crate::{
   ans, bin_optimization, bits, data_types, delta, ChunkConfig, PagingSpec, FULL_BATCH_N,
 };
+use std::any;
 use std::cmp::min;
 use std::io::Write;
 
@@ -534,11 +535,13 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
 
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
   if !T::mode_is_valid(&mode) {
-    return Err(PcoError::invalid_argument(
+    return Err(PcoError::invalid_argument(format!(
       "The chosen mode of {:?} was invalid for type {}. \
       This is most likely due to an invalid argument, but if using Auto mode \
       spec, it could also be a bug in pco.",
-    ));
+      mode,
+      any::type_name::<T>(),
+    )));
   }
 
   let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
