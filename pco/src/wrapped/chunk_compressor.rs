@@ -27,6 +27,7 @@ use crate::wrapped::guarantee;
 use crate::{
   ans, bin_optimization, bits, data_types, delta, ChunkConfig, PagingSpec, FULL_BATCH_N,
 };
+use std::any;
 use std::cmp::min;
 use std::io::Write;
 
@@ -539,7 +540,7 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
       This is most likely due to an invalid argument, but if using Auto mode \
       spec, it could also be a bug in pco.",
       mode,
-      std::any::type_name::<T>(),
+      any::type_name::<T>(),
     )));
   }
 

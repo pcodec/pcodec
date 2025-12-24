@@ -55,6 +55,15 @@ def write_u32(arr, name, base_dir):
 
 
 @writer
+def write_u64(arr, name, base_dir):
+    if arr.dtype != np.uint64:
+        arr = np.floor(arr).astype(np.uint64)
+    strs = [str(x) for x in arr]
+    full_name = f"u64_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
 def write_i64(arr, name, base_dir):
     if arr.dtype != np.int64:
         arr = np.floor(arr).astype(np.int64)
@@ -311,6 +320,16 @@ def diablo():
     return the_data
 
 
+@datagen("u64")
+def ids():
+    n_ids = 30000  # too many to have any hope of memorizing with bins
+    logits = np.random.uniform(0, 5, size=n_ids)
+    weight = np.exp(logits)
+    weight /= np.sum(weight)
+    unique = np.random.randint(0, 2**64, size=n_ids, dtype=np.uint64)
+    return np.random.choice(unique, size=n, replace=True, p=weight)
+
+
 def uniquify_preserving_order(xs):
     return list(dict.fromkeys(xs))
 
@@ -328,9 +347,9 @@ if __name__ == "__main__":
         type=str,
         nargs="*",
         help=(
-            'Datasets to generate. If not provided, all'
-            ' datasets are generated. Available datasets are:'
-            f' {", ".join(DATA_GENS)}'
+            "Datasets to generate. If not provided, all"
+            " datasets are generated. Available datasets are:"
+            f" {', '.join(DATA_GENS)}"
         ),
     )
     args = parser.parse_args()
