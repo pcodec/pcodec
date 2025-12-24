@@ -25,6 +25,8 @@ impl Default for FormatVersion {
 }
 
 impl FormatVersion {
+  pub(crate) const MAX_ENCODED_SIZE: usize = 1;
+
   pub(crate) fn read_from(reader: &mut BitReader) -> PcoResult<Self> {
     let version = reader.read_aligned_bytes(1)?[0];
     if version > CURRENT_FORMAT_VERSION {

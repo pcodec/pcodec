@@ -3,7 +3,7 @@ use crate::bit_writer::BitWriter;
 use crate::bits::bits_to_encode_offset_bits;
 use crate::constants::{
   Bitlen, Weight, ANS_INTERLEAVING, BITS_TO_ENCODE_ANS_SIZE_LOG, BITS_TO_ENCODE_N_BINS,
-  FULL_BIN_BATCH_SIZE, MAX_ANS_BITS,
+  MAX_ANS_BITS, OVERSHOOT_PADDING,
 };
 use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
@@ -14,15 +14,17 @@ use better_io::BetterBufRead;
 use std::cmp::min;
 use std::io::Write;
 
-unsafe fn read_bin_batch<L: Latent, R: BetterBufRead>(
+const FULL_BIN_BATCH_LEN: usize = 128;
+
+fn read_bin_batch<L: Latent, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   ans_size_log: Bitlen,
-  batch_size: usize,
-  dst: &mut Vec<Bin<L>>,
+  dst: &mut [Bin<L>],
 ) -> PcoResult<()> {
-  reader_builder.with_reader(|reader| {
+  let max_size: usize = dst.len() * (5 + L::BITS as usize) + OVERSHOOT_PADDING;
+  reader_builder.with_reader(max_size, |reader| unsafe {
     let offset_bits_bits = bits_to_encode_offset_bits::<L>();
-    for _ in 0..batch_size {
+    for bin in dst {
       let weight = reader.read_uint::<Weight>(ans_size_log) + 1;
       let lower = reader.read_uint::<L>(L::BITS);
 
@@ -36,11 +38,11 @@ unsafe fn read_bin_batch<L: Latent, R: BetterBufRead>(
         )));
       }
 
-      dst.push(Bin {
+      *bin = Bin {
         weight,
         lower,
         offset_bits,
-      });
+      };
     }
     Ok(())
   })?;
@@ -55,7 +57,7 @@ unsafe fn write_bins<L: Latent, W: Write>(
 ) -> PcoResult<()> {
   writer.write_usize(bins.len(), BITS_TO_ENCODE_N_BINS);
   let offset_bits_bits = bits_to_encode_offset_bits::<L>();
-  for bin_batch in bins.chunks(FULL_BIN_BATCH_SIZE) {
+  for bin_batch in bins.chunks(FULL_BIN_BATCH_LEN) {
     for bin in bin_batch {
       writer.write_uint(bin.weight - 1, ans_size_log);
       writer.write_uint(bin.lower, L::BITS);
@@ -94,15 +96,18 @@ impl ChunkLatentVarMeta {
     )
   }
 
-  pub(crate) unsafe fn read_from<R: BetterBufRead>(
+  pub(crate) fn read_from<R: BetterBufRead>(
     reader_builder: &mut BitReaderBuilder<R>,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let (ans_size_log, n_bins) = reader_builder.with_reader(|reader| {
-      let ans_size_log = reader.read_bitlen(BITS_TO_ENCODE_ANS_SIZE_LOG);
-      let n_bins = reader.read_usize(BITS_TO_ENCODE_N_BINS);
-      Ok((ans_size_log, n_bins))
-    })?;
+    let (ans_size_log, n_bins) = reader_builder.with_reader(
+      BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + OVERSHOOT_PADDING,
+      |reader| unsafe {
+        let ans_size_log = reader.read_bitlen(BITS_TO_ENCODE_ANS_SIZE_LOG);
+        let n_bins = reader.read_usize(BITS_TO_ENCODE_N_BINS);
+        Ok((ans_size_log, n_bins))
+      },
+    )?;
 
     if 1 << ans_size_log < n_bins {
       return Err(PcoError::corruption(format!(
@@ -127,13 +132,15 @@ impl ChunkLatentVarMeta {
       latent_type,
       LatentType<L> => {
         let mut bins = Vec::with_capacity(n_bins);
-        while bins.len() < n_bins {
-          let batch_size = min(n_bins - bins.len(), FULL_BIN_BATCH_SIZE);
+        unsafe { bins.set_len(n_bins) };
+        // we read in small batches because a latent variable could
+        // theoretically contain up to about 300kB of bins
+        for start in (0..n_bins).step_by(FULL_BIN_BATCH_LEN) {
+          let end = min(start + FULL_BIN_BATCH_LEN, n_bins);
           read_bin_batch::<L, R>(
             reader_builder,
             ans_size_log,
-            batch_size,
-            &mut bins,
+            &mut bins[start..end],
           )?;
         }
 

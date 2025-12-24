@@ -638,12 +638,12 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "better_io"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92fde17f91e7ba10b2a07f8dff29530b77144894bc6ae850fbc66e1276af0d28"
 
 [[package]]
 name = "better_io"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92fde17f91e7ba10b2a07f8dff29530b77144894bc6ae850fbc66e1276af0d28"
+version = "0.2.0"
 
 [[package]]
 name = "bindgen"
@@ -2382,7 +2382,7 @@ version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab068b64f2c6f074cbdcafc80ebd83a27da92a3848deba2fabc21eba6691fc65"
 dependencies = [
- "better_io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "better_io 0.1.0",
  "dtype_dispatch 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "half",
  "rand_xoshiro",
@@ -2392,7 +2392,7 @@ dependencies = [
 name = "pco"
 version = "0.4.7"
 dependencies = [
- "better_io 0.1.0",
+ "better_io 0.2.0",
  "dtype_dispatch 0.1.1",
  "half",
  "rand 0.8.5",
@@ -2405,7 +2405,7 @@ version = "0.4.3"
 dependencies = [
  "anyhow",
  "arrow",
- "better_io 0.1.0",
+ "better_io 0.2.0",
  "blosc2-src",
  "brotli",
  "bytes",
