@@ -466,7 +466,7 @@ fn new_candidate_w_split(
   let unoptimized_bins_log = choose_unoptimized_bins_log(config.compression_level, n);
   let delta_encoding = match config.delta_spec {
     DeltaSpec::Auto => choose_delta_encoding(&latents.primary, unoptimized_bins_log)?,
-    DeltaSpec::None | DeltaSpec::TryConsecutive(0) => DeltaEncoding::NoOp,
+    DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) => DeltaEncoding::NoOp,
     DeltaSpec::TryConsecutive(order) => DeltaEncoding::Consecutive {
       order,
       secondary_uses_delta: false,

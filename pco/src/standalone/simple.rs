@@ -172,7 +172,7 @@ mod tests {
   fn test_simple_compress_into() -> PcoResult<()> {
     let nums = (0..100).map(|x| x as i32).collect::<Vec<_>>();
     let config = &ChunkConfig {
-      delta_spec: DeltaSpec::None,
+      delta_spec: DeltaSpec::NoOp,
       ..Default::default()
     };
     let mut buffer = [77_u8];
@@ -200,7 +200,7 @@ mod tests {
       &nums,
       &ChunkConfig {
         compression_level: 0,
-        delta_spec: DeltaSpec::None,
+        delta_spec: DeltaSpec::NoOp,
         paging_spec: PagingSpec::Exact(vec![300, 300]),
         ..Default::default()
       },

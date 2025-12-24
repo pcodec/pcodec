@@ -9,7 +9,7 @@ fn assert_panic_safe<T: Number>(nums: Vec<T>) -> PcoResult<ChunkMeta> {
   let fc = FileCompressor::default();
   let config = ChunkConfig {
     mode_spec: ModeSpec::Classic,
-    delta_spec: DeltaSpec::None,
+    delta_spec: DeltaSpec::NoOp,
     ..Default::default()
   };
   let cc = fc.chunk_compressor(&nums, &config)?;
