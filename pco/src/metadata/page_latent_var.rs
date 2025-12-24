@@ -1,9 +1,8 @@
-use better_io::BetterBufRead;
 
 use crate::ans::AnsState;
-use crate::bit_reader::{BitReader, BitReaderBuilder};
+use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
-use crate::constants::{Bitlen, ANS_INTERLEAVING, OVERSHOOT_PADDING};
+use crate::constants::{Bitlen, ANS_INTERLEAVING};
 use crate::data_types::LatentType;
 use crate::delta::DeltaState;
 use crate::errors::PcoResult;

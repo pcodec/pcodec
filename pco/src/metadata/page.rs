@@ -1,8 +1,7 @@
 use std::io::Write;
 
-use better_io::BetterBufRead;
 
-use crate::bit_reader::{BitReader, BitReaderBuilder};
+use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::constants::Bitlen;
 use crate::errors::PcoResult;

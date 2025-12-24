@@ -10,7 +10,7 @@ use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
-use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
+use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::DynLatents;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::progress::Progress;
@@ -68,7 +68,7 @@ fn make_latent_decompressors(
   cd.per_latent_var
     .as_ref()
     .zip_exact(page_meta.per_latent_var.as_ref())
-    .map_result(|key, (dyn_cld, page_latent_var_meta)| {
+    .map_result(|_key, (dyn_cld, page_latent_var_meta)| {
       let state = match_latent_enum!(
         &dyn_cld,
         DynChunkLatentDecompressor<L>(cld) => {
