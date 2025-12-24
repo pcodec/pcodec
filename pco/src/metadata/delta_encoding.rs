@@ -84,6 +84,11 @@ pub enum DeltaEncoding {
 }
 
 impl DeltaEncoding {
+  pub(crate) const MAX_BIT_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
+    + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG
+    + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG
+    + 1) as usize;
+
   unsafe fn read_from_pre_v3(reader: &mut BitReader) -> Self {
     let order = reader.read_usize(BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
     match order {
@@ -96,8 +101,8 @@ impl DeltaEncoding {
   }
 
   pub(crate) unsafe fn read_from(
-    version: &FormatVersion,
     reader: &mut BitReader,
+    version: &FormatVersion,
   ) -> PcoResult<Self> {
     if !version.supports_delta_variants() {
       return Ok(Self::read_from_pre_v3(reader));
@@ -233,19 +238,6 @@ impl DeltaEncoding {
       ) => LatentVarDeltaEncoding::NoOp,
     }
   }
-
-  pub(crate) fn exact_bit_size(&self) -> Bitlen {
-    let payload_bits = match self {
-      Self::NoOp => 0,
-      // For nontrivial encodings, we have a +1 bit for whether the
-      // secondary latent is delta-encoded or not.
-      Self::Consecutive { .. } => BITS_TO_ENCODE_DELTA_ENCODING_ORDER + 1,
-      Self::Lookback { .. } => {
-        BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG + 1
-      }
-    };
-    BITS_TO_ENCODE_DELTA_ENCODING_VARIANT + payload_bits
-  }
 }
 
 #[cfg(test)]
@@ -260,10 +252,8 @@ mod tests {
     unsafe {
       encoding.write_to(&mut writer);
     }
-    assert_eq!(
-      encoding.exact_bit_size() as usize,
-      writer.bit_idx(),
-    );
+    let true_bit_size = writer.bit_idx();
+    assert!(true_bit_size <= DeltaEncoding::MAX_BIT_SIZE);
   }
 
   #[test]

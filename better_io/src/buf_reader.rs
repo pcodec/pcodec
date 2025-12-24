@@ -23,7 +23,7 @@ pub struct BetterBufReader<R: Read> {
 }
 
 impl<R: Read> BetterBufRead for BetterBufReader<R> {
-  fn fill_or_eof(&mut self, n_bytes: usize) -> std::io::Result<()> {
+  fn fill_or_eof(&mut self, n_bytes: usize) -> std::io::Result<&[u8]> {
     // cycle the buffer if necessary
     let unfilled = self.buffer.len() - self.pos;
     let max_available = max(unfilled, self.desired_capacity);
@@ -57,11 +57,7 @@ impl<R: Read> BetterBufRead for BetterBufReader<R> {
       }
     }
 
-    Ok(())
-  }
-
-  fn buffer(&self) -> &[u8] {
-    &self.buffer[self.pos..self.filled]
+    Ok(&self.buffer[self.pos..self.filled])
   }
 
   #[inline]
@@ -107,7 +103,7 @@ impl<R: Read> BetterBufReader<R> {
     }
   }
 
-  /// Creates a `BetterBufReader` based on a `Reader`, supplying sensible
+  /// Creates a `BetterBufReader` based on a `Read`, supplying sensible
   /// defaults.
   pub fn from_read_simple(inner: R) -> Self {
     Self::new(&[], inner, DEFAULT_CAPACITY)
@@ -138,50 +134,54 @@ impl<R: Read> BetterBufReader<R> {
 
 #[cfg(test)]
 mod tests {
-  use crate::buf_reader::BetterBufReader;
+  use std::io::Result;
+
+  use super::*;
+
   use crate::BetterBufRead;
 
   #[test]
-  fn test_better_buf_reader() {
+  fn test_better_buf_reader() -> Result<()> {
     let inner = (0..100_u8).skip(2).collect::<Vec<_>>();
     let mut reader = BetterBufReader::new(&[0, 1], inner.as_slice(), 5);
 
     // filling
-    assert_eq!(reader.buffer(), &[0, 1]);
-    reader.fill_or_eof(1).unwrap();
-    assert_eq!(reader.buffer(), &[0, 1]);
-    reader.fill_or_eof(3).unwrap();
-    assert_eq!(reader.buffer(), &[0, 1, 2]);
+    assert_eq!(reader.fill_or_eof(0)?, &[0, 1]);
+    assert_eq!(reader.fill_or_eof(1)?, &[0, 1]);
+    assert_eq!(reader.fill_or_eof(3)?, &[0, 1, 2]);
     assert!(reader.fill_or_eof(6).is_err());
-    assert_eq!(reader.buffer(), &[0, 1, 2]);
 
     // consuming
     reader.consume(2);
-    assert_eq!(reader.buffer(), &[2]);
-    reader.fill_or_eof(2).unwrap();
-    assert_eq!(reader.buffer(), &[2, 3]);
-    reader.fill_or_eof(5).unwrap();
-    assert_eq!(reader.buffer(), &[2, 3, 4, 5, 6]);
+    assert_eq!(reader.fill_or_eof(0)?, &[2]);
+    assert_eq!(reader.fill_or_eof(2)?, &[2, 3]);
+    assert_eq!(reader.fill_or_eof(5)?, &[2, 3, 4, 5, 6]);
 
     // resizing larger
     assert_eq!(reader.capacity(), Some(5));
     reader.resize_capacity(7);
     assert_eq!(reader.capacity(), Some(7));
-    reader.fill_or_eof(7).unwrap();
-    assert_eq!(reader.buffer(), &[2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(
+      reader.fill_or_eof(7)?,
+      &[2, 3, 4, 5, 6, 7, 8]
+    );
 
     // resizing smaller
     reader.resize_capacity(2);
     assert_eq!(reader.capacity(), Some(2));
-    assert_eq!(reader.buffer(), &[2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(
+      reader.fill_or_eof(0)?,
+      &[2, 3, 4, 5, 6, 7, 8]
+    );
     reader.consume(6);
-    reader.fill_or_eof(2).unwrap();
-    assert_eq!(reader.buffer(), &[8, 9]);
+    assert_eq!(reader.fill_or_eof(2)?, &[8, 9]);
 
     // getting the read back
     assert_eq!(
       reader.into_inner(),
       &(10..100).collect::<Vec<_>>()
     );
+
+    Ok(())
   }
 }
