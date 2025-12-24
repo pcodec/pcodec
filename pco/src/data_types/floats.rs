@@ -328,14 +328,14 @@ macro_rules! impl_float_number {
 
       fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
-          Mode::Classic => true,
+          Mode::Classic | Mode::Dict(_) => true,
           Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
           }
           Mode::FloatQuant(k) => *k > 0 && *k <= Self::PRECISION_BITS,
-          _ => false,
+          Mode::IntMult(_) => false,
         }
       }
       fn choose_mode_and_split_latents(
@@ -416,6 +416,11 @@ mod tests {
   fn test_mode_validation() {
     // CLASSIC
     assert!(f32::mode_is_valid(&Mode::Classic));
+
+    // DICT
+    assert!(f32::mode_is_valid(&Mode::Dict(
+      DynLatents::new(vec![0_u32, 111])
+    )));
 
     // FLOAT MULT
     for base in [

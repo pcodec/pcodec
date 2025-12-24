@@ -52,8 +52,8 @@ pub fn join_latents<L: Latent>(mode: &Mode, primary: &mut [L], secondary: Option
 pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
   match mode {
     Mode::Classic | Mode::Dict(_) => true,
+    Mode::FloatMult(_) | Mode::FloatQuant(_) => false,
     Mode::IntMult(base) => *base.downcast_ref::<L>().unwrap() > L::ZERO,
-    _ => false,
   }
 }
 
