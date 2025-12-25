@@ -32,6 +32,54 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
   }
 }
 
+#[used]
+static _FORCE_EXPORT_U16_4: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [u16], usize) =
+  decompress_offsets::<u16, 4>;
+#[used]
+static _FORCE_EXPORT_U32_4: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [u32], usize) =
+  decompress_offsets::<u32, 4>;
+#[used]
+static _FORCE_EXPORT_U64_8: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [u64], usize) =
+  decompress_offsets::<u64, 8>;
+// unsafe fn force_compile_u64_8_in_lib(
+//   pld: &mut PageLatentDecompressor<u64>,
+//   reader: &mut BitReader,
+//   batch_n: usize,
+// ) {
+//   pld.decompress_offsets::<8>(reader, batch_n);
+// }
+
+#[inline(never)]
+unsafe fn decompress_offsets<L: Latent, const READ_BYTES: usize>(
+  reader: &mut BitReader,
+  offset_bits_csum: &[u32],
+  offset_bits: &[u32],
+  latents: &mut [L],
+  n: usize,
+) {
+  let base_bit_idx = reader.bit_idx();
+  let src = reader.src;
+  for i in 0..n {
+    let offset_bits = offset_bits[i];
+    let offset_bits_csum = offset_bits_csum[i];
+    let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
+    let byte_idx = bit_idx / 8;
+    let bits_past_byte = bit_idx % 8;
+    let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
+      src,
+      byte_idx as usize,
+      bits_past_byte,
+      offset_bits,
+    );
+
+    latents[i] = latents[i].wrapping_add(offset);
+  }
+
+  let final_bit_idx = base_bit_idx + offset_bits_csum[n - 1] as usize + offset_bits[n - 1] as usize;
+  reader.stale_byte_idx = final_bit_idx / 8;
+  reader.bits_past_byte = final_bit_idx as Bitlen % 8;
+}
+
 // this is entirely state - any precomputed information is in the ChunkLatentDecompressor
 #[derive(Clone, Debug)]
 pub struct PageLatentDecompressor<L: Latent> {
@@ -183,38 +231,6 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     self.ans_state_idxs = state_idxs;
   }
 
-  #[inline(never)]
-  unsafe fn decompress_offsets<const READ_BYTES: usize>(
-    &mut self,
-    reader: &mut BitReader,
-    n: usize,
-  ) {
-    let base_bit_idx = reader.bit_idx();
-    let src = reader.src;
-    for i in 0..n {
-      let offset_bits = *self.offset_bits_scratch.get_unchecked(i);
-      let offset_bits_csum = *self.offset_bits_csum_scratch.get_unchecked(i);
-      let latent = self.latents.get_unchecked_mut(i);
-      let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
-      let byte_idx = bit_idx / 8;
-      let bits_past_byte = bit_idx % 8;
-      let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
-        src,
-        byte_idx as usize,
-        bits_past_byte,
-        offset_bits,
-      );
-
-      *latent = latent.wrapping_add(offset);
-    }
-
-    let final_bit_idx = base_bit_idx
-      + self.offset_bits_csum_scratch[n - 1] as usize
-      + self.offset_bits_scratch[n - 1] as usize;
-    reader.stale_byte_idx = final_bit_idx / 8;
-    reader.bits_past_byte = final_bit_idx as Bitlen % 8;
-  }
-
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
   pub unsafe fn decompress_batch_pre_delta(
@@ -248,13 +264,24 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
+    macro_rules! specialized_to_read_bytes {
+      ($rb: literal) => {
+        decompress_offsets::<L, $rb>(
+          reader,
+          &self.offset_bits_csum_scratch.0,
+          &self.offset_bits_scratch.0,
+          &mut self.latents.0,
+          batch_n,
+        )
+      };
+    }
     match (cld.bytes_per_offset, L::BITS) {
       (0, _) => (),
-      (1..=4, 16) => self.decompress_offsets::<4>(reader, batch_n),
-      (1..=4, 32) => self.decompress_offsets::<4>(reader, batch_n),
-      (5..=8, 32) => self.decompress_offsets::<8>(reader, batch_n),
-      (1..=8, 64) => self.decompress_offsets::<8>(reader, batch_n),
-      (9..=15, 64) => self.decompress_offsets::<15>(reader, batch_n),
+      (1..=4, 16) => specialized_to_read_bytes!(4),
+      (1..=4, 32) => specialized_to_read_bytes!(4),
+      (5..=8, 32) => specialized_to_read_bytes!(8),
+      (1..=8, 64) => specialized_to_read_bytes!(8),
+      (9..=15, 64) => specialized_to_read_bytes!(15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         cld.bytes_per_offset,
