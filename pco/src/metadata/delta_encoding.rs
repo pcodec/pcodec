@@ -6,20 +6,9 @@ use crate::constants::{
 };
 use crate::data_types::LatentType;
 use crate::errors::{PcoError, PcoResult};
-use crate::metadata::delta_encoding::DeltaEncoding::*;
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::LatentVarKey;
 use std::io::Write;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DeltaConsecutiveConfig {
-  /// The number of times consecutive deltas were taken.
-  /// For instance, 2nd order delta encoding is delta-of-deltas.
-  ///
-  /// This is always positive, between 1 and 7.
-  pub order: usize,
-  pub secondary_uses_delta: bool,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeltaLookbackConfig {
@@ -28,7 +17,6 @@ pub struct DeltaLookbackConfig {
   pub state_n_log: Bitlen,
   /// The log2 of the maximum possible lookback.
   pub window_n_log: Bitlen,
-  pub secondary_uses_delta: bool,
 }
 
 impl DeltaLookbackConfig {
@@ -41,27 +29,47 @@ impl DeltaLookbackConfig {
   }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LatentVarDeltaEncoding {
+  NoOp,
+  Consecutive(usize),
+  Lookback(DeltaLookbackConfig),
+}
+
+impl LatentVarDeltaEncoding {
+  pub(crate) fn n_latents_per_state(&self) -> usize {
+    match self {
+      Self::NoOp => 0,
+      Self::Consecutive(order) => *order,
+      Self::Lookback(config) => 1 << config.state_n_log,
+    }
+  }
+}
+
 /// How Pco did
-/// [delta encoding](https://en.wikipedia.org/wiki/Delta_encoding) on this
-/// chunk.
+/// [delta encoding](https://en.wikipedia.org/wiki/Delta_encoding) on a chunk.
 ///
 /// Delta encoding optionally takes differences between nearby numbers,
 /// greatly reducing the entropy of the data distribution in some cases.
 /// This stage of processing happens after applying the
 /// [`Mode`][crate::metadata::Mode] during compression.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DeltaEncoding {
   /// No delta encoding; the values are encoded as-is.
   ///
   /// This is best if your data is in random order.
-  None,
+  NoOp,
   /// Encodes the differences between consecutive values (or differences
   /// between those, etc.).
   ///
   /// This is best if your numbers have high variance overall, but adjacent
   /// numbers are close in value, e.g. an arithmetic sequence.
-  Consecutive(DeltaConsecutiveConfig),
+  Consecutive {
+    order: usize,
+    secondary_uses_delta: bool,
+  },
   /// Encodes an extra "lookback" latent variable and the differences
   /// `x[i] - x[i - lookback[i]]` between values.
   ///
@@ -69,24 +77,32 @@ pub enum DeltaEncoding {
   /// beyond just adjacent elements.
   /// It is in spirit similar to LZ77 compression, but only stores lookbacks
   /// (AKA match offsets) and no match lengths.
-  Lookback(DeltaLookbackConfig),
+  Lookback {
+    config: DeltaLookbackConfig,
+    secondary_uses_delta: bool,
+  },
 }
 
 impl DeltaEncoding {
+  pub(crate) const MAX_BIT_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
+    + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG
+    + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG
+    + 1) as usize;
+
   unsafe fn read_from_pre_v3(reader: &mut BitReader) -> Self {
     let order = reader.read_usize(BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
     match order {
-      0 => None,
-      _ => Consecutive(DeltaConsecutiveConfig {
+      0 => Self::NoOp,
+      _ => Self::Consecutive {
         order,
         secondary_uses_delta: false,
-      }),
+      },
     }
   }
 
   pub(crate) unsafe fn read_from(
-    version: &FormatVersion,
     reader: &mut BitReader,
+    version: &FormatVersion,
   ) -> PcoResult<Self> {
     if !version.supports_delta_variants() {
       return Ok(Self::read_from_pre_v3(reader));
@@ -95,7 +111,7 @@ impl DeltaEncoding {
     let delta_encoding_variant = reader.read_bitlen(BITS_TO_ENCODE_DELTA_ENCODING_VARIANT);
 
     let res = match delta_encoding_variant {
-      0 => None,
+      0 => Self::NoOp,
       1 => {
         let order = reader.read_usize(BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
         if order == 0 {
@@ -103,10 +119,10 @@ impl DeltaEncoding {
             "Consecutive delta encoding order must not be 0",
           ));
         } else {
-          Consecutive(DeltaConsecutiveConfig {
+          Self::Consecutive {
             order,
             secondary_uses_delta: reader.read_bool(),
-          })
+          }
         }
       }
       2 => {
@@ -118,11 +134,13 @@ impl DeltaEncoding {
             state_n_log, window_n_log
           )));
         }
-        Lookback(DeltaLookbackConfig {
-          window_n_log,
-          state_n_log,
+        Self::Lookback {
+          config: DeltaLookbackConfig {
+            window_n_log,
+            state_n_log,
+          },
           secondary_uses_delta: reader.read_bool(),
-        })
+        }
       }
       value => {
         return Err(PcoError::corruption(format!(
@@ -136,9 +154,9 @@ impl DeltaEncoding {
 
   pub(crate) unsafe fn write_to<W: Write>(&self, writer: &mut BitWriter<W>) {
     let variant = match self {
-      None => 0,
-      Consecutive(_) => 1,
-      Lookback(_) => 2,
+      Self::NoOp => 0,
+      Self::Consecutive { .. } => 1,
+      Self::Lookback { .. } => 2,
     };
     writer.write_bitlen(
       variant,
@@ -146,15 +164,18 @@ impl DeltaEncoding {
     );
 
     match self {
-      None => (),
-      Consecutive(config) => {
-        writer.write_usize(
-          config.order,
-          BITS_TO_ENCODE_DELTA_ENCODING_ORDER,
-        );
-        writer.write_bool(config.secondary_uses_delta);
+      Self::NoOp => (),
+      Self::Consecutive {
+        order,
+        secondary_uses_delta,
+      } => {
+        writer.write_usize(*order, BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
+        writer.write_bool(*secondary_uses_delta);
       }
-      Lookback(config) => {
+      Self::Lookback {
+        config,
+        secondary_uses_delta,
+      } => {
         writer.write_bitlen(
           config.window_n_log - 1,
           BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG,
@@ -163,62 +184,66 @@ impl DeltaEncoding {
           config.state_n_log,
           BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG,
         );
-        writer.write_bool(config.secondary_uses_delta);
+        writer.write_bool(*secondary_uses_delta);
       }
     }
   }
 
   pub(crate) fn latent_type(&self) -> Option<LatentType> {
     match self {
-      None | Consecutive(_) => Option::None,
-      Lookback(_) => Some(LatentType::U32),
+      Self::NoOp | Self::Consecutive { .. } => Option::None,
+      Self::Lookback { .. } => Some(LatentType::U32),
     }
   }
 
-  pub(crate) fn applies_to_latent_var(&self, key: LatentVarKey) -> bool {
+  pub(crate) fn for_latent_var(&self, key: LatentVarKey) -> LatentVarDeltaEncoding {
     match (self, key) {
+      (Self::NoOp, _) => LatentVarDeltaEncoding::NoOp,
       // We never recursively delta encode.
-      (_, LatentVarKey::Delta) => false,
+      (_, LatentVarKey::Delta) => LatentVarDeltaEncoding::NoOp,
       // We always apply the DeltaEncoding to the primary latents.
-      (_, LatentVarKey::Primary) => true,
-      (None, LatentVarKey::Secondary) => false,
-      (Consecutive(config), LatentVarKey::Secondary) => config.secondary_uses_delta,
-      (Lookback(config), LatentVarKey::Secondary) => config.secondary_uses_delta,
+      (Self::Consecutive { order, .. }, LatentVarKey::Primary) => {
+        LatentVarDeltaEncoding::Consecutive(*order)
+      }
+      (
+        Self::Consecutive {
+          order,
+          secondary_uses_delta: true,
+        },
+        LatentVarKey::Secondary,
+      ) => LatentVarDeltaEncoding::Consecutive(*order),
+      (
+        Self::Consecutive {
+          secondary_uses_delta: false,
+          ..
+        },
+        LatentVarKey::Secondary,
+      ) => LatentVarDeltaEncoding::NoOp,
+      (Self::Lookback { config, .. }, LatentVarKey::Primary) => {
+        LatentVarDeltaEncoding::Lookback(*config)
+      }
+      (
+        Self::Lookback {
+          config,
+          secondary_uses_delta: true,
+        },
+        LatentVarKey::Secondary,
+      ) => LatentVarDeltaEncoding::Lookback(*config),
+      (
+        Self::Lookback {
+          secondary_uses_delta: false,
+          ..
+        },
+        LatentVarKey::Secondary,
+      ) => LatentVarDeltaEncoding::NoOp,
     }
-  }
-
-  pub(crate) fn for_latent_var(self, key: LatentVarKey) -> DeltaEncoding {
-    if self.applies_to_latent_var(key) {
-      self
-    } else {
-      None
-    }
-  }
-
-  pub(crate) fn n_latents_per_state(&self) -> usize {
-    match self {
-      None => 0,
-      Consecutive(config) => config.order,
-      Lookback(config) => 1 << config.state_n_log,
-    }
-  }
-
-  pub(crate) fn exact_bit_size(&self) -> Bitlen {
-    let payload_bits = match self {
-      None => 0,
-      // For nontrivial encodings, we have a +1 bit for whether the
-      // secondary latent is delta-encoded or not.
-      Consecutive(_) => BITS_TO_ENCODE_DELTA_ENCODING_ORDER + 1,
-      Lookback(_) => BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG + 1,
-    };
-    BITS_TO_ENCODE_DELTA_ENCODING_VARIANT + payload_bits
   }
 }
 
 #[cfg(test)]
 mod tests {
   use crate::bit_writer::BitWriter;
-  use crate::metadata::delta_encoding::{DeltaConsecutiveConfig, DeltaLookbackConfig};
+  use crate::metadata::delta_encoding::DeltaLookbackConfig;
   use crate::metadata::DeltaEncoding;
 
   fn check_bit_size(encoding: DeltaEncoding) {
@@ -227,27 +252,23 @@ mod tests {
     unsafe {
       encoding.write_to(&mut writer);
     }
-    assert_eq!(
-      encoding.exact_bit_size() as usize,
-      writer.bit_idx(),
-    );
+    let true_bit_size = writer.bit_idx();
+    assert!(true_bit_size <= DeltaEncoding::MAX_BIT_SIZE);
   }
 
   #[test]
   fn test_bit_size() {
-    check_bit_size(DeltaEncoding::None);
-    check_bit_size(DeltaEncoding::Consecutive(
-      DeltaConsecutiveConfig {
-        order: 3,
-        secondary_uses_delta: false,
-      },
-    ));
-    check_bit_size(DeltaEncoding::Lookback(
-      DeltaLookbackConfig {
+    check_bit_size(DeltaEncoding::NoOp);
+    check_bit_size(DeltaEncoding::Consecutive {
+      order: 3,
+      secondary_uses_delta: false,
+    });
+    check_bit_size(DeltaEncoding::Lookback {
+      config: DeltaLookbackConfig {
         window_n_log: 8,
         state_n_log: 1,
-        secondary_uses_delta: true,
       },
-    ));
+      secondary_uses_delta: true,
+    });
   }
 }

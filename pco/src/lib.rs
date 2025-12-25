@@ -38,6 +38,7 @@ mod bit_writer;
 mod bits;
 mod chunk_config;
 mod chunk_latent_compressor;
+mod chunk_latent_decompressor;
 mod compression_intermediates;
 mod compression_table;
 mod constants;

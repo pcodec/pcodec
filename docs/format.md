@@ -10,6 +10,16 @@ Let `dtype_size` be the number type's number of bits.
 A "raw" value for a number is a `dtype_size` value that maps to the number
 via [its `from_unsigned` function](#Modes).
 
+Define "compatibility line" to be a non-API-breaking sequence of semver versions.
+Pco's compatibility guarantees are that:
+* Each library version will be able to decompress any data it produces, as well as any data its ancestors produce (e.g. the parent of 0.4.1 is 0.4.0, and the parent of 0.4.0 is 0.3.0).
+* Upgrades to the compressor's library version within a compatibility line will never break a decompressor with any library version.
+
+Note that we leave room for:
+* New library versions may support decompressing data that was previously considered corrupt.
+* Data produced by new compatibility lines may be considered corrupt by old compatibility lines.
+* Within a compatibility line, opt-in compressor features may be added that produce data that was previously considered corrupt.
+
 ## Wrapped Format Components
 
 The wrapped format consists of 3 components: header, chunk metadata, and data

@@ -15,13 +15,12 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
       weight: 1,
       lower: L::ZERO,
       offset_bits: L::BITS,
-    }])
-    .unwrap(),
+    }]),
   };
 
   ChunkMeta {
     mode: Mode::Classic,
-    delta_encoding: DeltaEncoding::None,
+    delta_encoding: DeltaEncoding::NoOp,
     per_latent_var: PerLatentVar {
       delta: None,
       primary,
@@ -33,7 +32,7 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
 /// Returns the maximum possible byte size of a wrapped chunk for a given
 /// latent type (e.g. u32 or u64) and count of numbers.
 pub fn chunk_size<L: Latent>(n: usize) -> usize {
-  baseline_chunk_meta::<L>().exact_size() + n * L::BITS.div_ceil(8) as usize
+  baseline_chunk_meta::<L>().max_size() + n * L::BITS.div_ceil(8) as usize
 }
 
 #[cfg(test)]

@@ -1,16 +1,14 @@
 use std::cmp::min;
+use std::io::Write;
 
 use crate::chunk_config::ChunkConfig;
-use crate::data_types::Number;
+use crate::data_types::{Number, NumberType};
 use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{FileDecompressor, MaybeChunkDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
-// TODO in 1.0 make this generic to Write and make all compress methods
-// accepting a Write return the number of bytes written?
-// TODO in 1.0 set a uniform number type for the file
 /// Takes in a slice of numbers and an exact configuration and writes compressed
 /// bytes to the destination, retuning the number of bytes written.
 ///
@@ -20,13 +18,14 @@ use crate::{PagingSpec, FULL_BATCH_N};
 /// chunks.
 /// For standalone, the concepts of chunk and page are conflated since each
 /// chunk has exactly one page.
-pub fn simple_compress_into<T: Number>(
+pub fn simple_compress_into<T: Number, W: Write>(
   nums: &[T],
   config: &ChunkConfig,
-  mut dst: &mut [u8],
-) -> PcoResult<usize> {
-  let original_length = dst.len();
-  let file_compressor = FileCompressor::default().with_n_hint(nums.len());
+  mut dst: W,
+) -> PcoResult<W> {
+  let file_compressor = FileCompressor::default()
+    .with_n_hint(nums.len())
+    .with_uniform_type(Some(NumberType::new::<T>()));
   dst = file_compressor.write_header(dst)?;
 
   // here we use the paging spec to determine chunks; each chunk has 1 page
@@ -44,7 +43,7 @@ pub fn simple_compress_into<T: Number>(
   }
 
   dst = file_compressor.write_footer(dst)?;
-  Ok(original_length - dst.len())
+  Ok(dst)
 }
 
 /// Takes in a slice of numbers and an exact configuration and returns
@@ -89,8 +88,8 @@ pub fn simple_compress<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult
 /// Takes in compressed bytes and writes numbers to the destination, returning
 /// progress into the file.
 ///
-/// Will return an error if there are any compatibility, corruption,
-/// or insufficient data issues.
+/// Will return an error if there are any corruption or or insufficient data
+/// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
 pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoResult<Progress> {
@@ -155,8 +154,8 @@ pub fn simpler_compress<T: Number>(nums: &[T], compression_level: usize) -> PcoR
 
 /// Takes in compressed bytes and returns a vector of numbers.
 ///
-/// Will return an error if there are any compatibility, corruption,
-/// or insufficient data issues.
+/// Will return an error if there are any corruption, or insufficient data
+/// issues.
 pub fn simple_decompress<T: Number>(src: &[u8]) -> PcoResult<Vec<T>> {
   let (file_decompressor, src) = FileDecompressor::new(src)?;
   file_decompressor.simple_decompress(src)
@@ -164,6 +163,8 @@ pub fn simple_decompress<T: Number>(src: &[u8]) -> PcoResult<Vec<T>> {
 
 #[cfg(test)]
 mod tests {
+  use std::io::Cursor;
+
   use super::*;
   use crate::chunk_config::DeltaSpec;
 
@@ -171,15 +172,16 @@ mod tests {
   fn test_simple_compress_into() -> PcoResult<()> {
     let nums = (0..100).map(|x| x as i32).collect::<Vec<_>>();
     let config = &ChunkConfig {
-      delta_spec: DeltaSpec::None,
+      delta_spec: DeltaSpec::NoOp,
       ..Default::default()
     };
-    let mut buffer = [77];
+    let mut buffer = [77_u8];
     // error if buffer is too small
-    assert!(simple_compress_into(&nums, config, &mut buffer).is_err());
+    assert!(simple_compress_into(&nums, config, buffer.as_mut_slice()).is_err());
 
     let mut buffer = vec![0; 1000];
-    let bytes_written = simple_compress_into(&nums, config, &mut buffer)?;
+    let cursor = simple_compress_into(&nums, config, Cursor::new(&mut buffer))?;
+    let bytes_written = cursor.position() as usize;
     assert!(bytes_written >= 10);
     for i in bytes_written..buffer.len() {
       assert_eq!(buffer[i], 0);
@@ -198,7 +200,7 @@ mod tests {
       &nums,
       &ChunkConfig {
         compression_level: 0,
-        delta_spec: DeltaSpec::None,
+        delta_spec: DeltaSpec::NoOp,
         paging_spec: PagingSpec::Exact(vec![300, 300]),
         ..Default::default()
       },

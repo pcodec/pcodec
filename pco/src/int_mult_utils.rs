@@ -31,8 +31,8 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
   }
 
   SplitLatents {
-    primary: DynLatents::new(mults).unwrap(),
-    secondary: Some(DynLatents::new(adjs).unwrap()),
+    primary: DynLatents::new(mults),
+    secondary: Some(DynLatents::new(adjs)),
   }
 }
 

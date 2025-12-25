@@ -5,8 +5,9 @@ use crate::bits;
 use crate::compression_intermediates::PageDissectedVar;
 use crate::compression_intermediates::TrainedBins;
 use crate::compression_table::CompressionTable;
+use crate::constants::Bitlen;
 use crate::constants::ANS_INTERLEAVING;
-use crate::constants::{Bitlen, PAGE_PADDING};
+use crate::constants::MAX_BATCH_LATENT_VAR_SIZE;
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
@@ -250,7 +251,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     PageDissectedVar {
       ans_vals: uninit_vec(n),
       ans_bits: uninit_vec(n),
-      offsets: DynLatents::new(uninit_vec::<L>(n)).unwrap(),
+      offsets: DynLatents::new(uninit_vec::<L>(n)),
       offset_bits: uninit_vec(n),
       ans_final_states,
     }
@@ -288,7 +289,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     batch_start: usize,
     writer: &mut BitWriter<W>,
   ) -> PcoResult<()> {
-    assert!(writer.buf.len() >= PAGE_PADDING);
+    assert!(writer.buf.len() >= MAX_BATCH_LATENT_VAR_SIZE);
     writer.flush()?;
 
     if batch_start >= page_dissected_var.offsets.len() {

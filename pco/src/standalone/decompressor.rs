@@ -1,14 +1,13 @@
 use better_io::BetterBufRead;
 
 use crate::bit_reader::{BitReader, BitReaderBuilder};
-use crate::constants::Bitlen;
+use crate::constants::{Bitlen, OVERSHOOT_PADDING};
 use crate::data_types::{Number, NumberType};
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
-use crate::standalone::NumberTypeOrTermination;
-use crate::{bit_reader, wrapped};
+use crate::wrapped;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -78,15 +77,14 @@ impl FileDecompressor {
   /// Reads a short header and returns a `FileDecompressor` and the
   /// remaining input.
   ///
-  /// Will return an error if any corruptions, version incompatibilities, or
-  /// insufficient data are found.
-  pub fn new<R: BetterBufRead>(mut src: R) -> PcoResult<(Self, R)> {
-    bit_reader::ensure_buf_read_capacity(&mut src, STANDALONE_HEADER_PADDING);
-    let mut reader_builder = BitReaderBuilder::new(src, STANDALONE_HEADER_PADDING, 0);
+  /// Will return an error if any corruptions or insufficient data are found.
+  pub fn new<R: BetterBufRead>(src: R) -> PcoResult<(Self, R)> {
+    let mut reader_builder = BitReaderBuilder::new(src);
     // Do this part first so we check for insufficient data before returning a
     // confusing corruption error.
-    let header = reader_builder
-      .with_reader(|reader| Ok(reader.read_aligned_bytes(MAGIC_HEADER.len())?.to_vec()))?;
+    let header = reader_builder.with_reader(MAGIC_HEADER.len(), |reader| {
+      Ok(reader.read_aligned_bytes(MAGIC_HEADER.len())?.to_vec())
+    })?;
     if header != MAGIC_HEADER {
       return Err(PcoError::corruption(format!(
         "magic header does not match {:?}; instead found {:?}",
@@ -95,7 +93,7 @@ impl FileDecompressor {
     }
 
     let (standalone_version, uniform_number_type, n_hint) =
-      reader_builder.with_reader(|reader| unsafe {
+      reader_builder.with_reader(STANDALONE_HEADER_PADDING, |reader| unsafe {
         let standalone_version = reader.read_usize(BITS_TO_ENCODE_STANDALONE_VERSION);
         if standalone_version < 2 {
           // These versions only had wrapped version; we need to rewind so they can
@@ -116,7 +114,7 @@ impl FileDecompressor {
       })?;
 
     if standalone_version > CURRENT_STANDALONE_VERSION {
-      return Err(PcoError::compatibility(format!(
+      return Err(PcoError::corruption(format!(
         "file's standalone version ({}) exceeds max supported ({}); consider upgrading pco",
         standalone_version, CURRENT_STANDALONE_VERSION,
       )));
@@ -145,18 +143,26 @@ impl FileDecompressor {
     self.n_hint
   }
 
-  /// Peeks at what's next in the file, returning whether it's a termination
-  /// or chunk with some data type.
+  /// Peeks at what's next in the file, returning the next chunk's number type
+  /// or None if there are no more chunks.
   ///
   /// If a uniform number type for the file exists, it will be used instead.
-  /// Will return an error if there is insufficient data.
-  pub fn peek_number_type_or_termination(&self, src: &[u8]) -> PcoResult<NumberTypeOrTermination> {
+  /// Will return an error if there is insufficient data or a number type this
+  /// version of Pco does not support.
+  pub fn peek_number_type_or_termination(&self, src: &[u8]) -> PcoResult<Option<NumberType>> {
     if let Some(uniform_type) = self.uniform_type {
-      return Ok(NumberTypeOrTermination::Known(uniform_type));
+      return Ok(Some(uniform_type));
     }
 
     match src.first() {
-      Some(&byte) => Ok(NumberTypeOrTermination::from(byte)),
+      Some(&byte) => match NumberType::from_descriminant(byte) {
+        Some(number_type) => Ok(Some(number_type)),
+        None if byte == MAGIC_TERMINATION_BYTE => Ok(None),
+        _ => Err(PcoError::corruption(format!(
+          "peeked unknown data type byte: {}",
+          byte
+        ))),
+      },
       None => Err(PcoError::insufficient_data(
         "unable to peek data type from empty bytes",
       )),
@@ -170,12 +176,12 @@ impl FileDecompressor {
   /// data are found.
   pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
     &self,
-    mut src: R,
+    src: R,
   ) -> PcoResult<MaybeChunkDecompressor<T, R>> {
-    bit_reader::ensure_buf_read_capacity(&mut src, STANDALONE_CHUNK_PREAMBLE_PADDING);
-    let mut reader_builder = BitReaderBuilder::new(src, STANDALONE_CHUNK_PREAMBLE_PADDING, 0);
-    let type_or_termination_byte =
-      reader_builder.with_reader(|reader| Ok(reader.read_aligned_bytes(1)?[0]))?;
+    let mut reader_builder = BitReaderBuilder::new(src);
+    let type_or_termination_byte = reader_builder.with_reader(1, |reader| {
+      Ok(reader.read_aligned_bytes(1)?[0])
+    })?;
     if type_or_termination_byte == MAGIC_TERMINATION_BYTE {
       return Ok(MaybeChunkDecompressor::EndOfData(
         reader_builder.into_inner(),
@@ -200,15 +206,17 @@ impl FileDecompressor {
       )));
     }
 
-    let n = reader_builder
-      .with_reader(|reader| unsafe { Ok(reader.read_usize(BITS_TO_ENCODE_N_ENTRIES) + 1) })?;
+    let n = reader_builder.with_reader(
+      BITS_TO_ENCODE_N_ENTRIES as usize + OVERSHOOT_PADDING,
+      |reader| unsafe { Ok(reader.read_usize(BITS_TO_ENCODE_N_ENTRIES) + 1) },
+    )?;
     let src = reader_builder.into_inner();
     let (inner_cd, src) = self.inner.chunk_decompressor::<T, R>(src)?;
-    let inner_pd = inner_cd.page_decompressor(src, n)?;
+    let inner_pd = wrapped::PageDecompressorState::new(src, &inner_cd.inner, n)?;
 
     let res = ChunkDecompressor {
       inner_cd,
-      inner_pd,
+      page_state: inner_pd,
       n,
       n_processed: 0,
     };
@@ -218,8 +226,8 @@ impl FileDecompressor {
   /// Takes in compressed bytes (after the header, at the start of the chunks)
   /// and returns a vector of numbers.
   ///
-  /// Will return an error if there are any compatibility, corruption,
-  /// or insufficient data issues.
+  /// Will return an error if there are any corruption or insufficient data
+  /// issues.
   ///
   /// This function exists (in addition to the [standalone
   /// functions][crate::standalone]) because the user may want to peek at the
@@ -239,7 +247,7 @@ impl FileDecompressor {
 /// Holds metadata about a chunk and supports decompression.
 pub struct ChunkDecompressor<T: Number, R: BetterBufRead> {
   inner_cd: wrapped::ChunkDecompressor<T>,
-  inner_pd: wrapped::PageDecompressor<T, R>,
+  page_state: wrapped::PageDecompressorState<R>,
   n: usize,
   n_processed: usize,
 }
@@ -247,7 +255,7 @@ pub struct ChunkDecompressor<T: Number, R: BetterBufRead> {
 impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// Returns pre-computed information about the chunk.
   pub fn meta(&self) -> &ChunkMeta {
-    &self.inner_cd.meta
+    self.inner_cd.meta()
   }
 
   /// Returns the count of numbers in the chunk.
@@ -263,7 +271,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
   pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    let progress = self.inner_pd.decompress(dst)?;
+    let progress = self.page_state.decompress(&self.inner_cd.inner, dst)?;
 
     self.n_processed += progress.n_processed;
 
@@ -272,7 +280,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
 
   /// Returns the rest of the compressed data source.
   pub fn into_src(self) -> R {
-    self.inner_pd.into_src()
+    self.page_state.into_src()
   }
 
   // a helper for some internal things

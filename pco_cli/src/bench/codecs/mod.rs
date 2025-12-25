@@ -62,7 +62,7 @@ trait CodecInternal: Clone + CommandFactory + Debug + FromArgMatches + Send + Sy
     match_number_enum!(
       dtype,
       NumberType<T> => {
-        NumVec::new(self.decompress::<T>(compressed)).unwrap()
+        NumVec::new(self.decompress::<T>(compressed))
       }
     )
   }

@@ -1,7 +1,7 @@
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
 use crate::macros::match_latent_enum;
-use crate::metadata::delta_encoding::DeltaLookbackConfig;
+use crate::metadata::delta_encoding::{DeltaLookbackConfig, LatentVarDeltaEncoding};
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::DeltaEncoding;
 use crate::FULL_BATCH_N;
@@ -298,18 +298,18 @@ pub fn decode_with_lookbacks_in_place<L: Latent>(
 }
 
 pub fn compute_delta_latent_var(
-  delta_encoding: DeltaEncoding,
+  delta_encoding: &DeltaEncoding,
   primary_latents: &mut DynLatents,
   range: Range<usize>,
 ) -> Option<DynLatents> {
   match delta_encoding {
-    DeltaEncoding::None | DeltaEncoding::Consecutive(_) => None,
-    DeltaEncoding::Lookback(config) => {
+    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } => None,
+    DeltaEncoding::Lookback { config, .. } => {
       let res = match_latent_enum!(
         primary_latents,
         DynLatents<L>(inner) => {
           let latents = &mut inner[range];
-          DynLatents::new(choose_lookbacks(config, latents)).unwrap()
+          DynLatents::new(choose_lookbacks(*config, latents))
         }
       );
       Some(res)
@@ -318,7 +318,7 @@ pub fn compute_delta_latent_var(
 }
 
 pub fn encode_in_place(
-  delta_encoding: DeltaEncoding,
+  delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: Option<&DynLatents>,
   range: Range<usize>,
   latents: &mut DynLatents,
@@ -327,16 +327,16 @@ pub fn encode_in_place(
     latents,
     DynLatents<L>(inner) => {
       let delta_state = match delta_encoding {
-        DeltaEncoding::None => Vec::<L>::new(),
-        DeltaEncoding::Consecutive(config) => {
-          encode_consecutive_in_place(config.order, &mut inner[range])
+        LatentVarDeltaEncoding::NoOp => Vec::<L>::new(),
+        LatentVarDeltaEncoding::Consecutive(order) => {
+          encode_consecutive_in_place(*order, &mut inner[range])
         }
-        DeltaEncoding::Lookback(config) => {
+        LatentVarDeltaEncoding::Lookback(config) => {
           let lookbacks = delta_latents.unwrap().downcast_ref::<DeltaLookback>().unwrap();
-          encode_with_lookbacks_in_place(config, lookbacks, &mut inner[range])
+          encode_with_lookbacks_in_place(*config, lookbacks, &mut inner[range])
         }
       };
-      DynLatents::new(delta_state).unwrap()
+      DynLatents::new(delta_state)
     }
   )
 }
@@ -384,7 +384,6 @@ mod tests {
     let config = DeltaLookbackConfig {
       window_n_log: 4,
       state_n_log: 1,
-      secondary_uses_delta: false,
     };
     let window_n = config.window_n();
     assert_eq!(window_n, 16);
@@ -428,7 +427,6 @@ mod tests {
     let config = DeltaLookbackConfig {
       state_n_log: 0,
       window_n_log: 2,
-      secondary_uses_delta: false,
     };
     let delta_state = vec![0_u32];
     let lookbacks = vec![5, 1, 1, 1];

@@ -19,7 +19,7 @@ macro_rules! impl_signed {
           .expect("invalid mode for signed type")
       }
 
-      fn mode_is_valid(mode: Mode) -> bool {
+      fn mode_is_valid(mode: &Mode) -> bool {
         unsigneds::mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
@@ -38,7 +38,7 @@ macro_rules! impl_signed {
         self.wrapping_sub(Self::MIN) as $latent
       }
       fn join_latents(
-        mode: Mode,
+        mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],

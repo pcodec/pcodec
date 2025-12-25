@@ -41,14 +41,14 @@ impl NumVec {
   pub fn dtype(&self) -> NumberType {
     match_number_enum!(
       self,
-      NumVec<T>(_inner) => { NumberType::new::<T>().unwrap() }
+      NumVec<T>(_inner) => { NumberType::new::<T>() }
     )
   }
 
   pub fn truncated(&self, limit: usize) -> Self {
     match_number_enum!(
       self,
-      NumVec<T>(nums) => { NumVec::new(nums[..limit].to_vec()).unwrap() }
+      NumVec<T>(nums) => { NumVec::new(nums[..limit].to_vec()) }
     )
   }
 

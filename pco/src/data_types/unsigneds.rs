@@ -29,14 +29,14 @@ pub fn choose_mode_and_split_latents<T: Number>(
     )),
     ModeSpec::TryIntMult(base_u64) => {
       let base = T::L::from_u64(base_u64);
-      let mode = Mode::IntMult(DynLatent::new(base).unwrap());
+      let mode = Mode::IntMult(DynLatent::new(base));
       let latents = int_mult_utils::split_latents(nums, base);
       Ok((mode, latents))
     }
   }
 }
 
-pub fn mode_is_valid<L: Latent>(mode: Mode) -> bool {
+pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
   match mode {
     Mode::Classic => true,
     Mode::IntMult(base) => *base.downcast_ref::<L>().unwrap() > L::ZERO,
@@ -103,7 +103,7 @@ macro_rules! impl_unsigned_number {
           .expect("invalid mode for unsigned type")
       }
 
-      fn mode_is_valid(mode: Mode) -> bool {
+      fn mode_is_valid(mode: &Mode) -> bool {
         mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
@@ -122,7 +122,7 @@ macro_rules! impl_unsigned_number {
         self
       }
       fn join_latents(
-        mode: Mode,
+        mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
@@ -152,15 +152,15 @@ mod tests {
   #[test]
   fn test_mode_validation() {
     // CLASSIC
-    assert!(u32::mode_is_valid(Mode::Classic));
+    assert!(u32::mode_is_valid(&Mode::Classic));
 
     // INT MULT
     for base in [1_u32, 77, u32::MAX] {
-      assert!(u32::mode_is_valid(Mode::int_mult(base)))
+      assert!(u32::mode_is_valid(&Mode::int_mult(base)))
     }
-    assert!(!u32::mode_is_valid(Mode::int_mult(0_u32)));
+    assert!(!u32::mode_is_valid(&Mode::int_mult(0_u32)));
 
     // FLOAT
-    assert!(!u32::mode_is_valid(Mode::FloatQuant(3)));
+    assert!(!u32::mode_is_valid(&Mode::FloatQuant(3)));
   }
 }

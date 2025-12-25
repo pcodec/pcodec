@@ -6,7 +6,6 @@ pub const MAGIC_TERMINATION_BYTE: u8 = 0;
 pub const BITS_TO_ENCODE_N_ENTRIES: Bitlen = 24;
 pub const BITS_TO_ENCODE_STANDALONE_VERSION: Bitlen = 8;
 pub const BITS_TO_ENCODE_VARINT_POWER: Bitlen = 6;
-pub const PRE_UNIFORM_TYPE_STANDALONE_VERSION: usize = 2;
 pub const CURRENT_STANDALONE_VERSION: usize = 3;
 
 // padding

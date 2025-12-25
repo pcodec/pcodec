@@ -25,6 +25,20 @@ mod unsigneds;
 
 pub(crate) type ModeAndLatents = (Mode, SplitLatents);
 
+mod private {
+  pub trait Sealed {}
+
+  impl Sealed for f32 {}
+  impl Sealed for f64 {}
+  impl Sealed for half::f16 {}
+  impl Sealed for i16 {}
+  impl Sealed for i32 {}
+  impl Sealed for i64 {}
+  impl Sealed for u16 {}
+  impl Sealed for u32 {}
+  impl Sealed for u64 {}
+}
+
 /// This is used internally for compressing and decompressing with
 /// float modes.
 pub(crate) trait Float:
@@ -79,7 +93,6 @@ pub(crate) trait Float:
   fn from_latent_numerical(l: Self::L) -> Self;
 }
 
-// TODO in 1.0 seal Latent and Number
 /// **unstable API** Trait for data types that behave like unsigned integers.
 ///
 /// This is used extensively in `pco` to guarantee that bitwise
@@ -106,6 +119,7 @@ pub trait Latent:
   + PartialOrd
   + Rem<Output = Self>
   + RemAssign
+  + private::Sealed
   + Send
   + Sync
   + Shl<Bitlen, Output = Self>
@@ -151,7 +165,9 @@ pub trait Latent:
 ///   one needs to flip the sign bit and, if negative, the rest of the bits.
 ///
 /// Custom data types (defined outside of pco) are not currently supported.
-pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + 'static {
+pub trait Number:
+  Copy + Debug + Display + Default + PartialEq + private::Sealed + Send + Sync + 'static
+{
   /// A number from 1-255 that corresponds to the number's data type.
   ///
   /// Each `Number` implementation should have a different `NUMBER_TYPE_BYTE`.
@@ -170,7 +186,7 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 
   fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber>;
 
-  fn mode_is_valid(mode: Mode) -> bool;
+  fn mode_is_valid(mode: &Mode) -> bool;
   /// Breaks the numbers into latent variables for better compression.
   ///
   /// Returns
@@ -187,7 +203,7 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
   fn from_latent_ordered(l: Self::L) -> Self;
   fn to_latent_ordered(self) -> Self::L;
   fn join_latents(
-    mode: Mode,
+    mode: &Mode,
     primary: DynLatentSlice,
     secondary: Option<DynLatentSlice>,
     dst: &mut [Self],
@@ -195,7 +211,7 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 }
 
 pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
-  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect()).unwrap();
+  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect());
   SplitLatents {
     primary,
     secondary: None,
