@@ -209,24 +209,7 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
 
       *latent = latent.wrapping_add(offset);
     }
-    // for (latent, (&offset_bits, &offset_bits_csum)) in state.latents[..n].iter_mut().zip(
-    //   state
-    //     .offset_bits_scratch
-    //     .iter()
-    //     .zip(state.offset_bits_csum_scratch.iter()),
-    // ) {
-    //   let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
-    //   let byte_idx = bit_idx / 8;
-    //   let bits_past_byte = bit_idx % 8;
-    //   let offset = bit_reader::read_uint_at::<L, READ_BYTES>(
-    //     src,
-    //     byte_idx as usize,
-    //     bits_past_byte,
-    //     offset_bits,
-    //   );
 
-    //   *latent = latent.wrapping_add(offset);
-    // }
     let final_bit_idx = base_bit_idx
       + self.offset_bits_csum_scratch[n - 1] as usize
       + self.offset_bits_scratch[n - 1] as usize;
