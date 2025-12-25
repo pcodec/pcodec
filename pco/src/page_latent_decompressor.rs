@@ -263,7 +263,7 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
-    macro_rules! specialized_to_read_bytes {
+    macro_rules! specialized_decompress_offsets {
       ($rb: literal) => {
         decompress_offsets::<L, $rb>(
           reader,
@@ -276,11 +276,11 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     }
     match (cld.bytes_per_offset, L::BITS) {
       (0, _) => (),
-      (1..=4, 16) => specialized_to_read_bytes!(4),
-      (1..=4, 32) => specialized_to_read_bytes!(4),
-      (5..=8, 32) => specialized_to_read_bytes!(8),
-      (1..=8, 64) => specialized_to_read_bytes!(8),
-      (9..=15, 64) => specialized_to_read_bytes!(15),
+      (1..=4, 16) => specialized_decompress_offsets!(4),
+      (1..=4, 32) => specialized_decompress_offsets!(4),
+      (5..=8, 32) => specialized_decompress_offsets!(8),
+      (1..=8, 64) => specialized_decompress_offsets!(8),
+      (9..=15, 64) => specialized_decompress_offsets!(15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         cld.bytes_per_offset,

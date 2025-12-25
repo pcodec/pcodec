@@ -135,14 +135,13 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
           match_latent_enum!(
             dyn_pld,
             DynPageLatentDecompressor<L>(pld) => {
-              let cld = cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap();
               // Delta latents only line up with pre-delta length of the other
               // latents.
               // We never apply delta encoding to delta latents, so we just
-              // skip straight to the inner PageLatentDecompressor
+              // skip straight to the pre-delta routine.
               pld.decompress_batch_pre_delta(
                 reader,
-                cld,
+                cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
                 limit,
               )
             }
