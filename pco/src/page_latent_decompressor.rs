@@ -32,23 +32,6 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
   }
 }
 
-#[used]
-static _FORCE_EXPORT_U16_4: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [u16], usize) =
-  decompress_offsets::<u16, 4>;
-#[used]
-static _FORCE_EXPORT_U32_4: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [u32], usize) =
-  decompress_offsets::<u32, 4>;
-#[used]
-static _FORCE_EXPORT_U64_8: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [u64], usize) =
-  decompress_offsets::<u64, 8>;
-// unsafe fn force_compile_u64_8_in_lib(
-//   pld: &mut PageLatentDecompressor<u64>,
-//   reader: &mut BitReader,
-//   batch_n: usize,
-// ) {
-//   pld.decompress_offsets::<8>(reader, batch_n);
-// }
-
 #[inline(never)]
 unsafe fn decompress_offsets<L: Latent, const READ_BYTES: usize>(
   reader: &mut BitReader,
@@ -79,6 +62,22 @@ unsafe fn decompress_offsets<L: Latent, const READ_BYTES: usize>(
   reader.stale_byte_idx = final_bit_idx / 8;
   reader.bits_past_byte = final_bit_idx as Bitlen % 8;
 }
+
+// Here we do something very strange to ensure vectorization of
+// decompress_offsets on aarch64: we force specializations to be exported by the
+// pco compiled library, as opposed to downstream compilation units. I'm not
+// sure why this changes vectorization rules, but it's a significant speedup.
+macro_rules! force_export {
+  ($name: ident, $l: ty, $rb: literal) => {
+    #[used]
+    static $name: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [$l], usize) =
+      decompress_offsets::<$l, $rb>;
+  };
+}
+force_export!(_FORCE_EXPORT_U16_4, u16, 4);
+force_export!(_FORCE_EXPORT_U32_4, u32, 4);
+force_export!(_FORCE_EXPORT_U32_8, u32, 8);
+force_export!(_FORCE_EXPORT_U64_8, u64, 8);
 
 // this is entirely state - any precomputed information is in the ChunkLatentDecompressor
 #[derive(Clone, Debug)]
