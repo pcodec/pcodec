@@ -250,17 +250,13 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
-    match cld.bytes_per_offset {
-      // all
-      0 => (),
-      // u16
-      1..=4 if L::BITS == 16 => self.decompress_offsets::<4>(reader, batch_n),
-      // // u32
-      1..=4 if L::BITS == 32 => self.decompress_offsets::<4>(reader, batch_n),
-      5..=8 if L::BITS == 32 => self.decompress_offsets::<8>(reader, batch_n),
-      // u64
-      1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, batch_n),
-      9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, batch_n),
+    match (cld.bytes_per_offset, L::BITS) {
+      (0, _) => (),
+      (1..=4, 16) => self.decompress_offsets::<4>(reader, batch_n),
+      (1..=4, 32) => self.decompress_offsets::<4>(reader, batch_n),
+      (5..=8, 32) => self.decompress_offsets::<8>(reader, batch_n),
+      (1..=8, 64) => self.decompress_offsets::<8>(reader, batch_n),
+      (9..=15, 64) => self.decompress_offsets::<15>(reader, batch_n),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         cld.bytes_per_offset,
