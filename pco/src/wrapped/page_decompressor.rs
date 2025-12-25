@@ -1,6 +1,4 @@
 use std::cmp::min;
-use std::fmt::Debug;
-use std::marker::PhantomData;
 
 use better_io::BetterBufRead;
 
@@ -13,8 +11,6 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::metadata::DynLatents;
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynBins, Mode};
 use crate::page_latent_decompressor::DynPageLatentDecompressor;
 use crate::page_latent_decompressor::PageLatentDecompressor;
 use crate::progress::Progress;
