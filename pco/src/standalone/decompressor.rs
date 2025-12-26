@@ -134,7 +134,7 @@ impl FileDecompressor {
     ))
   }
 
-  pub fn format_version(&self) -> FormatVersion {
+  pub fn format_version(&self) -> &FormatVersion {
     self.inner.format_version()
   }
 

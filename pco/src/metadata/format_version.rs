@@ -20,7 +20,7 @@ use crate::errors::{PcoError, PcoResult};
 /// However, in some circumstances you may want to inspect this during
 /// decompression.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FormatVersion {
   pub major: u8,
   pub minor: u8,
@@ -42,20 +42,21 @@ impl Display for FormatVersion {
 impl FormatVersion {
   pub(crate) const MAX_ENCODED_SIZE: usize = 2;
 
-  /// The max supported format version determines what kind of files can be
-  /// decompressed.
+  /// Returns the max format version that can definitely be decompressed by the
+  /// current library version.
   pub fn max_supported() -> Self {
     Self { major: 4, minor: 0 }
   }
 
-  /// Returns whether this library version of Pco can definitely decompress the
-  /// file's format version.
+  /// Returns whether this format version can definitely be read by the
+  /// current library version.
   pub fn can_definitely_be_decompressed(&self) -> bool {
     Self::max_supported() >= *self
   }
 
-  /// Returns whether this library version of Pco might be able to decompress
-  /// the file's format version.
+  /// Returns whether this format version might be readable by the current
+  /// library version (depending on whether new format additions have been used
+  /// later in the file).
   pub fn can_maybe_be_decompressed(&self) -> bool {
     Self::max_supported().major >= self.major
   }
