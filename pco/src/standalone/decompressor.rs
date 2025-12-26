@@ -4,6 +4,7 @@ use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::constants::{Bitlen, OVERSHOOT_PADDING};
 use crate::data_types::{Number, NumberType};
 use crate::errors::{PcoError, PcoResult};
+use crate::metadata::format_version::FormatVersion;
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
@@ -133,7 +134,7 @@ impl FileDecompressor {
     ))
   }
 
-  pub fn format_version(&self) -> u8 {
+  pub fn format_version(&self) -> &FormatVersion {
     self.inner.format_version()
   }
 
