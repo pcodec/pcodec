@@ -1,5 +1,6 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
+use crate::constants::Bitlen;
 use crate::data_types::Latent;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use std::io::Write;
@@ -23,5 +24,14 @@ impl DynLatent {
         writer.write_uint(*latent, L::BITS);
       }
     );
+  }
+
+  pub(crate) fn exact_bit_size(&self) -> Bitlen {
+    match_latent_enum!(
+      &self,
+      DynLatent<L>(_latent) => {
+        L::BITS
+      }
+    )
   }
 }

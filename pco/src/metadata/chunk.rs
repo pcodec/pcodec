@@ -33,7 +33,7 @@ impl ChunkMeta {
       .as_ref()
       .map(|_, var_meta| var_meta.exact_bit_size())
       .sum();
-    let n_bits = Mode::MAX_BIT_SIZE + DeltaEncoding::MAX_BIT_SIZE + bits_for_latent_vars;
+    let n_bits = self.mode.exact_bit_size() + DeltaEncoding::MAX_BIT_SIZE + bits_for_latent_vars;
     n_bits.div_ceil(8)
   }
 
@@ -77,13 +77,10 @@ impl ChunkMeta {
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let (mode, delta_encoding) = reader_builder.with_reader(
-      (Mode::MAX_BIT_SIZE + DeltaEncoding::MAX_BIT_SIZE).div_ceil(8) + OVERSHOOT_PADDING,
-      |reader| unsafe {
-        let mode = Mode::read_from(reader, version, latent_type)?;
-        let delta_encoding = DeltaEncoding::read_from(reader, version)?;
-        Ok((mode, delta_encoding))
-      },
+    let mode = Mode::read_from(reader_builder, version, latent_type)?;
+    let delta_encoding = reader_builder.with_reader(
+      DeltaEncoding::MAX_BIT_SIZE.div_ceil(8) + OVERSHOOT_PADDING,
+      |reader| unsafe { DeltaEncoding::read_from(reader, version) },
     )?;
 
     let delta = if let Some(delta_latent_type) = delta_encoding.latent_type() {

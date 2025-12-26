@@ -5,7 +5,6 @@ use crate::describers::LatentDescriber;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
-use crate::mode::int_mult;
 use crate::{describers, ChunkConfig};
 
 macro_rules! impl_signed {
@@ -40,14 +39,7 @@ macro_rules! impl_signed {
         self.wrapping_sub(Self::MIN) as $latent
       }
       fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        match mode {
-          Mode::Classic => (),
-          Mode::IntMult(dyn_latent) => {
-            let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult::join_latents(base, primary, secondary)
-          }
-          _ => unreachable!("impossible mode for signed ints"),
-        }
+        unsigneds::join_latents(mode, primary, secondary)
       }
 
       fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {

@@ -12,7 +12,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
 use crate::mode::float_mult::FloatMultConfig;
-use crate::mode::{float_mult, float_quant};
+use crate::mode::{dict, float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
@@ -68,6 +68,7 @@ fn choose_mode_and_split_latents<F: Float>(
     ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
     )),
+    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
   }
 }
 
@@ -328,14 +329,14 @@ macro_rules! impl_float_number {
 
       fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
-          Mode::Classic => true,
+          Mode::Classic | Mode::Dict(_) => true,
           Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
           }
           Mode::FloatQuant(k) => *k > 0 && *k <= Self::PRECISION_BITS,
-          _ => false,
+          Mode::IntMult(_) => false,
         }
       }
       fn choose_mode_and_split_latents(
@@ -369,12 +370,13 @@ macro_rules! impl_float_number {
       fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
         match mode {
           Mode::Classic => (),
+          Mode::Dict(dict) => dict::join_latents(primary, dict),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
             float_mult::join_latents(base, primary, secondary)
           }
           Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary),
-          _ => unreachable!("impossible mode for floats"),
+          Mode::IntMult(_) => unreachable!("impossible mode for floats"),
         }
       }
 
@@ -415,6 +417,11 @@ mod tests {
   fn test_mode_validation() {
     // CLASSIC
     assert!(f32::mode_is_valid(&Mode::Classic));
+
+    // DICT
+    assert!(f32::mode_is_valid(&Mode::Dict(
+      DynLatents::new(vec![0_u32, 111])
+    )));
 
     // FLOAT MULT
     for base in [

@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::iter::Sum;
 
+use crate::errors::PcoResult;
+
 /// The possible kinds of latent variables present in a chunk.
 ///
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,6 +75,23 @@ impl<T> PerLatentVar<T> {
         .secondary
         .map(|secondary| f(LatentVarKey::Secondary, secondary)),
     }
+  }
+
+  pub(crate) fn map_result<S, F: FnMut(LatentVarKey, T) -> PcoResult<S>>(
+    self,
+    mut f: F,
+  ) -> PcoResult<PerLatentVar<S>> {
+    Ok(PerLatentVar {
+      delta: match self.delta {
+        Some(delta) => Some(f(LatentVarKey::Delta, delta)?),
+        None => None,
+      },
+      primary: f(LatentVarKey::Primary, self.primary)?,
+      secondary: match self.secondary {
+        Some(secondary) => Some(f(LatentVarKey::Secondary, secondary)?),
+        None => None,
+      },
+    })
   }
 
   /// Returns a new `PerLatentVar` where each entry has been wrapped in a

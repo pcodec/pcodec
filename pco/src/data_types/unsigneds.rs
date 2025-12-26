@@ -5,7 +5,7 @@ use crate::describers::LatentDescriber;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
-use crate::mode::int_mult;
+use crate::mode::{dict, int_mult};
 use crate::{describers, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
@@ -22,7 +22,6 @@ pub fn choose_mode_and_split_latents<T: Number>(
         Ok((Mode::Classic, split_latents_classic(nums)))
       }
     }
-
     ModeSpec::Classic => Ok((Mode::Classic, split_latents_classic(nums))),
     ModeSpec::TryFloatMult(_) | ModeSpec::TryFloatQuant(_) => Err(PcoError::invalid_argument(
       "unable to use float mode for ints",
@@ -33,14 +32,29 @@ pub fn choose_mode_and_split_latents<T: Number>(
       let latents = int_mult::split_latents(nums, base);
       Ok((mode, latents))
     }
+    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
+  }
+}
+
+pub fn join_latents<L: Latent>(mode: &Mode, primary: &mut [L], secondary: Option<&DynLatents>) {
+  match mode {
+    Mode::Classic => (),
+    Mode::Dict(dict) => dict::join_latents(primary, dict),
+    Mode::IntMult(dyn_latent) => {
+      let base = *dyn_latent.downcast_ref::<L>().unwrap();
+      int_mult::join_latents(base, primary, secondary)
+    }
+    Mode::FloatMult(_) | Mode::FloatQuant(_) => {
+      unreachable!("impossible mode for unsigned ints")
+    }
   }
 }
 
 pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
   match mode {
-    Mode::Classic => true,
+    Mode::Classic | Mode::Dict(_) => true,
+    Mode::FloatMult(_) | Mode::FloatQuant(_) => false,
     Mode::IntMult(base) => *base.downcast_ref::<L>().unwrap() > L::ZERO,
-    _ => false,
   }
 }
 
@@ -122,14 +136,7 @@ macro_rules! impl_unsigned_number {
         self
       }
       fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        match mode {
-          Mode::Classic => (),
-          Mode::IntMult(dyn_latent) => {
-            let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult::join_latents(base, primary, secondary)
-          }
-          _ => unreachable!("impossible mode for unsigned ints"),
-        }
+        join_latents(mode, primary, secondary)
       }
 
       fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
@@ -156,6 +163,11 @@ mod tests {
   fn test_mode_validation() {
     // CLASSIC
     assert!(u32::mode_is_valid(&Mode::Classic));
+
+    // DICT
+    assert!(u32::mode_is_valid(&Mode::Dict(
+      DynLatents::new(vec![1_u32, 3])
+    )));
 
     // INT MULT
     for base in [1_u32, 77, u32::MAX] {

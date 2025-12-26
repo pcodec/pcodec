@@ -29,7 +29,7 @@ pub struct FormatVersion {
 /// The default FormatVersion is used when compressing files.
 impl Default for FormatVersion {
   fn default() -> Self {
-    Self { major: 4, minor: 0 }
+    Self { major: 4, minor: 1 }
   }
 }
 
@@ -45,7 +45,7 @@ impl FormatVersion {
   /// Returns the max format version that can definitely be decompressed by the
   /// current library version.
   pub fn max_supported() -> Self {
-    Self { major: 4, minor: 0 }
+    Self { major: 4, minor: 1 }
   }
 
   /// Returns whether this format version can definitely be read by the
