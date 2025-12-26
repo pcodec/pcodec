@@ -62,8 +62,8 @@ So far, these format versions exist:
 | 1              | 0.1.0 | 0.1.0             |                         | IntMult mode                  |
 | 2              | 0.3.0 | 0.3.0             |                         | FloatQuant mode, 16-bit types |
 | 3              | 0.4.0 | 0.4.0             | delta encoding variants | Lookback delta encoding       |
-| 4.0            | 0.4.8 | 1.0.0             | minor version           |                               |
-| 4.1            | 1.0.0 | 0.0.0             |                         | Dict mode                     |
+| 4.0            | 0.4.8 |                   | minor version           |                               |
+| 4.1            | 1.0.0 | 1.0.0             |                         | Dict mode                     |
 
 ### Chunk Metadata
 
