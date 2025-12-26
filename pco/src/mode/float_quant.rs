@@ -3,7 +3,6 @@ use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
 use crate::dyn_latent_slice::DynLatentSlice;
-use crate::int_mult_utils;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 use std::cmp;
@@ -115,7 +114,7 @@ fn estimate_best_k_and_bits_saved_from_hist(
     let freq = occurrences / sample_len;
     let n_categories = (1_u64 << k) - 1;
     let worst_case_bits_per_infrequent_primary =
-      int_mult_utils::worse_case_categorical_entropy(freq, n_categories as f64);
+      super::worst_case_categorical_entropy(freq, n_categories as f64);
     let bits_saved_per_infrequent_primary = k as f64 - worst_case_bits_per_infrequent_primary;
     if bits_saved_per_infrequent_primary > best_bits_saved {
       best_k = k as Bitlen;

@@ -7,8 +7,9 @@ use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::metadata::{DynLatents, Mode};
+use crate::mode::int_mult;
+use crate::sampling;
 use crate::sampling::PrimaryLatentAndSavings;
-use crate::{int_mult_utils, sampling};
 
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
@@ -184,7 +185,7 @@ fn choose_config_by_trailing_zeros<F: Float>(sample: &[F]) -> Option<FloatMultCo
   }
 
   if int_sample.len() >= required_samples {
-    let int_base = int_mult_utils::choose_candidate_base(&mut int_sample)
+    let int_base = int_mult::choose_candidate_base(&mut int_sample)
       .map(|(base, _)| base)
       .unwrap_or(F::L::ONE);
     let base = F::from_latent_numerical(int_base) * F::exp2(k);

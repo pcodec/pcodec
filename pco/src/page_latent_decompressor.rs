@@ -7,9 +7,8 @@ use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
 use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::dyn_latent_slice::DynLatentSlice;
-use crate::errors::{PcoError, PcoResult};
+use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
-use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::{bit_reader, delta};
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
@@ -97,14 +96,8 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
-    let (working_delta_state, delta_state_pos) = match cld.delta_encoding {
-      LatentVarDeltaEncoding::NoOp | LatentVarDeltaEncoding::Consecutive(_) => {
-        (stored_delta_state, 0)
-      }
-      LatentVarDeltaEncoding::Lookback(config) => {
-        delta::new_lookback_window_buffer_and_pos(config, &stored_delta_state)
-      }
-    };
+    let (working_delta_state, delta_state_pos) =
+      delta::new_buffer_and_pos(&cld.delta_encoding, stored_delta_state);
 
     let mut res = Self {
       offset_bits_csum_scratch: ScratchArray([0; FULL_BATCH_N]),
@@ -302,32 +295,13 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     self.decompress_batch_pre_delta(reader, cld, pre_delta_len);
     let dst = &mut self.latents[..n_remaining_in_page.min(FULL_BATCH_N)];
 
-    match cld.delta_encoding {
-      LatentVarDeltaEncoding::NoOp => Ok(()),
-      LatentVarDeltaEncoding::Consecutive(_) => {
-        delta::decode_consecutive_in_place(&mut self.delta_state, dst);
-        Ok(())
-      }
-      LatentVarDeltaEncoding::Lookback(config) => {
-        let Some(DynLatentSlice::U32(lookbacks)) = delta_latents else {
-          unreachable!()
-        };
-        let has_oob_lookbacks = delta::decode_with_lookbacks_in_place(
-          config,
-          lookbacks,
-          &mut self.delta_state_pos,
-          &mut self.delta_state,
-          dst,
-        );
-        if has_oob_lookbacks {
-          Err(PcoError::corruption(
-            "delta lookback exceeded window n",
-          ))
-        } else {
-          Ok(())
-        }
-      }
-    }
+    delta::decode_in_place(
+      &cld.delta_encoding,
+      delta_latents,
+      &mut self.delta_state_pos,
+      &mut self.delta_state,
+      dst,
+    )
   }
 }
 

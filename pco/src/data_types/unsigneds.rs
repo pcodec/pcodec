@@ -6,7 +6,8 @@ use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatent, Mode};
-use crate::{describers, int_mult_utils, ChunkConfig, ModeSpec};
+use crate::mode::int_mult;
+use crate::{describers, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
   nums: &[T],
@@ -14,9 +15,9 @@ pub fn choose_mode_and_split_latents<T: Number>(
 ) -> PcoResult<ModeAndLatents> {
   match config.mode_spec {
     ModeSpec::Auto => {
-      if let Some(base) = int_mult_utils::choose_base(nums) {
+      if let Some(base) = int_mult::choose_base(nums) {
         let mode = Mode::int_mult(base);
-        let latents = int_mult_utils::split_latents(nums, base);
+        let latents = int_mult::split_latents(nums, base);
         Ok((mode, latents))
       } else {
         Ok((Mode::Classic, split_latents_classic(nums)))
@@ -30,7 +31,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
     ModeSpec::TryIntMult(base_u64) => {
       let base = T::L::from_u64(base_u64);
       let mode = Mode::IntMult(DynLatent::new(base));
-      let latents = int_mult_utils::split_latents(nums, base);
+      let latents = int_mult::split_latents(nums, base);
       Ok((mode, latents))
     }
   }
@@ -131,7 +132,7 @@ macro_rules! impl_unsigned_number {
           Mode::Classic => join_latents_classic(primary, dst),
           Mode::IntMult(dyn_latent) => {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary, dst)
+            int_mult::join_latents(base, primary, secondary, dst)
           }
           _ => unreachable!("impossible mode for unsigned ints"),
         }

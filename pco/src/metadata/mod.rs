@@ -5,6 +5,7 @@ pub use delta_encoding::{DeltaEncoding, DeltaLookbackConfig};
 pub use dyn_bins::DynBins;
 pub use dyn_latent::DynLatent;
 pub use dyn_latents::DynLatents;
+pub use format_version::FormatVersion;
 pub use mode::Mode;
 pub use per_latent_var::{LatentVarKey, PerLatentVar};
 

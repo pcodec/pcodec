@@ -4,7 +4,8 @@ use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
-use crate::{describers, int_mult_utils, ChunkConfig};
+use crate::mode::int_mult;
+use crate::{describers, ChunkConfig};
 
 macro_rules! impl_signed {
   ($t: ty, $latent: ty, $header_byte: expr) => {
@@ -47,7 +48,7 @@ macro_rules! impl_signed {
           Mode::Classic => join_latents_classic(primary, dst),
           Mode::IntMult(dyn_latent) => {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary, dst)
+            int_mult::join_latents(base, primary, secondary, dst)
           }
           _ => unreachable!("impossible mode for signed ints"),
         }

@@ -8,9 +8,6 @@ pub(crate) type Bitlen = u32;
 pub(crate) type Weight = u32;
 pub(crate) type DeltaLookback = u32;
 
-// compatibility
-pub const CURRENT_FORMAT_VERSION: u8 = 3;
-
 // bit lengths
 pub const BITS_TO_ENCODE_ANS_SIZE_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_MODE_VARIANT: Bitlen = 4;
