@@ -44,7 +44,7 @@ use crate::ChunkConfig;
 /// Otherwise, you may write anything else you like in your wrapping file!
 #[derive(Clone, Debug, Default)]
 pub struct FileCompressor {
-  format_version: FormatVersion,
+  pub(crate) format_version: FormatVersion,
 }
 
 impl FileCompressor {

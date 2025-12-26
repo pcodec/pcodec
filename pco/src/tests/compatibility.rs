@@ -222,3 +222,26 @@ fn v0_4_5_uniform_type() -> PcoResult<()> {
   assert_compatible(version, name, &nums)?;
   Ok(())
 }
+
+#[test]
+fn v0_4_8_minor_version() -> PcoResult<()> {
+  // v0.4.8 introduced the minor (wrapped) format version
+  let version = "0.4.8";
+  let name = "minor_version";
+
+  let nums: Vec<u32> = vec![1, 2, 3, 4, 5];
+  let config = ChunkConfig::default();
+
+  let path = get_pco_path(version, name);
+  if needs_write(version, &path) {
+    let mut dst = vec![];
+    let fc = FileCompressor::default().with_max_supported_version();
+    fc.write_header(&mut dst)?;
+    fc.chunk_compressor(&nums, &config)?.write_chunk(&mut dst)?;
+    fc.write_footer(&mut dst)?;
+    fs::write(path, dst)?;
+  }
+
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}

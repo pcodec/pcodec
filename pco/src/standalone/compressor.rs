@@ -48,6 +48,16 @@ pub struct FileCompressor {
 }
 
 impl FileCompressor {
+  // currently we only use this for testing that we can decode future format
+  // versions without actually letting users write them yet
+  #[cfg(test)]
+  pub(crate) fn with_max_supported_version(mut self) -> Self {
+    use crate::metadata::format_version::FormatVersion;
+
+    self.inner.format_version = FormatVersion::max_supported();
+    self
+  }
+
   /// Optionally specify a hint for the count of numbers in this entire file.
   ///
   /// If set correctly, this can improve performance of decompressing the

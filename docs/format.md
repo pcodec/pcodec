@@ -39,23 +39,30 @@ Plate notation for page component:
 
 ### Header
 
-The Pco format is versioned.
-It is typically expected that changes are made in a backwards-compatible way,
-so that decompressors can decompress any version of Pco up to their own
-version.
-This enables Pco to make small format changes in the future if necessary.
-The header simply consists of
+Pco's header specifies its major and (as of major version 4) minor versions,
+allowing Pco to make small format changes in the future if necessary.
+To explain the meaning of these: suppose a decompressor supports version `a.b`, and is reading a file with version `c.d`.
+* If `a < c`, the decompressor will definitely be unable to read the file; the
+  file has modifications the decompressor does not support.
+* If `a >= c, b < d`, the decompressor might be able to read the file; the file
+  may or may not contain additions the decompressor does not support.
+* If `a >= c, b >= d`, the decompressor will definitely be able to read the
+  file.
 
-* [8 bits] the format version
+
+The header simply consists of
+* [8 bits] the major format version
+* [8 bits] the minor format version
 
 So far, these format versions exist:
 
-| format version | first Rust version | deviations from next format version          |
-|----------------|--------------------|----------------------------------------------|
-| 0              | 0.0.0              | IntMult mode unsupported                     |
-| 1              | 0.1.0              | FloatQuant mode and 16-bit types unsupported |
-| 2              | 0.3.0              | delta variants and Lookback unsupported      |
-| 3              | 0.4.0              | -                                            |
+| format version | first Rust version | format modifications    | format additions              |
+|----------------|--------------------|-------------------------|-------------------------------|
+| 0              | 0.0.0              |                         |                               |
+| 1              | 0.1.0              |                         | IntMult mode                  |
+| 2              | 0.3.0              |                         | FloatQuant mode, 16-bit types |
+| 3              | 0.4.0              | delta encoding variants | Lookback delta encoding       |
+| 4.0            | 1.0.0              | minor version           |                               |
 
 ### Chunk Metadata
 
@@ -163,12 +170,12 @@ It consists of
 
 So far, these standalone versions exist:
 
-| format version | first Rust version | deviations from next format version                                      |
-|----------------|--------------------|--------------------------------------------------------------------------|
-| 0              | 0.0.0              | -                                                                        |
-| 1              | 0.1.0              | standalone version was implicit and equaled wrapped version, no `n_hint` |
-| 2              | 0.1.1              | uniform number type unsupported                                          |
-| 3              | 0.4.5              | -                                                                        |
+| format version | first Rust version | format modifications |
+|----------------|--------------------|----------------------|
+| 0              | 0.0.0              |   |
+| 1              | 0.1.0              |   |
+| 2              | 0.1.1              | explicit standalone version (previously was implicit and equaled wrapped major version), added `n_hint` |
+| 3              | 0.4.5              | uniform number type |
 
 As well as these number type 1-byte representations:
 
