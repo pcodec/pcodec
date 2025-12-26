@@ -62,7 +62,7 @@ pub struct ChunkSummary {
 pub struct Output {
   pub filename: String,
   pub data_type: String,
-  pub format_version: u8,
+  pub format_version: String,
   pub n: usize,
   pub n_chunks: usize,
   pub uncompressed_size: usize,
@@ -200,7 +200,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
     let output = Output {
       filename: opt.path.to_str().unwrap().to_string(),
       data_type: utils::dtype_name::<T>(),
-      format_version: fd.format_version(),
+      format_version: fd.format_version().to_string(),
       n,
       n_chunks: metas.len(),
       uncompressed_size,

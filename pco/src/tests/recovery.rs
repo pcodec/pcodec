@@ -393,7 +393,7 @@ fn test_dict() -> PcoResult<()> {
     &nums,
     &ChunkConfig::default()
       .with_mode_spec(ModeSpec::TryDict)
-      .with_delta_spec(DeltaSpec::None),
+      .with_delta_spec(DeltaSpec::NoOp),
   )?;
   let Mode::Dict(DynLatents::U64(dict)) = &meta.mode else {
     panic!("expected to compress with a dictionary of u64s");

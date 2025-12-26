@@ -31,7 +31,7 @@ fn trivial_inspect(opt: &InspectOpt, src: &[u8]) -> Result<()> {
   let summary = Output {
     filename: opt.path.to_str().unwrap().to_string(),
     data_type: "<none>".to_string(),
-    format_version: fd.format_version(),
+    format_version: fd.format_version().to_string(),
     n: 0,
     n_chunks: 0,
     uncompressed_size: 0,
