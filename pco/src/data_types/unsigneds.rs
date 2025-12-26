@@ -5,7 +5,8 @@ use crate::describers::LatentDescriber;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
-use crate::{describers, dict_utils, int_mult_utils, ChunkConfig, ModeSpec};
+use crate::mode::{dict, int_mult};
+use crate::{describers, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
   nums: &[T],
@@ -13,9 +14,9 @@ pub fn choose_mode_and_split_latents<T: Number>(
 ) -> PcoResult<ModeAndLatents> {
   match config.mode_spec {
     ModeSpec::Auto => {
-      if let Some(base) = int_mult_utils::choose_base(nums) {
+      if let Some(base) = int_mult::choose_base(nums) {
         let mode = Mode::int_mult(base);
-        let latents = int_mult_utils::split_latents(nums, base);
+        let latents = int_mult::split_latents(nums, base);
         Ok((mode, latents))
       } else {
         Ok((Mode::Classic, split_latents_classic(nums)))
@@ -28,20 +29,20 @@ pub fn choose_mode_and_split_latents<T: Number>(
     ModeSpec::TryIntMult(base_u64) => {
       let base = T::L::from_u64(base_u64);
       let mode = Mode::IntMult(DynLatent::new(base));
-      let latents = int_mult_utils::split_latents(nums, base);
+      let latents = int_mult::split_latents(nums, base);
       Ok((mode, latents))
     }
-    ModeSpec::TryDict => dict_utils::configure_and_split_latents(nums),
+    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
   }
 }
 
 pub fn join_latents<L: Latent>(mode: &Mode, primary: &mut [L], secondary: Option<&DynLatents>) {
   match mode {
     Mode::Classic => (),
-    Mode::Dict(dict) => dict_utils::join_latents(primary, dict),
+    Mode::Dict(dict) => dict::join_latents(primary, dict),
     Mode::IntMult(dyn_latent) => {
       let base = *dyn_latent.downcast_ref::<L>().unwrap();
-      int_mult_utils::join_latents(base, primary, secondary)
+      int_mult::join_latents(base, primary, secondary)
     }
     Mode::FloatMult(_) | Mode::FloatQuant(_) => {
       unreachable!("impossible mode for unsigned ints")
