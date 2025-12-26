@@ -9,10 +9,11 @@ use crate::constants::Bitlen;
 use crate::data_types::{split_latents_classic, Float, Latent, Number};
 use crate::describers::LatentDescriber;
 use crate::errors::{PcoError, PcoResult};
-use crate::float_mult_utils::FloatMultConfig;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
-use crate::{describers, float_mult_utils, float_quant_utils, sampling, ChunkConfig};
+use crate::mode::float_mult::FloatMultConfig;
+use crate::mode::{float_mult, float_quant, int_mult};
+use crate::{describers, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
   // We can compress infinities, nans, and baby floats, but we can't learn
@@ -41,8 +42,8 @@ fn choose_mode_and_split_latents<F: Float>(
       });
 
       if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
-        bids.extend(float_mult_utils::compute_bid(&sample));
-        bids.extend(float_quant_utils::compute_bid(&sample));
+        bids.extend(float_mult::compute_bid(&sample));
+        bids.extend(float_quant::compute_bid(&sample));
       }
 
       let winning_bid = choose_winning_bid(bids);
@@ -57,12 +58,12 @@ fn choose_mode_and_split_latents<F: Float>(
         base,
         inv_base: base.inv(),
       };
-      let latents = float_mult_utils::split_latents(nums, float_mult_config);
+      let latents = float_mult::split_latents(nums, float_mult_config);
       Ok((mode, latents))
     }
     ModeSpec::TryFloatQuant(k) => Ok((
       Mode::FloatQuant(k),
-      float_quant_utils::split_latents(nums, k),
+      float_quant::split_latents(nums, k),
     )),
     ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
@@ -370,9 +371,9 @@ macro_rules! impl_float_number {
           Mode::Classic => (),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
-            float_mult_utils::join_latents(base, primary, secondary)
+            float_mult::join_latents(base, primary, secondary)
           }
-          Mode::FloatQuant(k) => float_quant_utils::join_latents::<Self>(*k, primary, secondary),
+          Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary),
           _ => unreachable!("impossible mode for floats"),
         }
       }

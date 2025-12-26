@@ -1,76 +1,14 @@
-use crate::constants::{Bitlen, DeltaLookback};
-use crate::data_types::Latent;
-use crate::macros::match_latent_enum;
-use crate::metadata::delta_encoding::{DeltaLookbackConfig, LatentVarDeltaEncoding};
-use crate::metadata::dyn_latents::DynLatents;
-use crate::metadata::DeltaEncoding;
-use crate::FULL_BATCH_N;
-use std::mem::MaybeUninit;
-use std::ops::Range;
-use std::{array, cmp, mem};
+use std::{
+  array, cmp,
+  mem::{self, MaybeUninit},
+};
 
-pub type DeltaState = DynLatents;
-
-// Without this, deltas in, say, [-5, 5] would be split out of order into
-// [U::MAX - 4, U::MAX] and [0, 5].
-// This can be used to convert from
-// * unsigned deltas -> (effectively) signed deltas; encoding
-// * signed deltas -> unsigned deltas; decoding
-#[inline(never)]
-pub fn toggle_center_in_place<L: Latent>(latents: &mut [L]) {
-  for l in latents.iter_mut() {
-    *l = l.toggle_center();
-  }
-}
-
-fn first_order_encode_consecutive_in_place<L: Latent>(latents: &mut [L]) {
-  if latents.is_empty() {
-    return;
-  }
-
-  for i in (1..latents.len()).rev() {
-    latents[i] = latents[i].wrapping_sub(latents[i - 1]);
-  }
-}
-
-// Used for a single page, so we return the delta moments.
-// All encode in place functions leave junk data (`order`
-// latents in this case) at the front of the latents.
-// Using the front instead of the back is preferable because it makes the lookback
-// encode function simpler and faster.
-#[inline(never)]
-fn encode_consecutive_in_place<L: Latent>(order: usize, mut latents: &mut [L]) -> Vec<L> {
-  // TODO this function could be made faster by doing all steps on mini batches
-  // of ~512 at a time
-  let mut page_moments = Vec::with_capacity(order);
-  for _ in 0..order {
-    page_moments.push(latents.first().copied().unwrap_or(L::ZERO));
-
-    first_order_encode_consecutive_in_place(latents);
-    let truncated_start = cmp::min(latents.len(), 1);
-    latents = &mut latents[truncated_start..];
-  }
-  toggle_center_in_place(latents);
-
-  page_moments
-}
-
-fn first_order_decode_consecutive_in_place<L: Latent>(moment: &mut L, latents: &mut [L]) {
-  for delta in latents.iter_mut() {
-    let tmp = *delta;
-    *delta = *moment;
-    *moment = moment.wrapping_add(tmp);
-  }
-}
-
-// used for a single batch, so we mutate the delta moments
-#[inline(never)]
-pub(crate) fn decode_consecutive_in_place<L: Latent>(delta_moments: &mut [L], latents: &mut [L]) {
-  toggle_center_in_place(latents);
-  for moment in delta_moments.iter_mut().rev() {
-    first_order_decode_consecutive_in_place(moment, latents);
-  }
-}
+use crate::{
+  constants::{Bitlen, DeltaLookback},
+  data_types::Latent,
+  metadata::DeltaLookbackConfig,
+  FULL_BATCH_N,
+};
 
 // there are 3 types of proposed lookbacks:
 // * brute force: just try the most recent few latents
@@ -85,7 +23,7 @@ const REPEATING_LOOKBACKS: usize = 4;
 // quotient by 256.
 const COARSENESSES: [Bitlen; 2] = [0, 8];
 
-fn lookback_hash_lookup(
+fn hash_lookup(
   l: u64,
   i: usize,
   hash_table_n: usize,
@@ -113,7 +51,7 @@ fn lookback_hash_lookup(
       proposed_lookbacks[proposal_idx] = if lookback_to_last_instance <= window_n {
         lookback_to_last_instance
       } else {
-        cmp::min(proposal_idx, i)
+        proposal_idx.min(i)
       };
       proposal_idx += 1;
     }
@@ -155,7 +93,10 @@ fn find_best_lookback<L: Latent>(
 }
 
 #[inline(never)]
-fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Vec<DeltaLookback> {
+pub fn choose_lookbacks<L: Latent>(
+  config: DeltaLookbackConfig,
+  latents: &[L],
+) -> Vec<DeltaLookback> {
   let state_n = config.state_n();
 
   if latents.len() <= state_n {
@@ -170,7 +111,7 @@ fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Ve
     "we do not support tiny windows during compression"
   );
 
-  let mut lookback_counts = vec![1_u32; cmp::min(window_n, latents.len())];
+  let mut lookback_counts = vec![1_u32; window_n.min(latents.len())];
   let mut lookbacks = vec![MaybeUninit::uninit(); latents.len() - state_n];
   let mut idx_hash_table = vec![0_usize; COARSENESSES.len() * hash_table_n];
   let mut proposed_lookbacks = array::from_fn::<_, PROPOSED_LOOKBACKS, _>(|i| (i + 1).min(state_n));
@@ -182,7 +123,7 @@ fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Ve
     let new_brute_lookback = i.min(PROPOSED_LOOKBACKS);
     proposed_lookbacks[new_brute_lookback - 1] = new_brute_lookback;
 
-    lookback_hash_lookup(
+    hash_lookup(
       l.to_u64(),
       i,
       hash_table_n,
@@ -215,7 +156,7 @@ fn choose_lookbacks<L: Latent>(config: DeltaLookbackConfig, latents: &[L]) -> Ve
 // Using the front instead of the back is preferable because it means we don't
 // need an extra copy of the latents in this case.
 #[inline(never)]
-fn encode_with_lookbacks_in_place<L: Latent>(
+pub fn encode_in_place<L: Latent>(
   config: DeltaLookbackConfig,
   lookbacks: &[DeltaLookback],
   latents: &mut [L],
@@ -231,12 +172,12 @@ fn encode_with_lookbacks_in_place<L: Latent>(
   let mut state = vec![L::ZERO; state_n];
   state[state_n - real_state_n..].copy_from_slice(&latents[..real_state_n]);
 
-  toggle_center_in_place(latents);
+  super::toggle_center_in_place(latents);
 
   state
 }
 
-pub fn new_lookback_window_buffer_and_pos<L: Latent>(
+pub fn new_window_buffer_and_pos<L: Latent>(
   config: DeltaLookbackConfig,
   state: &[L],
 ) -> (Vec<L>, usize) {
@@ -249,14 +190,14 @@ pub fn new_lookback_window_buffer_and_pos<L: Latent>(
 }
 
 // returns whether it was corrupt
-pub fn decode_with_lookbacks_in_place<L: Latent>(
+pub fn decode_in_place<L: Latent>(
   config: DeltaLookbackConfig,
   lookbacks: &[DeltaLookback],
   window_buffer_pos: &mut usize,
   window_buffer: &mut [L],
   latents: &mut [L],
 ) -> bool {
-  toggle_center_in_place(latents);
+  super::toggle_center_in_place(latents);
 
   let (window_n, state_n) = (config.window_n(), config.state_n());
   let mut start_pos = *window_buffer_pos;
@@ -297,77 +238,10 @@ pub fn decode_with_lookbacks_in_place<L: Latent>(
   has_oob_lookbacks
 }
 
-pub fn compute_delta_latent_var(
-  delta_encoding: &DeltaEncoding,
-  primary_latents: &mut DynLatents,
-  range: Range<usize>,
-) -> Option<DynLatents> {
-  match delta_encoding {
-    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } => None,
-    DeltaEncoding::Lookback { config, .. } => {
-      let res = match_latent_enum!(
-        primary_latents,
-        DynLatents<L>(inner) => {
-          let latents = &mut inner[range];
-          DynLatents::new(choose_lookbacks(*config, latents))
-        }
-      );
-      Some(res)
-    }
-  }
-}
-
-pub fn encode_in_place(
-  delta_encoding: &LatentVarDeltaEncoding,
-  delta_latents: Option<&DynLatents>,
-  range: Range<usize>,
-  latents: &mut DynLatents,
-) -> DeltaState {
-  match_latent_enum!(
-    latents,
-    DynLatents<L>(inner) => {
-      let delta_state = match delta_encoding {
-        LatentVarDeltaEncoding::NoOp => Vec::<L>::new(),
-        LatentVarDeltaEncoding::Consecutive(order) => {
-          encode_consecutive_in_place(*order, &mut inner[range])
-        }
-        LatentVarDeltaEncoding::Lookback(config) => {
-          let lookbacks = delta_latents.unwrap().downcast_ref::<DeltaLookback>().unwrap();
-          encode_with_lookbacks_in_place(*config, lookbacks, &mut inner[range])
-        }
-      };
-      DynLatents::new(delta_state)
-    }
-  )
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
-
-  #[test]
-  fn test_consecutive_encode_decode() {
-    let orig_latents: Vec<u32> = vec![2, 2, 1, u32::MAX, 0];
-    let mut deltas = orig_latents.clone();
-    let order = 2;
-    let mut moments = encode_consecutive_in_place(order, &mut deltas);
-
-    // Encoding left junk deltas at the front,
-    // but for decoding we need junk deltas at the end.
-    let mut deltas_to_decode = Vec::new();
-    deltas_to_decode.extend(&deltas[order..]);
-    for _ in 0..order {
-      deltas_to_decode.push(1337);
-    }
-    let mut deltas = deltas_to_decode;
-
-    // decode in two parts to show we keep state properly
-    decode_consecutive_in_place::<u32>(&mut moments, &mut deltas[..3]);
-    assert_eq!(&deltas[..3], &orig_latents[..3]);
-
-    decode_consecutive_in_place::<u32>(&mut moments, &mut deltas[3..]);
-    assert_eq!(&deltas[3..5], &orig_latents[3..5]);
-  }
+  use crate::metadata::DeltaLookbackConfig;
 
   #[test]
   fn test_lookback_encode_decode() {
@@ -397,7 +271,7 @@ mod tests {
     assert_eq!(lookbacks[13], 10); // 204 -> 203
     assert_eq!(lookbacks[48], 1); // 205 -> 0; 204 was outside window
 
-    let state = encode_with_lookbacks_in_place(config, &lookbacks, &mut deltas);
+    let state = encode_in_place(config, &lookbacks, &mut deltas);
     assert_eq!(state, vec![100, 200]);
 
     // Encoding left junk deltas at the front,
@@ -408,9 +282,9 @@ mod tests {
       deltas_to_decode.push(1337);
     }
 
-    let (mut window_buffer, mut pos) = new_lookback_window_buffer_and_pos(config, &state);
+    let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &state);
     assert_eq!(pos, window_n);
-    let has_oob_lookbacks = decode_with_lookbacks_in_place(
+    let has_oob_lookbacks = decode_in_place(
       config,
       &lookbacks,
       &mut pos,
@@ -431,8 +305,8 @@ mod tests {
     let delta_state = vec![0_u32];
     let lookbacks = vec![5, 1, 1, 1];
     let mut latents = vec![1_u32, 2, 3, 4];
-    let (mut window_buffer, mut pos) = new_lookback_window_buffer_and_pos(config, &delta_state);
-    let has_oob_lookbacks = decode_with_lookbacks_in_place(
+    let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &delta_state);
+    let has_oob_lookbacks = decode_in_place(
       config,
       &lookbacks,
       &mut pos,
