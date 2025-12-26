@@ -1,16 +1,15 @@
-use std::mem;
-
 use half::f16;
 
 use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
-use crate::data_types::{split_latents_classic, Float, Latent, Number};
+use crate::data_types::{join_latents_classic, split_latents_classic, Float, Latent, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, Mode};
 use crate::mode::float_mult::FloatMultConfig;
 use crate::mode::{float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
@@ -366,25 +365,21 @@ macro_rules! impl_float_number {
           mem_layout ^ $sign_bit_mask
         }
       }
-      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) {
         match mode {
-          Mode::Classic => (),
+          Mode::Classic => join_latents_classic(primary, dst),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
-            float_mult::join_latents(base, primary, secondary)
+            float_mult::join_latents(base, primary, secondary, dst)
           }
-          Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary),
+          Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary, dst),
           _ => unreachable!("impossible mode for floats"),
         }
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        unsafe { mem::transmute(slice) }
-      }
-
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self.to_bits()
       }
     }
   };

@@ -17,7 +17,6 @@ pub struct ChunkLatentDecompressor<L: Latent> {
   pub n_bins: usize,
   pub only_bin: Option<Bin<L>>,
   pub decoder: ans::Decoder,
-  pub maybe_constant_value: Option<L>,
 }
 
 impl<L: Latent> ChunkLatentDecompressor<L> {
@@ -37,13 +36,6 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       .collect();
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
-    let maybe_constant_value =
-      if bins::are_trivial(bins) && matches!(delta_encoding, LatentVarDeltaEncoding::NoOp) {
-        bins.first().map(|bin| bin.lower)
-      } else {
-        None
-      };
-
     let only_bin = if bins.len() == 1 { Some(bins[0]) } else { None };
 
     Ok(Self {
@@ -53,7 +45,6 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       only_bin,
       decoder,
       delta_encoding,
-      maybe_constant_value,
     })
   }
 }
