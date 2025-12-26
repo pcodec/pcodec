@@ -1,17 +1,14 @@
 mod consecutive;
 mod lookback;
 
-use crate::constants::{Bitlen, DeltaLookback};
+use crate::constants::DeltaLookback;
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
-use crate::metadata::delta_encoding::{DeltaLookbackConfig, LatentVarDeltaEncoding};
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::DeltaEncoding;
-use crate::FULL_BATCH_N;
-use std::mem::MaybeUninit;
 use std::ops::Range;
-use std::{array, cmp, mem};
 
 pub type DeltaState = DynLatents;
 

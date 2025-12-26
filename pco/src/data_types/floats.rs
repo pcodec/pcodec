@@ -12,7 +12,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
 use crate::mode::float_mult::FloatMultConfig;
-use crate::mode::{float_mult, float_quant, int_mult};
+use crate::mode::{float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {

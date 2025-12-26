@@ -4,11 +4,10 @@ use std::ops::{Deref, DerefMut};
 use crate::ans::AnsState;
 use crate::bit_reader::BitReader;
 use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
-use crate::constants::{Bitlen, DeltaLookback, ANS_INTERLEAVING, FULL_BATCH_N};
+use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
-use crate::errors::{PcoError, PcoResult};
+use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
-use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::DynLatents;
 use crate::{bit_reader, delta};
 
