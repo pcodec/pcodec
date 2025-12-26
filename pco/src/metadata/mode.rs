@@ -47,7 +47,7 @@ use std::io::Write;
 /// convey the correct intuition without dealing with implementation
 /// complexities.
 /// Slightly more rigorous formulas are in format.md.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Mode {
   /// Represents each number as a single latent: itself.
@@ -102,8 +102,8 @@ impl Mode {
       0 => Classic,
       1 => {
         if version.used_old_gcds() {
-          return Err(PcoError::compatibility(
-            "unable to decompress data from v0.0.0 of pco with different GCD encoding",
+          return Err(PcoError::corruption(
+            "unable to decompress data from yanked v0.0.0 of pco with different GCD encoding",
           ));
         }
 
@@ -164,11 +164,11 @@ impl Mode {
   }
 
   pub(crate) fn float_mult<F: Float>(base: F) -> Self {
-    FloatMult(DynLatent::new(base.to_latent_ordered()).unwrap())
+    FloatMult(DynLatent::new(base.to_latent_ordered()))
   }
 
   pub(crate) fn int_mult<L: Latent>(base: L) -> Self {
-    IntMult(DynLatent::new(base).unwrap())
+    IntMult(DynLatent::new(base))
   }
 }
 
@@ -190,12 +190,8 @@ mod tests {
   #[test]
   fn test_bit_size() {
     check_bit_size(Mode::Classic);
-    check_bit_size(Mode::IntMult(
-      DynLatent::new(77_u32).unwrap(),
-    ));
-    check_bit_size(Mode::FloatMult(
-      DynLatent::new(77_u32).unwrap(),
-    ));
+    check_bit_size(Mode::IntMult(DynLatent::new(77_u32)));
+    check_bit_size(Mode::FloatMult(DynLatent::new(77_u32)));
     check_bit_size(Mode::FloatQuant(7));
   }
 }

@@ -73,7 +73,7 @@ fn v0_0_0_classic() -> PcoResult<()> {
   let name = "classic";
   let nums = (0_i32..1000).chain(2000..3000).collect::<Vec<_>>();
   let config = ChunkConfig {
-    delta_spec: DeltaSpec::None,
+    delta_spec: DeltaSpec::NoOp,
     ..Default::default()
   };
   simple_write_if_version_matches(version, name, &nums, &config)?;

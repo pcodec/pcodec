@@ -1,11 +1,11 @@
 use crate::data_types::Latent;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, DynBins, Mode};
+use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, DynBins, FormatVersion, Mode};
 
 /// Returns the maximum possible byte size of a wrapped header.
 pub fn header_size() -> usize {
-  1
+  FormatVersion::MAX_ENCODED_SIZE
 }
 
 pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
@@ -15,13 +15,12 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
       weight: 1,
       lower: L::ZERO,
       offset_bits: L::BITS,
-    }])
-    .unwrap(),
+    }]),
   };
 
   ChunkMeta {
     mode: Mode::Classic,
-    delta_encoding: DeltaEncoding::None,
+    delta_encoding: DeltaEncoding::NoOp,
     per_latent_var: PerLatentVar {
       delta: None,
       primary,

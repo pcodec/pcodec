@@ -13,7 +13,7 @@ define_latent_enum!(
 
 impl DynLatent {
   pub(crate) unsafe fn read_uncompressed_from<L: Latent>(reader: &mut BitReader) -> Self {
-    DynLatent::new(reader.read_uint::<L>(L::BITS)).unwrap()
+    DynLatent::new(reader.read_uint::<L>(L::BITS))
   }
 
   pub(crate) unsafe fn write_uncompressed_to<W: Write>(&self, writer: &mut BitWriter<W>) {

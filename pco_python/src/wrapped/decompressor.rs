@@ -66,7 +66,7 @@ impl PyFd {
         let (generic_cd, rest) = fd
           .chunk_decompressor::<T, _>(src)
           .map_err(pco_err_to_py)?;
-        (DynCd::new(generic_cd).unwrap(), rest)
+        (DynCd::new(generic_cd), rest)
       }
     );
 

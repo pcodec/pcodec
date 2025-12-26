@@ -7,7 +7,7 @@ use crate::dtypes::PcoNumber;
 fn unparse_delta_spec(spec: &DeltaSpec) -> String {
   match spec {
     DeltaSpec::Auto => "Auto".to_string(),
-    DeltaSpec::None => "None".to_string(),
+    DeltaSpec::NoOp => "NoOp".to_string(),
     DeltaSpec::TryConsecutive(order) => format!("Consecutive@{}", order),
     DeltaSpec::TryLookback => "Lookback".to_string(),
     _ => "Unknown".to_string(),

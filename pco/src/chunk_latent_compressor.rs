@@ -251,7 +251,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     PageDissectedVar {
       ans_vals: uninit_vec(n),
       ans_bits: uninit_vec(n),
-      offsets: DynLatents::new(uninit_vec::<L>(n)).unwrap(),
+      offsets: DynLatents::new(uninit_vec::<L>(n)),
       offset_bits: uninit_vec(n),
       ans_final_states,
     }

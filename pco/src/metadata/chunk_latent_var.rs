@@ -8,8 +8,9 @@ use crate::constants::{
 use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_bins::DynBins;
-use crate::metadata::{Bin, DeltaEncoding};
+use crate::metadata::Bin;
 use better_io::BetterBufRead;
 use std::cmp::min;
 use std::io::Write;
@@ -92,7 +93,7 @@ impl ChunkLatentVarMeta {
   pub(crate) fn latent_type(&self) -> LatentType {
     match_latent_enum!(
       &self.bins,
-      DynBins<L>(_inner) => { LatentType::new::<L>().unwrap() }
+      DynBins<L>(_inner) => { LatentType::new::<L>() }
     )
   }
 
@@ -144,7 +145,7 @@ impl ChunkLatentVarMeta {
           )?;
         }
 
-        DynBins::new(bins).unwrap()
+        DynBins::new(bins)
       }
     );
 
@@ -173,7 +174,7 @@ impl ChunkLatentVarMeta {
     BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + total_bin_size
   }
 
-  pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: DeltaEncoding) -> usize {
+  pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: &LatentVarDeltaEncoding) -> usize {
     let bits_per_latent = match_latent_enum!(
       &self.bins,
       DynBins<L>(_bins) => { L::BITS }

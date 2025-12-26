@@ -6,7 +6,7 @@ use pco::{DeltaSpec, ModeSpec};
 pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => DeltaSpec::Auto,
-    "none" => DeltaSpec::None,
+    "noop" => DeltaSpec::NoOp,
     "lookback" => DeltaSpec::TryLookback,
     other => {
       let mut parts = other.split('@');

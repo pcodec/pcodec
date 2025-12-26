@@ -236,7 +236,7 @@ fn recover_with_alternating_nums(offset_bits: Bitlen, name: &str) -> PcoResult<(
   let (compressed, meta) = compress_w_meta(
     &nums,
     &ChunkConfig {
-      delta_spec: DeltaSpec::None,
+      delta_spec: DeltaSpec::NoOp,
       compression_level: 0,
       ..Default::default()
     },
@@ -276,7 +276,7 @@ fn test_with_int_mult() -> PcoResult<()> {
   let (compressed, meta) = compress_w_meta(
     &nums,
     &ChunkConfig {
-      delta_spec: DeltaSpec::None,
+      delta_spec: DeltaSpec::NoOp,
       ..Default::default()
     },
   )?;
@@ -370,7 +370,7 @@ fn test_lookback_delta_encoding() -> PcoResult<()> {
   )?;
   assert!(matches!(
     meta.delta_encoding,
-    DeltaEncoding::Lookback(_)
+    DeltaEncoding::Lookback { .. }
   ));
   let decompressed = simple_decompress(&compressed)?;
   assert_nums_eq(&decompressed, &nums, "trivial_first_latent")?;

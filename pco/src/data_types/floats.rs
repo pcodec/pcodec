@@ -9,10 +9,11 @@ use crate::constants::Bitlen;
 use crate::data_types::{split_latents_classic, Float, Latent, Number};
 use crate::describers::LatentDescriber;
 use crate::errors::{PcoError, PcoResult};
-use crate::float_mult_utils::FloatMultConfig;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
-use crate::{describers, float_mult_utils, float_quant_utils, sampling, ChunkConfig};
+use crate::mode::float_mult::FloatMultConfig;
+use crate::mode::{float_mult, float_quant};
+use crate::{describers, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
   // We can compress infinities, nans, and baby floats, but we can't learn
@@ -41,8 +42,8 @@ fn choose_mode_and_split_latents<F: Float>(
       });
 
       if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
-        bids.extend(float_mult_utils::compute_bid(&sample));
-        bids.extend(float_quant_utils::compute_bid(&sample));
+        bids.extend(float_mult::compute_bid(&sample));
+        bids.extend(float_quant::compute_bid(&sample));
       }
 
       let winning_bid = choose_winning_bid(bids);
@@ -57,12 +58,12 @@ fn choose_mode_and_split_latents<F: Float>(
         base,
         inv_base: base.inv(),
       };
-      let latents = float_mult_utils::split_latents(nums, float_mult_config);
+      let latents = float_mult::split_latents(nums, float_mult_config);
       Ok((mode, latents))
     }
     ModeSpec::TryFloatQuant(k) => Ok((
       Mode::FloatQuant(k),
-      float_quant_utils::split_latents(nums, k),
+      float_quant::split_latents(nums, k),
     )),
     ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
@@ -325,7 +326,7 @@ macro_rules! impl_float_number {
           .expect("invalid mode for float type")
       }
 
-      fn mode_is_valid(mode: Mode) -> bool {
+      fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
           Mode::Classic => true,
           Mode::FloatMult(dyn_latent) => {
@@ -333,7 +334,7 @@ macro_rules! impl_float_number {
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
           }
-          Mode::FloatQuant(k) => k > 0 && k <= Self::PRECISION_BITS,
+          Mode::FloatQuant(k) => *k > 0 && *k <= Self::PRECISION_BITS,
           _ => false,
         }
       }
@@ -365,14 +366,14 @@ macro_rules! impl_float_number {
           mem_layout ^ $sign_bit_mask
         }
       }
-      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
         match mode {
           Mode::Classic => (),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
-            float_mult_utils::join_latents(base, primary, secondary)
+            float_mult::join_latents(base, primary, secondary)
           }
-          Mode::FloatQuant(k) => float_quant_utils::join_latents::<Self>(k, primary, secondary),
+          Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary),
           _ => unreachable!("impossible mode for floats"),
         }
       }
@@ -407,13 +408,13 @@ mod tests {
     let nums = (0..1000).map(|i| (i as f64) * base).collect::<Vec<_>>();
     let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
     assert_eq!(mode, Mode::float_mult(base));
-    assert!(f64::mode_is_valid(mode))
+    assert!(f64::mode_is_valid(&mode))
   }
 
   #[test]
   fn test_mode_validation() {
     // CLASSIC
-    assert!(f32::mode_is_valid(Mode::Classic));
+    assert!(f32::mode_is_valid(&Mode::Classic));
 
     // FLOAT MULT
     for base in [
@@ -421,7 +422,7 @@ mod tests {
       0.000000000000000000000000000000000000003416741_f32,
     ] {
       assert!(
-        f32::mode_is_valid(Mode::float_mult(base)),
+        f32::mode_is_valid(&Mode::float_mult(base)),
         "{} was invalid",
         base
       );
@@ -429,7 +430,7 @@ mod tests {
 
     for base in [0.0_f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
       assert!(
-        !f32::mode_is_valid(Mode::float_mult(base)),
+        !f32::mode_is_valid(&Mode::float_mult(base)),
         "{} was valid",
         base
       )
@@ -437,15 +438,15 @@ mod tests {
 
     // FLOAT QUANT
     for k in [1, 22, 23] {
-      assert!(f32::mode_is_valid(Mode::FloatQuant(k)));
+      assert!(f32::mode_is_valid(&Mode::FloatQuant(k)));
     }
     for k in [0, 24, 32] {
-      assert!(!f32::mode_is_valid(Mode::FloatQuant(k)));
+      assert!(!f32::mode_is_valid(&Mode::FloatQuant(k)));
     }
 
     // INT MULT
-    assert!(!f32::mode_is_valid(Mode::IntMult(
-      DynLatent::new(77_u32).unwrap()
+    assert!(!f32::mode_is_valid(&Mode::IntMult(
+      DynLatent::new(77_u32)
     )));
   }
 

@@ -6,13 +6,11 @@ use std::{fmt, io};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ErrorKind {
-  /// `Compatibility` errors occur during decompression, indicating the library
-  /// version is not up-to-date enough for the provided data.
-  Compatibility,
   /// `Corruption` errors occur during decompression, indicating the
   /// provided data is inconsistent or violates the pco format.
-  /// It also applies to cases where standalone files were read but a wrapped
-  /// format was detected, or vice versa.
+  /// These may arise when the decompressor version is too old.
+  /// They may also apply to cases where standalone files were read using the
+  /// wrapped API, or vice versa.
   Corruption,
   /// `InsufficientData` errors occur during decompression, indicating
   /// the decompressor reached the end of the provided data before finishing.
@@ -38,10 +36,6 @@ impl PcoError {
       kind,
       message: message.as_ref().to_string(),
     }
-  }
-
-  pub(crate) fn compatibility<S: AsRef<str>>(message: S) -> Self {
-    Self::new(ErrorKind::Compatibility, message)
   }
 
   pub(crate) fn corruption<S: AsRef<str>>(message: S) -> Self {
