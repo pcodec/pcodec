@@ -16,16 +16,17 @@ Define "compatibility line" to be a non-API-breaking sequence of semver versions
 Pco's compatibility guarantee is:
 
 Each library version will be able to decompress any data compressed by
-* earlier or equal library versions (in the sense of SemVer precedence), or
-* later library versions in the same compatibility line, unless opt-in features are used during compression.
+* earlier or equal library versions (in the sense of SemVer precedence), and
+* later library versions in the same compatibility line, unless opt-in features
+  are added to the API and opted into by the user during compression.
 
-Note that we leave room for:
-* New library versions may support decompressing data that was previously considered corrupt.
-* Data produced by new compatibility lines may be considered corrupt by old compatibility lines.
-* Within a compatibility line, opt-in compressor features may be added that produce data that was previously considered corrupt.
-
-Also note that the Pco header contains a major and minor format version.
-Supporting the file's major version is a necessary condition for decompression, and supporting the minor version as well is a sufficient one.
+Note that we allow:
+* New library versions may support decompressing data that was previously
+  considered corrupt.
+* Data produced by new compatibility lines may be considered corrupt by old
+  compatibility lines.
+* Within a compatibility line, opt-in compressor features may be added that
+  produce data that was previously considered corrupt.
 
 ## Wrapped Format Components
 
