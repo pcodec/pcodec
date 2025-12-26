@@ -296,7 +296,7 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
     };
     self.decompress_batch_pre_delta(reader, cld, &mut dst[..pre_delta_len]);
 
-    delta::decode(
+    delta::decode_in_place(
       &cld.delta_encoding,
       delta_latents,
       &mut self.delta_state_pos,

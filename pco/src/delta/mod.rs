@@ -18,7 +18,7 @@ pub type DeltaState = DynLatents;
 // * unsigned deltas -> (effectively) signed deltas; encoding
 // * signed deltas -> unsigned deltas; decoding
 #[inline(never)]
-pub fn toggle_center_in_place<L: Latent>(latents: &mut [L]) {
+fn toggle_center_in_place<L: Latent>(latents: &mut [L]) {
   for l in latents.iter_mut() {
     *l = l.toggle_center();
   }
@@ -82,7 +82,7 @@ pub fn encode_in_place(
   )
 }
 
-pub fn decode<L: Latent>(
+pub fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: Option<&DynLatents>,
   delta_state_pos: &mut usize,
