@@ -34,8 +34,8 @@ impl FileDecompressor {
     ))
   }
 
-  pub fn format_version(&self) -> u8 {
-    self.format_version.0
+  pub fn format_version(&self) -> FormatVersion {
+    self.format_version
   }
 
   /// Reads a chunk's metadata and returns a `ChunkDecompressor` and the
