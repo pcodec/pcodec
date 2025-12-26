@@ -12,7 +12,7 @@ via [its `from_unsigned` function](#Modes).
 
 ## Version Compatibility
 
-Define "compatibility line" to be a non-API-breaking sequence of semver
+Define "compatibility line" to be a non-API-breaking sequence of SemVer
 versions, e.g 0.4.x or 1.x.y.
 Pco's compatibility guarantee is:
 
