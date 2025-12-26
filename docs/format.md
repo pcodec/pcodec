@@ -12,7 +12,8 @@ via [its `from_unsigned` function](#Modes).
 
 ## Version Compatibility
 
-Define "compatibility line" to be a non-API-breaking sequence of semver versions.
+Define "compatibility line" to be a non-API-breaking sequence of semver
+versions, e.g 0.4.x or 1.x.y.
 Pco's compatibility guarantee is:
 
 Each library version will be able to decompress any data compressed by
