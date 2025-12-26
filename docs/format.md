@@ -170,12 +170,12 @@ It consists of
 
 So far, these standalone versions exist:
 
-| format version | first Rust version | deviations from next format version                                      |
-|----------------|--------------------|--------------------------------------------------------------------------|
-| 0              | 0.0.0              | -                                                                        |
-| 1              | 0.1.0              | standalone version was implicit and equaled wrapped version, no `n_hint` |
-| 2              | 0.1.1              | uniform number type unsupported                                          |
-| 3              | 0.4.5              | -                                                                        |
+| format version | first Rust version | format modifications |
+|----------------|--------------------|----------------------|
+| 0              | 0.0.0              |   |
+| 1              | 0.1.0              |   |
+| 2              | 0.1.1              | explicit standalone version (previously was implicit and equaled wrapped major version), added `n_hint` |
+| 3              | 0.4.5              | uniform number type |
 
 As well as these number type 1-byte representations:
 
