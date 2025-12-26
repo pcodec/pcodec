@@ -1,7 +1,6 @@
 use std::io::Write;
 
 use crate::bit_writer::BitWriter;
-use crate::constants::HEADER_PADDING;
 use crate::data_types::Number;
 use crate::errors::PcoResult;
 use crate::metadata::format_version::FormatVersion;
@@ -45,7 +44,7 @@ use crate::ChunkConfig;
 /// Otherwise, you may write anything else you like in your wrapping file!
 #[derive(Clone, Debug, Default)]
 pub struct FileCompressor {
-  format_version: FormatVersion,
+  pub(crate) format_version: FormatVersion,
 }
 
 impl FileCompressor {
@@ -53,7 +52,7 @@ impl FileCompressor {
   ///
   /// Will return an error if the provided `Write` errors.
   pub fn write_header<W: Write>(&self, dst: W) -> PcoResult<W> {
-    let mut writer = BitWriter::new(dst, HEADER_PADDING);
+    let mut writer = BitWriter::new(dst, FormatVersion::MAX_ENCODED_SIZE);
     self.format_version.write_to(&mut writer)?;
     writer.flush()?;
     Ok(writer.into_inner())

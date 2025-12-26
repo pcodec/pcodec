@@ -8,9 +8,6 @@ pub(crate) type Bitlen = u32;
 pub(crate) type Weight = u32;
 pub(crate) type DeltaLookback = u32;
 
-// compatibility
-pub const CURRENT_FORMAT_VERSION: u8 = 3;
-
 // bit lengths
 pub const BITS_TO_ENCODE_ANS_SIZE_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_MODE_VARIANT: Bitlen = 4;
@@ -22,17 +19,10 @@ pub const BITS_TO_ENCODE_N_BINS: Bitlen = 15;
 // conservative: wide enough to support quantizing float datasets with 255 unused bits of precision
 pub const BITS_TO_ENCODE_QUANTIZE_K: Bitlen = 8;
 
-// padding
-pub const HEADER_PADDING: usize = 1;
 // + 9 because we might read an extra u64 (8 bytes), plus 1 for good measure
-pub const OVERSHOOT_PADDING: usize = MAX_SUPPORTED_PRECISION_BYTES + 9;
-// Chunk meta padding is enough for one full batch of bins; this should also
-// generously cover the data needed to read the other parts of chunk meta.
-pub const CHUNK_META_PADDING: usize =
-  FULL_BIN_BATCH_SIZE * (4 + 2 * MAX_SUPPORTED_PRECISION_BYTES) + OVERSHOOT_PADDING;
-// Page padding is enough for one full batch of latents; this should also
-// generously cover the data needed to read the page meta.
-pub const PAGE_PADDING: usize =
+pub const OVERSHOOT_PADDING: usize = 9;
+// enough for one full batch of latents
+pub const MAX_BATCH_LATENT_VAR_SIZE: usize =
   FULL_BATCH_N * (MAX_SUPPORTED_PRECISION_BYTES + MAX_ANS_BYTES) + OVERSHOOT_PADDING;
 
 // cutoffs and legal parameter values
@@ -59,7 +49,6 @@ pub const ANS_INTERLEAVING: usize = 4;
 ///
 /// Only the final batch in each page may have fewer numbers than this.
 pub const FULL_BATCH_N: usize = 256;
-pub const FULL_BIN_BATCH_SIZE: usize = 128;
 
 #[cfg(test)]
 mod tests {

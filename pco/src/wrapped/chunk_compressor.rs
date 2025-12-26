@@ -6,8 +6,8 @@ use crate::chunk_latent_compressor::{
 use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
-  Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_COMPRESSION_LEVEL, MAX_DELTA_ENCODING_ORDER,
-  MAX_ENTRIES, OVERSHOOT_PADDING, PAGE_PADDING,
+  Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
+  MAX_DELTA_ENCODING_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, LatentType, Number};
@@ -27,6 +27,7 @@ use crate::wrapped::guarantee;
 use crate::{
   ans, bin_optimization, bits, data_types, delta, ChunkConfig, PagingSpec, FULL_BATCH_N,
 };
+use std::any;
 use std::cmp::min;
 use std::io::Write;
 
@@ -528,11 +529,13 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
 
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
   if !T::mode_is_valid(mode) {
-    return Err(PcoError::invalid_argument(
+    return Err(PcoError::invalid_argument(format!(
       "The chosen mode of {:?} was invalid for type {}. \
       This is most likely due to an invalid argument, but if using Auto mode \
       spec, it could also be a bug in pco.",
-    ));
+      mode,
+      any::type_name::<T>(),
+    )));
   }
 
   let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
@@ -579,7 +582,7 @@ impl ChunkCompressor {
       });
     }
 
-    let worst_case_size = meta.exact_size()
+    let worst_case_size = meta.max_size()
       + n_pages * meta.exact_page_meta_size()
       + worst_case_body_bit_size.div_ceil(8);
 
@@ -605,17 +608,14 @@ impl ChunkCompressor {
   /// This can be useful when building the file as a `Vec<u8>` in memory;
   /// you can `.reserve()` ahead of time.
   pub fn chunk_meta_size_hint(&self) -> usize {
-    self.meta.exact_size()
+    self.meta.max_size()
   }
 
   /// Writes the chunk metadata to the destination.
   ///
   /// Will return an error if the provided `Write` errors.
   pub fn write_chunk_meta<W: Write>(&self, dst: W) -> PcoResult<W> {
-    let mut writer = BitWriter::new(
-      dst,
-      self.meta.exact_size() + OVERSHOOT_PADDING,
-    );
+    let mut writer = BitWriter::new(dst, self.meta.max_size() + OVERSHOOT_PADDING);
     unsafe { self.meta.write_to(&mut writer)? };
     Ok(writer.into_inner())
   }
@@ -740,7 +740,7 @@ impl ChunkCompressor {
       )));
     }
 
-    let mut writer = BitWriter::new(dst, PAGE_PADDING);
+    let mut writer = BitWriter::new(dst, MAX_BATCH_LATENT_VAR_SIZE);
 
     let dissected_page = self.dissect_page(page_idx, scratch)?;
     let page_info = &self.page_infos[page_idx];
