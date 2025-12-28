@@ -14,8 +14,8 @@ pub(crate) fn join_latents<F: Float>(
   secondary: Option<DynLatentSlice>,
   dst: &mut [F],
 ) {
-  let primary = primary.downcast::<F::L>().unwrap();
-  let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
+  let primary = primary.downcast_unwrap::<F::L>();
+  let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;

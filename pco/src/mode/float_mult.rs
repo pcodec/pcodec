@@ -18,8 +18,8 @@ pub(crate) fn join_latents<F: Float>(
   secondary: Option<DynLatentSlice>,
   dst: &mut [F],
 ) {
-  let primary = primary.downcast::<F::L>().unwrap();
-  let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
+  let primary = primary.downcast_unwrap::<F::L>();
+  let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     let unadjusted = F::int_float_from_latent(mult) * base;
     *dst = F::from_latent_ordered(

@@ -237,8 +237,6 @@ impl<'a, L: Latent> PageLatentDecompressor<L> {
 
     assert!(batch_n <= FULL_BATCH_N);
     if cld.n_bins > 1 {
-      assert!(batch_n <= FULL_BATCH_N);
-
       if batch_n == FULL_BATCH_N {
         self.decompress_full_ans_symbols(reader, cld);
       } else {

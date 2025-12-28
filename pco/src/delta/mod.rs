@@ -99,7 +99,7 @@ pub fn decode_in_place<L: Latent>(
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
-        delta_latents.unwrap().downcast::<DeltaLookback>().unwrap(),
+        delta_latents.unwrap().downcast_unwrap::<DeltaLookback>(),
         delta_state_pos,
         delta_state,
         latents,

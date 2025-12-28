@@ -43,8 +43,8 @@ pub(crate) fn join_latents<T: Number>(
   secondary: Option<DynLatentSlice>,
   dst: &mut [T],
 ) {
-  let primary = primary.downcast::<T::L>().unwrap();
-  let secondary = secondary.unwrap().downcast::<T::L>().unwrap();
+  let primary = primary.downcast_unwrap::<T::L>();
+  let secondary = secondary.unwrap().downcast_unwrap::<T::L>();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
   }

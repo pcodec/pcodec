@@ -219,12 +219,7 @@ pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
 }
 
 pub(crate) fn join_latents_classic<T: Number>(primary: DynLatentSlice, dst: &mut [T]) {
-  for (&l, dst) in primary
-    .downcast::<T::L>()
-    .unwrap()
-    .iter()
-    .zip(dst.iter_mut())
-  {
+  for (&l, dst) in primary.downcast_unwrap::<T::L>().iter().zip(dst.iter_mut()) {
     *dst = T::from_latent_ordered(l);
   }
 }
