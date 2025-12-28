@@ -1,7 +1,6 @@
-use std::mem;
-
 use crate::data_types::{unsigneds, ModeAndLatents, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
@@ -38,16 +37,13 @@ macro_rules! impl_signed {
       fn to_latent_ordered(self) -> Self::L {
         self.wrapping_sub(Self::MIN) as $latent
       }
-      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        unsigneds::join_latents(mode, primary, secondary)
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        unsafe { mem::transmute(slice) }
-      }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self.cast_unsigned()
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) {
+        unsigneds::join_latents(mode, primary, secondary, dst)
       }
     }
   };

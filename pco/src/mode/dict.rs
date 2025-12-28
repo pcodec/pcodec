@@ -1,7 +1,8 @@
 use std::{cmp, collections::HashMap};
 
 use crate::{
-  data_types::{Latent, ModeAndLatents, Number, SplitLatents},
+  data_types::{ModeAndLatents, Number, SplitLatents},
+  dyn_latent_slice::DynLatentSlice,
   errors::PcoResult,
   metadata::{DynLatents, Mode},
 };
@@ -21,7 +22,7 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
   let mode = Mode::Dict(DynLatents::new(ordered_unique));
   let indices = nums
     .iter()
-    .map(|&num| T::L::from_u32(*index_hashmap.get(&num.to_latent_ordered()).unwrap()))
+    .map(|&num| *index_hashmap.get(&num.to_latent_ordered()).unwrap())
     .collect();
   let latents = DynLatents::new(indices);
   Ok((
@@ -33,10 +34,10 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
   ))
 }
 
-pub fn join_latents<L: Latent>(primary: &mut [L], dict: &DynLatents) {
-  let dict = dict.downcast_ref::<L>().unwrap();
-  for latent in primary.iter_mut() {
-    let index = latent.to_u64() as usize;
-    *latent = dict[index];
+pub fn join_latents<T: Number>(dict: &DynLatents, primary: DynLatentSlice, dst: &mut [T]) {
+  let dict = dict.downcast_ref::<T::L>().unwrap();
+  let idxs = primary.downcast_unwrap::<u32>();
+  for (idx, num) in idxs.iter().zip(dst.iter_mut()) {
+    *num = T::from_latent_ordered(dict[*idx as usize]);
   }
 }

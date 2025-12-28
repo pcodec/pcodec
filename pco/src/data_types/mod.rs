@@ -10,6 +10,7 @@ pub use split_latents::SplitLatents;
 
 use crate::constants::Bitlen;
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::per_latent_var::PerLatentVar;
@@ -201,16 +202,10 @@ pub trait Number:
 
   fn from_latent_ordered(l: Self::L) -> Self;
   fn to_latent_ordered(self) -> Self::L;
-  fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>);
-
-  fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L];
-  fn transmute_to_latent(self) -> Self::L;
-}
-
-pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
-  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect());
-  SplitLatents {
-    primary,
-    secondary: None,
-  }
+  fn join_latents(
+    mode: &Mode,
+    primary: DynLatentSlice,
+    secondary: Option<DynLatentSlice>,
+    dst: &mut [Self],
+  );
 }

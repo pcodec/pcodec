@@ -23,6 +23,7 @@ use crate::metadata::page::PageMeta;
 use crate::metadata::page_latent_var::PageLatentVarMeta;
 use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar, PerLatentVarBuilder};
 use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, Mode};
+use crate::mode::classic;
 use crate::wrapped::guarantee;
 use crate::{
   ans, bin_optimization, bits, data_types, delta, ChunkConfig, PagingSpec, FULL_BATCH_N,
@@ -546,7 +547,7 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
 
   let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
   if candidate.should_fallback(LatentType::new::<T::L>(), n, bin_counts) {
-    let split_latents = data_types::split_latents_classic(nums);
+    let split_latents = classic::split_latents(nums);
     return fallback_chunk_compressor(split_latents, config);
   }
 

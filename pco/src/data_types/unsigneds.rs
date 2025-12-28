@@ -1,11 +1,12 @@
 use super::ModeAndLatents;
 use crate::constants::Bitlen;
-use crate::data_types::{split_latents_classic, Latent, Number};
+use crate::data_types::{Latent, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
-use crate::mode::{dict, int_mult};
+use crate::mode::{classic, dict, int_mult};
 use crate::{describers, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
@@ -19,10 +20,10 @@ pub fn choose_mode_and_split_latents<T: Number>(
         let latents = int_mult::split_latents(nums, base);
         Ok((mode, latents))
       } else {
-        Ok((Mode::Classic, split_latents_classic(nums)))
+        Ok((Mode::Classic, classic::split_latents(nums)))
       }
     }
-    ModeSpec::Classic => Ok((Mode::Classic, split_latents_classic(nums))),
+    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
     ModeSpec::TryFloatMult(_) | ModeSpec::TryFloatQuant(_) => Err(PcoError::invalid_argument(
       "unable to use float mode for ints",
     )),
@@ -36,14 +37,16 @@ pub fn choose_mode_and_split_latents<T: Number>(
   }
 }
 
-pub fn join_latents<L: Latent>(mode: &Mode, primary: &mut [L], secondary: Option<&DynLatents>) {
+pub fn join_latents<T: Number>(
+  mode: &Mode,
+  primary: DynLatentSlice,
+  secondary: Option<DynLatentSlice>,
+  dst: &mut [T],
+) {
   match mode {
-    Mode::Classic => (),
-    Mode::Dict(dict) => dict::join_latents(primary, dict),
-    Mode::IntMult(dyn_latent) => {
-      let base = *dyn_latent.downcast_ref::<L>().unwrap();
-      int_mult::join_latents(base, primary, secondary)
-    }
+    Mode::Classic => classic::join_latents(primary, dst),
+    Mode::Dict(dict) => dict::join_latents(dict, primary, dst),
+    Mode::IntMult(base) => int_mult::join_latents(*base, primary, secondary, dst),
     Mode::FloatMult(_) | Mode::FloatQuant(_) => {
       unreachable!("impossible mode for unsigned ints")
     }
@@ -135,16 +138,13 @@ macro_rules! impl_unsigned_number {
       fn to_latent_ordered(self) -> Self::L {
         self
       }
-      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        join_latents(mode, primary, secondary)
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        slice
-      }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) {
+        join_latents(mode, primary, secondary, dst)
       }
     }
   };

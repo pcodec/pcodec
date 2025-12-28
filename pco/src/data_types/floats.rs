@@ -1,18 +1,17 @@
-use std::mem;
-
 use half::f16;
 
 use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
-use crate::data_types::{split_latents_classic, Float, Latent, Number};
+use crate::data_types::{Float, Latent, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DynLatents, Mode};
 use crate::mode::float_mult::FloatMultConfig;
-use crate::mode::{dict, float_mult, float_quant};
+use crate::mode::{classic, dict, float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
@@ -38,7 +37,7 @@ fn choose_mode_and_split_latents<F: Float>(
       bids.push(Bid {
         mode: Mode::Classic,
         bits_saved_per_num: 0.0,
-        split_fn: Box::new(|nums| split_latents_classic(nums)),
+        split_fn: Box::new(|nums| classic::split_latents(nums)),
       });
 
       if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
@@ -50,7 +49,7 @@ fn choose_mode_and_split_latents<F: Float>(
       let latents = (winning_bid.split_fn)(nums);
       Ok((winning_bid.mode, latents))
     }
-    ModeSpec::Classic => Ok((Mode::Classic, split_latents_classic(nums))),
+    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
     ModeSpec::TryFloatMult(base_f64) => {
       let base = F::from_f64(base_f64);
       let mode = Mode::float_mult(base);
@@ -367,26 +366,23 @@ macro_rules! impl_float_number {
           mem_layout ^ $sign_bit_mask
         }
       }
-      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) {
         match mode {
-          Mode::Classic => (),
-          Mode::Dict(dict) => dict::join_latents(primary, dict),
+          Mode::Classic => classic::join_latents(primary, dst),
+          Mode::Dict(dict) => dict::join_latents(dict, primary, dst),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
-            float_mult::join_latents(base, primary, secondary)
+            float_mult::join_latents(base, primary, secondary, dst)
           }
-          Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary),
+          Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary, dst),
           Mode::IntMult(_) => unreachable!("impossible mode for floats"),
+          _ => unreachable!("impossible mode for floats"),
         }
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        unsafe { mem::transmute(slice) }
-      }
-
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self.to_bits()
       }
     }
   };

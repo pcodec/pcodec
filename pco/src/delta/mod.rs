@@ -3,6 +3,7 @@ mod lookback;
 
 use crate::constants::DeltaLookback;
 use crate::data_types::Latent;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
@@ -84,7 +85,7 @@ pub fn encode_in_place(
 
 pub fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
-  delta_latents: Option<&DynLatents>,
+  delta_latents: Option<DynLatentSlice>,
   delta_state_pos: &mut usize,
   delta_state: &mut [L],
   latents: &mut [L],
@@ -98,10 +99,7 @@ pub fn decode_in_place<L: Latent>(
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
-        delta_latents
-          .unwrap()
-          .downcast_ref::<DeltaLookback>()
-          .unwrap(),
+        delta_latents.unwrap().downcast_unwrap::<DeltaLookback>(),
         delta_state_pos,
         delta_state,
         latents,
