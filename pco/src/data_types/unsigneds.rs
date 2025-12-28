@@ -157,7 +157,7 @@ impl_unsigned_number!(u16, 7);
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::metadata::Mode;
+  use crate::metadata::{DynLatents, Mode};
 
   #[test]
   fn test_mode_validation() {

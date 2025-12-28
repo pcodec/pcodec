@@ -397,7 +397,7 @@ impl_float_number!(f16, u16, 1_u16 << 15, 9);
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::metadata::DynLatent;
+  use crate::metadata::{DynLatent, DynLatents};
 
   #[test]
   fn test_choose_mult_mode() {
