@@ -1,10 +1,11 @@
 use super::ModeAndLatents;
 use crate::constants::Bitlen;
-use crate::data_types::{split_latents_classic, Latent, Number};
+use crate::data_types::{join_latents_classic, split_latents_classic, Latent, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, DynLatent, Mode};
 use crate::mode::int_mult;
 use crate::{describers, ChunkConfig, ModeSpec};
 
@@ -121,23 +122,20 @@ macro_rules! impl_unsigned_number {
       fn to_latent_ordered(self) -> Self::L {
         self
       }
-      fn join_latents(mode: &Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) {
         match mode {
-          Mode::Classic => (),
+          Mode::Classic => join_latents_classic(primary, dst),
           Mode::IntMult(dyn_latent) => {
             let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult::join_latents(base, primary, secondary)
+            int_mult::join_latents(base, primary, secondary, dst)
           }
           _ => unreachable!("impossible mode for unsigned ints"),
         }
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        slice
-      }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self
       }
     }
   };
