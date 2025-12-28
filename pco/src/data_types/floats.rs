@@ -9,7 +9,7 @@ use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, Mode};
 use crate::mode::float_mult::FloatMultConfig;
 use crate::mode::{classic, dict, float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
@@ -381,7 +381,6 @@ macro_rules! impl_float_number {
           }
           Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary, dst),
           Mode::IntMult(_) => unreachable!("impossible mode for floats"),
-          _ => unreachable!("impossible mode for floats"),
         }
       }
     }

@@ -3,7 +3,7 @@ use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatents, Mode};
+use crate::metadata::{ChunkMeta, Mode};
 use crate::{describers, ChunkConfig};
 
 macro_rules! impl_signed {

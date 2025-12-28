@@ -12,7 +12,6 @@ use crate::constants::Bitlen;
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
-use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::ChunkConfig;
