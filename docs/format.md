@@ -56,14 +56,14 @@ The header simply consists of
 
 So far, these format versions exist:
 
-| format version | 1st reader lib version | 1st writer lib version | format modifications | format additions |
-|----------------|-------|-------------------|-------------------------|                               |
-| 0              | 0.0.0 | 0.0.0             |                         |                               |
-| 1              | 0.1.0 | 0.1.0             |                         | IntMult mode                  |
-| 2              | 0.3.0 | 0.3.0             |                         | FloatQuant mode, 16-bit types |
-| 3              | 0.4.0 | 0.4.0             | delta encoding variants | Lookback delta encoding       |
-| 4.0            | 0.4.8 |                   | minor version           |                               |
-| 4.1            | 1.0.0 | 1.0.0             |                         | Dict mode                     |
+| format version | 1st reader lib version | 1st writer lib version | format modifications    | format additions              |
+|----------------|------------------------|------------------------|-------------------------|-------------------------------|
+| 0              | 0.0.0                  | 0.0.0                  |                         |                               |
+| 1              | 0.1.0                  | 0.1.0                  |                         | IntMult mode                  |
+| 2              | 0.3.0                  | 0.3.0                  |                         | FloatQuant mode, 16-bit types |
+| 3              | 0.4.0                  | 0.4.0                  | delta encoding variants | Lookback delta encoding       |
+| 4.0            | 0.4.8                  | -                      | minor version           |                               |
+| 4.1            | 1.0.0                  | 1.0.0                  |                         | Dict mode                     |
 
 ### Chunk Metadata
 
@@ -87,6 +87,8 @@ Each chunk meta consists of
 
   Here, `T::L` refers to the latent type with the same number of bits as the
   number type, e.g. u64 for i64.
+  `Dict` mode's payload is a 25-bit integer for the count of values in the
+  dictionary, followed by those raw values.
 
 * [`extra_mode_bits` bits] for certain modes, extra data is parsed. See the
   mode-specific formulas below for how this is used, e.g. as the `mult`, `k`, or
