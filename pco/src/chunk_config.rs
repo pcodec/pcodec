@@ -39,6 +39,8 @@ pub enum ModeSpec {
   /// of discrete values over a very wide range that often occur multiple times
   /// each.
   /// At present, this requires substantially more compression time than others.
+  /// When using Dict mode, it is often advantageous to use very large chunks
+  /// (>1M values) to reuse the large dictionary metadata as much as possible.
   TryDict,
 }
 
