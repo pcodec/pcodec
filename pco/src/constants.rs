@@ -18,6 +18,7 @@ pub const BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_N_BINS: Bitlen = 15;
 // conservative: wide enough to support quantizing float datasets with 255 unused bits of precision
 pub const BITS_TO_ENCODE_QUANTIZE_K: Bitlen = 8;
+pub const BITS_TO_ENCODE_DICT_LEN: Bitlen = 25; // enough to encode MAX_ENTRIES
 
 // + 9 because we might read an extra u64 (8 bytes), plus 1 for good measure
 pub const OVERSHOOT_PADDING: usize = 9;

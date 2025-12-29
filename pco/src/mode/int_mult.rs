@@ -7,7 +7,8 @@ use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, Number};
 use crate::dyn_latent_slice::DynLatentSlice;
-use crate::metadata::DynLatents;
+use crate::errors::PcoResult;
+use crate::metadata::{DynLatent, DynLatents};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 
 // riemann zeta function
@@ -38,16 +39,19 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
 
 #[inline(never)]
 pub(crate) fn join_latents<T: Number>(
-  base: T::L,
+  dyn_base: DynLatent,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
   dst: &mut [T],
-) {
+) -> PcoResult<()> {
+  let base = *dyn_base.downcast_ref::<T::L>().unwrap();
   let primary = primary.downcast_unwrap::<T::L>();
   let secondary = secondary.unwrap().downcast_unwrap::<T::L>();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
   }
+
+  Ok(())
 }
 
 fn calc_gcd<L: Latent>(mut x: L, mut y: L) -> L {
@@ -262,11 +266,12 @@ mod tests {
 
     // JOIN
     join_latents(
-      base,
+      DynLatent::new(base),
       DynLatentSlice::U32(&mut primary),
       Some(DynLatentSlice::U32(&mut secondary)),
       &mut dst,
-    );
+    )
+    .unwrap();
 
     assert_eq!(dst, nums);
   }

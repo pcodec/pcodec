@@ -10,9 +10,8 @@ use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;
-use crate::metadata::per_latent_var::{PerLatentVar, PerLatentVarBuilder};
-use crate::page_latent_decompressor::DynPageLatentDecompressor;
-use crate::page_latent_decompressor::PageLatentDecompressor;
+use crate::metadata::per_latent_var::PerLatentVar;
+use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::progress::Progress;
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
 use crate::wrapped::ChunkDecompressor;
@@ -34,41 +33,37 @@ fn make_latent_decompressors(
   page_meta: &PageMeta,
   n: usize,
 ) -> PcoResult<PerLatentVar<DynPageLatentDecompressor>> {
-  let mut builder = PerLatentVarBuilder::default();
-  for (key, (dyn_cld, page_latent_var_meta)) in cd
-    .per_latent_var
+  let n_in_body = n.saturating_sub(cd.n_latents_per_delta_state());
+  cd.per_latent_var
     .as_ref()
     .zip_exact(page_meta.per_latent_var.as_ref())
-    .enumerated()
-  {
-    let n_in_body = n.saturating_sub(cd.n_latents_per_delta_state());
-    let state = match_latent_enum!(
-      &dyn_cld,
-      DynChunkLatentDecompressor<L>(cld) => {
-        let delta_state = page_latent_var_meta
-          .delta_state
-          .downcast_ref::<L>()
-          .unwrap()
-          .clone();
+    .map_result(|_key, (dyn_cld, page_latent_var_meta)| {
+      let state = match_latent_enum!(
+        &dyn_cld,
+        DynChunkLatentDecompressor<L>(cld) => {
+          let delta_state = page_latent_var_meta
+            .delta_state
+            .downcast_ref::<L>()
+            .unwrap()
+            .clone();
 
-        if cld.n_bins == 0 && n_in_body > 0 {
-          return Err(PcoError::corruption(format!(
-            "unable to decompress chunk with no bins and {} latents",
-            n_in_body
-          )));
+          if cld.n_bins == 0 && n_in_body > 0 {
+            return Err(PcoError::corruption(format!(
+              "unable to decompress chunk with no bins and {} latents",
+              n_in_body
+            )));
+          }
+
+          let pld = PageLatentDecompressor::new(
+            cld,
+            page_latent_var_meta.ans_final_state_idxs,
+            delta_state,
+          )?;
+          DynPageLatentDecompressor::new(Box::new(pld))
         }
-
-        DynPageLatentDecompressor::new(Box::new(PageLatentDecompressor::new(
-          cld,
-          page_latent_var_meta.ans_final_state_idxs,
-          delta_state,
-        )?))
-      }
-    );
-
-    builder.set(key, state);
-  }
-  Ok(builder.into())
+      );
+      Ok(state)
+    })
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
@@ -171,7 +166,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       None => None,
     };
 
-    T::join_latents(&cd.meta.mode, primary, secondary, dst);
+    T::join_latents(&cd.meta.mode, primary, secondary, dst)?;
 
     self.n_remaining -= batch_n;
     if self.n_remaining == 0 {

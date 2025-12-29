@@ -6,6 +6,7 @@ use crate::constants::{Bitlen, MULT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
 use crate::dyn_latent_slice::DynLatentSlice;
+use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::mode::int_mult;
 use crate::sampling;
@@ -17,7 +18,7 @@ pub(crate) fn join_latents<F: Float>(
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
   dst: &mut [F],
-) {
+) -> PcoResult<()> {
   let primary = primary.downcast_unwrap::<F::L>();
   let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
@@ -29,6 +30,8 @@ pub(crate) fn join_latents<F: Float>(
         .toggle_center(),
     );
   }
+
+  Ok(())
 }
 
 pub(crate) fn split_latents<F: Float>(page_nums: &[F], config: FloatMultConfig<F>) -> SplitLatents {

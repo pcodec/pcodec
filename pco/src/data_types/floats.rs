@@ -4,14 +4,14 @@ use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
-use crate::data_types::{join_latents_classic, split_latents_classic, Float, Latent, Number};
+use crate::data_types::{Float, Latent, Number};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::mode::float_mult::FloatMultConfig;
-use crate::mode::{float_mult, float_quant};
+use crate::mode::{classic, dict, float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
@@ -37,7 +37,7 @@ fn choose_mode_and_split_latents<F: Float>(
       bids.push(Bid {
         mode: Mode::Classic,
         bits_saved_per_num: 0.0,
-        split_fn: Box::new(|nums| split_latents_classic(nums)),
+        split_fn: Box::new(|nums| classic::split_latents(nums)),
       });
 
       if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
@@ -49,7 +49,7 @@ fn choose_mode_and_split_latents<F: Float>(
       let latents = (winning_bid.split_fn)(nums);
       Ok((winning_bid.mode, latents))
     }
-    ModeSpec::Classic => Ok((Mode::Classic, split_latents_classic(nums))),
+    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
     ModeSpec::TryFloatMult(base_f64) => {
       let base = F::from_f64(base_f64);
       let mode = Mode::float_mult(base);
@@ -67,6 +67,7 @@ fn choose_mode_and_split_latents<F: Float>(
     ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
     )),
+    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
   }
 }
 
@@ -327,14 +328,14 @@ macro_rules! impl_float_number {
 
       fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
-          Mode::Classic => true,
+          Mode::Classic | Mode::Dict(_) => true,
           Mode::FloatMult(dyn_latent) => {
             let base_latent = *dyn_latent.downcast_ref::<Self::L>().unwrap();
             let base = Self::from_latent_ordered(base_latent);
             base.is_finite() && base.abs() > Self::ZERO
           }
           Mode::FloatQuant(k) => *k > 0 && *k <= Self::PRECISION_BITS,
-          _ => false,
+          Mode::IntMult(_) => false,
         }
       }
       fn choose_mode_and_split_latents(
@@ -370,15 +371,16 @@ macro_rules! impl_float_number {
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
-      ) {
+      ) -> PcoResult<()> {
         match mode {
-          Mode::Classic => join_latents_classic(primary, dst),
+          Mode::Classic => classic::join_latents(primary, dst),
+          Mode::Dict(dict) => dict::join_latents(dict, primary, dst),
           Mode::FloatMult(dyn_latent) => {
             let base = Self::from_latent_ordered(*dyn_latent.downcast_ref::<Self::L>().unwrap());
             float_mult::join_latents(base, primary, secondary, dst)
           }
           Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary, dst),
-          _ => unreachable!("impossible mode for floats"),
+          Mode::IntMult(_) => unreachable!("impossible mode for floats"),
         }
       }
     }
@@ -395,7 +397,7 @@ impl_float_number!(f16, u16, 1_u16 << 15, 9);
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::metadata::DynLatent;
+  use crate::metadata::{DynLatent, DynLatents};
 
   #[test]
   fn test_choose_mult_mode() {
@@ -410,6 +412,11 @@ mod tests {
   fn test_mode_validation() {
     // CLASSIC
     assert!(f32::mode_is_valid(&Mode::Classic));
+
+    // DICT
+    assert!(f32::mode_is_valid(&Mode::Dict(
+      DynLatents::new(vec![0_u32, 111])
+    )));
 
     // FLOAT MULT
     for base in [

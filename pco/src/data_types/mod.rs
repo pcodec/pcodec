@@ -12,7 +12,6 @@ use crate::constants::Bitlen;
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
-use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::ChunkConfig;
@@ -207,19 +206,5 @@ pub trait Number:
     primary: DynLatentSlice,
     secondary: Option<DynLatentSlice>,
     dst: &mut [Self],
-  );
-}
-
-pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
-  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect());
-  SplitLatents {
-    primary,
-    secondary: None,
-  }
-}
-
-pub(crate) fn join_latents_classic<T: Number>(primary: DynLatentSlice, dst: &mut [T]) {
-  for (&l, dst) in primary.downcast_unwrap::<T::L>().iter().zip(dst.iter_mut()) {
-    *dst = T::from_latent_ordered(l);
-  }
+  ) -> PcoResult<()>;
 }

@@ -1,3 +1,5 @@
+pub mod classic;
+pub mod dict;
 pub mod float_mult;
 pub mod float_quant;
 pub mod int_mult;

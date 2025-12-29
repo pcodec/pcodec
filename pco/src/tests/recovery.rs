@@ -4,9 +4,9 @@ use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::constants::Bitlen;
-use crate::data_types::Number;
+use crate::data_types::{LatentType, Number};
 use crate::errors::PcoResult;
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, Mode};
+use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, DynLatents, Mode};
 use crate::standalone::{simple_compress, simple_decompress, FileCompressor};
 use crate::ModeSpec;
 
@@ -373,6 +373,38 @@ fn test_lookback_delta_encoding() -> PcoResult<()> {
     DeltaEncoding::Lookback { .. }
   ));
   let decompressed = simple_decompress(&compressed)?;
-  assert_nums_eq(&decompressed, &nums, "trivial_first_latent")?;
+  assert_nums_eq(
+    &decompressed,
+    &nums,
+    "lookback delta encoding",
+  )?;
+  Ok(())
+}
+
+#[test]
+fn test_dict() -> PcoResult<()> {
+  let mut nums = Vec::<i64>::new();
+  for i in 0..2000 {
+    for _ in 0..5 {
+      nums.push(i * i);
+    }
+  }
+  let (compressed, meta) = compress_w_meta(
+    &nums,
+    &ChunkConfig::default()
+      .with_mode_spec(ModeSpec::TryDict)
+      .with_delta_spec(DeltaSpec::NoOp),
+  )?;
+  let Mode::Dict(DynLatents::U64(dict)) = &meta.mode else {
+    panic!("expected to compress with a dictionary of u64s");
+  };
+  assert!(matches!(
+    meta.per_latent_var.primary.latent_type(),
+    LatentType::U32
+  ));
+  assert!(matches!(meta.per_latent_var.secondary, None));
+  assert_eq!(dict.len(), 2000); // this many unique values
+  let decompressed = simple_decompress(&compressed)?;
+  assert_nums_eq(&decompressed, &nums, "dict mode")?;
   Ok(())
 }

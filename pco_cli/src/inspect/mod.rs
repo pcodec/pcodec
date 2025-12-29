@@ -30,7 +30,7 @@ fn trivial_inspect(opt: &InspectOpt, src: &[u8]) -> Result<()> {
 
   let summary = Output {
     filename: opt.path.to_str().unwrap().to_string(),
-    data_type: "<none>".to_string(),
+    number_type: "<none>".to_string(),
     format_version: fd.format_version().to_string(),
     n: 0,
     n_chunks: 0,
@@ -44,7 +44,7 @@ fn trivial_inspect(opt: &InspectOpt, src: &[u8]) -> Result<()> {
       footer_size: 1,
       unknown_trailing_bytes: src.len(),
     },
-    chunks: Vec::new(),
+    chunk: Vec::new(),
   };
   println!("{}", toml::to_string_pretty(&summary)?);
   Ok(())

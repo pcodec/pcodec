@@ -4,6 +4,7 @@ use crate::bit_writer::BitWriter;
 use crate::constants::{Bitlen, ANS_INTERLEAVING};
 use crate::data_types::LatentType;
 use crate::delta::DeltaState;
+use crate::errors::PcoResult;
 use crate::macros::match_latent_enum;
 use crate::metadata::dyn_latents::DynLatents;
 use std::io::Write;
@@ -29,20 +30,21 @@ impl PageLatentVarMeta {
     latent_type: LatentType,
     n_latents_per_delta_state: usize,
     ans_size_log: Bitlen,
-  ) -> Self {
+  ) -> PcoResult<Self> {
     let delta_state = match_latent_enum!(
       latent_type,
       LatentType<L> => {
-        DynLatents::read_uncompressed_from::<L>(reader, n_latents_per_delta_state)
+        DynLatents::read_short_uncompressed_from::<L>(reader, n_latents_per_delta_state)
       }
-    );
+    )?;
     let mut ans_final_state_idxs = [0; ANS_INTERLEAVING];
     for state in &mut ans_final_state_idxs {
       *state = reader.read_uint::<AnsState>(ans_size_log);
     }
-    Self {
+
+    Ok(Self {
       delta_state,
       ans_final_state_idxs,
-    }
+    })
   }
 }

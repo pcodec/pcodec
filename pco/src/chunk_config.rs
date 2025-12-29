@@ -16,6 +16,7 @@ pub enum ModeSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad mode in adversarial cases.
+  /// At present, this will never consider `Dict` mode.
   #[default]
   Auto,
   /// Only uses `Classic` mode.
@@ -32,6 +33,13 @@ pub enum ModeSpec {
   ///
   /// Only applies to integer types.
   TryIntMult(u64),
+  /// Tries using `Dict` mode.
+  ///
+  /// This may be beneficial when the data consists of IDs, i.e. a large number
+  /// of discrete values over a very wide range that often occur multiple times
+  /// each.
+  /// At present, this requires substantially more compression time than others.
+  TryDict,
 }
 
 /// Specifies how Pco should choose a

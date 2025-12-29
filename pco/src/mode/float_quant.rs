@@ -3,6 +3,7 @@ use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
 use crate::dyn_latent_slice::DynLatentSlice;
+use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 use std::cmp;
@@ -13,7 +14,7 @@ pub(crate) fn join_latents<F: Float>(
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
   dst: &mut [F],
-) {
+) -> PcoResult<()> {
   let primary = primary.downcast_unwrap::<F::L>();
   let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
@@ -33,6 +34,8 @@ pub(crate) fn join_latents<F: Float>(
     };
     *dst = F::from_latent_ordered((y << k) + lowest_k_bits);
   }
+
+  Ok(())
 }
 
 pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatents {
@@ -250,7 +253,8 @@ mod test {
       DynLatentSlice::U64(&mut primary),
       Some(DynLatentSlice::U64(&mut secondary)),
       &mut dst,
-    );
+    )
+    .unwrap();
 
     assert_eq!(dst.len(), nums.len());
     for (a, b) in dst.iter().zip(&nums) {

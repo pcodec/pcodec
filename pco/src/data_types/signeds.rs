@@ -1,10 +1,9 @@
-use crate::data_types::{join_latents_classic, unsigneds, ModeAndLatents, Number};
+use crate::data_types::{unsigneds, ModeAndLatents, Number};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
-use crate::mode::int_mult;
 use crate::{describers, ChunkConfig};
 
 macro_rules! impl_signed {
@@ -43,15 +42,8 @@ macro_rules! impl_signed {
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
-      ) {
-        match mode {
-          Mode::Classic => join_latents_classic(primary, dst),
-          Mode::IntMult(dyn_latent) => {
-            let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult::join_latents(base, primary, secondary, dst)
-          }
-          _ => unreachable!("impossible mode for signed ints"),
-        }
+      ) -> PcoResult<()> {
+        unsigneds::join_latents(mode, primary, secondary, dst)
       }
     }
   };
