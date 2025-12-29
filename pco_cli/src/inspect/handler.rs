@@ -56,14 +56,14 @@ pub struct ChunkSummary {
   mode: String,
   delta_encoding: String,
   // using BTreeMaps to preserve ordering
-  latent_vars: BTreeMap<String, LatentVarSummary>,
+  latent_var: BTreeMap<String, LatentVarSummary>,
 }
 
 #[derive(Serialize)]
 pub struct Output {
   pub filename: String,
-  pub data_type: String,
   pub format_version: String,
+  pub number_type: String,
   pub n: usize,
   pub n_chunks: usize,
   pub uncompressed_size: usize,
@@ -196,14 +196,14 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
         n: chunk_ns[idx],
         mode: short_debug_str(&meta.mode),
         delta_encoding: short_debug_str(&meta.delta_encoding),
-        latent_vars,
+        latent_var: latent_vars,
       });
     }
 
     let output = Output {
       filename: opt.path.to_str().unwrap().to_string(),
-      data_type: utils::dtype_name::<T>(),
       format_version: fd.format_version().to_string(),
+      number_type: utils::dtype_name::<T>(),
       n,
       n_chunks: metas.len(),
       uncompressed_size,
