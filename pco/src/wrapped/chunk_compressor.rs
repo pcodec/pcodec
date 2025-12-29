@@ -25,9 +25,7 @@ use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar, PerLatentVarBu
 use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, Mode};
 use crate::mode::classic;
 use crate::wrapped::guarantee;
-use crate::{
-  ans, bin_optimization, bits, delta, ChunkConfig, PagingSpec, FULL_BATCH_N,
-};
+use crate::{ans, bin_optimization, bits, delta, ChunkConfig, PagingSpec, FULL_BATCH_N};
 use std::any;
 use std::cmp::min;
 use std::io::Write;
