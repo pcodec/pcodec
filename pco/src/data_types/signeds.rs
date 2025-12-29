@@ -42,7 +42,7 @@ macro_rules! impl_signed {
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
-      ) {
+      ) -> PcoResult<()> {
         unsigneds::join_latents(mode, primary, secondary, dst)
       }
     }

@@ -4,7 +4,7 @@ use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::constants::Bitlen;
-use crate::data_types::Number;
+use crate::data_types::{LatentType, Number};
 use crate::errors::PcoResult;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, DynLatents, Mode};
 use crate::standalone::{simple_compress, simple_decompress, FileCompressor};
@@ -398,6 +398,11 @@ fn test_dict() -> PcoResult<()> {
   let Mode::Dict(DynLatents::U64(dict)) = &meta.mode else {
     panic!("expected to compress with a dictionary of u64s");
   };
+  assert!(matches!(
+    meta.per_latent_var.primary.latent_type(),
+    LatentType::U32
+  ));
+  assert!(matches!(meta.per_latent_var.secondary, None));
   assert_eq!(dict.len(), 2000); // this many unique values
   let decompressed = simple_decompress(&compressed)?;
   assert_nums_eq(&decompressed, &nums, "dict mode")?;

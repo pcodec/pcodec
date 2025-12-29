@@ -206,5 +206,5 @@ pub trait Number:
     primary: DynLatentSlice,
     secondary: Option<DynLatentSlice>,
     dst: &mut [Self],
-  );
+  ) -> PcoResult<()>;
 }

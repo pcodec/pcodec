@@ -44,7 +44,7 @@ fn trivial_inspect(opt: &InspectOpt, src: &[u8]) -> Result<()> {
       footer_size: 1,
       unknown_trailing_bytes: src.len(),
     },
-    chunks: Vec::new(),
+    chunk: Vec::new(),
   };
   println!("{}", toml::to_string_pretty(&summary)?);
   Ok(())

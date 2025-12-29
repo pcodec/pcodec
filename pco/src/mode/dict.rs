@@ -3,7 +3,7 @@ use std::{cmp, collections::HashMap};
 use crate::{
   data_types::{ModeAndLatents, Number, SplitLatents},
   dyn_latent_slice::DynLatentSlice,
-  errors::PcoResult,
+  errors::{PcoError, PcoResult},
   metadata::{DynLatents, Mode},
 };
 
@@ -24,7 +24,7 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
     .iter()
     .map(|&num| *index_hashmap.get(&num.to_latent_ordered()).unwrap())
     .collect();
-  let latents = DynLatents::new(indices);
+  let latents = DynLatents::U32(indices);
   Ok((
     mode,
     SplitLatents {
@@ -34,10 +34,24 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
   ))
 }
 
-pub fn join_latents<T: Number>(dict: &DynLatents, primary: DynLatentSlice, dst: &mut [T]) {
+pub fn join_latents<T: Number>(
+  dict: &DynLatents,
+  primary: DynLatentSlice,
+  dst: &mut [T],
+) -> PcoResult<()> {
   let dict = dict.downcast_ref::<T::L>().unwrap();
   let idxs = primary.downcast_unwrap::<u32>();
+  if idxs.iter().any(|idx| *idx > dict.len() as u32) {
+    // in some cases it is possible to prove the indices are in range from
+    // looking at the bins ahead of time, but just keeping this simple for now
+    return Err(PcoError::corruption(format!(
+      "dict index exceeded dict length {}",
+      dict.len()
+    )));
+  }
+
   for (idx, num) in idxs.iter().zip(dst.iter_mut()) {
     *num = T::from_latent_ordered(dict[*idx as usize]);
   }
+  Ok(())
 }

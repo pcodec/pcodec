@@ -188,7 +188,6 @@ impl Mode {
   }
 
   pub(crate) fn primary_latent_type(&self, number_latent_type: LatentType) -> LatentType {
-    // TODO make dict use u32 all the time
     match self {
       Classic | FloatMult(_) | FloatQuant(_) | IntMult(_) => number_latent_type,
       Dict(_) => LatentType::U32,

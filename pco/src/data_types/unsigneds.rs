@@ -42,7 +42,7 @@ pub fn join_latents<T: Number>(
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
   dst: &mut [T],
-) {
+) -> PcoResult<()> {
   match mode {
     Mode::Classic => classic::join_latents(primary, dst),
     Mode::Dict(dict) => dict::join_latents(dict, primary, dst),
@@ -143,7 +143,7 @@ macro_rules! impl_unsigned_number {
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
-      ) {
+      ) -> PcoResult<()> {
         join_latents(mode, primary, secondary, dst)
       }
     }

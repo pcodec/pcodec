@@ -166,7 +166,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       None => None,
     };
 
-    T::join_latents(&cd.meta.mode, primary, secondary, dst);
+    T::join_latents(&cd.meta.mode, primary, secondary, dst)?;
 
     self.n_remaining -= batch_n;
     if self.n_remaining == 0 {

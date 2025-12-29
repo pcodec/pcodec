@@ -371,7 +371,7 @@ macro_rules! impl_float_number {
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
-      ) {
+      ) -> PcoResult<()> {
         match mode {
           Mode::Classic => classic::join_latents(primary, dst),
           Mode::Dict(dict) => dict::join_latents(dict, primary, dst),

@@ -111,11 +111,11 @@ pub(crate) fn match_int_modes<L: Latent>(
         Box::new(IntDescriber {
           description: "index".to_string(),
           units: "".to_string(),
-          center: L::ZERO,
+          center: 0_u32,
           is_signed: false,
         })
       } else {
-        centered_delta_describer::<L>("index delta".to_string(), "".to_string())
+        centered_delta_describer::<u32>("index delta".to_string(), "".to_string())
       };
 
       Some(PerLatentVar {
