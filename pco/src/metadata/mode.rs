@@ -133,6 +133,9 @@ impl Mode {
         }
         4 => {
           let n_unique = reader.read_usize(BITS_TO_ENCODE_DICT_LEN);
+          // we byte align so that future implementations might read the raw
+          // values faster
+          reader.drain_empty_byte("expected zeros between dict mode length and values")?;
           // leave dictionary uninitialized for now because our reader might not
           // be long enough
           let dict = match_latent_enum!(
@@ -182,6 +185,7 @@ impl Mode {
       }
       Dict(dict) => {
         writer.write_usize(dict.len(), BITS_TO_ENCODE_DICT_LEN);
+        writer.finish_byte();
         dict.write_uncompressed_to(writer);
       }
     };
@@ -209,10 +213,11 @@ impl Mode {
     IntMult(DynLatent::new(base))
   }
 
-  pub(crate) fn exact_bit_size(&self) -> usize {
+  pub(crate) fn max_bit_size(&self) -> usize {
     let payload_bits = match self {
       Mode::Classic => 0,
-      Mode::Dict(dict) => BITS_TO_ENCODE_DICT_LEN as usize + dict.exact_bit_size(),
+      // dict may take up to 7 extra bits to reach byte alignment
+      Mode::Dict(dict) => BITS_TO_ENCODE_DICT_LEN as usize + 7 + dict.exact_bit_size(),
       Mode::FloatMult(base) => base.exact_bit_size() as usize,
       Mode::FloatQuant(_) => BITS_TO_ENCODE_QUANTIZE_K as usize,
       Mode::IntMult(base) => base.exact_bit_size() as usize,
@@ -223,8 +228,9 @@ impl Mode {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
   use crate::bit_writer::BitWriter;
-  use crate::metadata::{DynLatent, DynLatents, Mode};
+  use crate::metadata::{DynLatent, DynLatents};
 
   fn check_bit_size(mode: Mode) {
     let mut bytes = Vec::new();
@@ -233,7 +239,11 @@ mod tests {
       mode.write_to(&mut writer);
     }
     let true_bit_size = writer.bit_idx();
-    assert_eq!(mode.exact_bit_size(), true_bit_size);
+    assert!(true_bit_size <= mode.max_bit_size());
+    // all modes except dict should actually be able to given an exact bit size
+    if !matches!(mode, Mode::Dict(_)) {
+      assert_eq!(true_bit_size, mode.max_bit_size());
+    }
   }
 
   #[test]

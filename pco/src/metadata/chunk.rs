@@ -33,7 +33,7 @@ impl ChunkMeta {
       .as_ref()
       .map(|_, var_meta| var_meta.exact_bit_size())
       .sum();
-    let n_bits = self.mode.exact_bit_size() + DeltaEncoding::MAX_BIT_SIZE + bits_for_latent_vars;
+    let n_bits = self.mode.max_bit_size() + DeltaEncoding::MAX_BIT_SIZE + bits_for_latent_vars;
     n_bits.div_ceil(8)
   }
 

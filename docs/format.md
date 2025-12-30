@@ -82,7 +82,7 @@ Each chunk meta consists of
   | 1     | IntMult      | `T::L`         | `T::L`            | `dtype_size`      |
   | 2     | FloatMult    | `T::L`         | `T::L`            | `dtype_size`      |
   | 3     | FloatQuant   | `T::L`         | `T::L`            | 8                 |
-  | 4     | Dict         | `u32`          |                   | 25 + `dtype_size` * (value of first 25 bits) |
+  | 4     | Dict         | `u32`          |                   | variable*         |
   | 5-15  | \<reserved\> |                |                   |                   |
 
   Here, `T::L` refers to the latent type with the same number of bits as the
@@ -96,6 +96,9 @@ Each chunk meta consists of
   The value encoded in these bits should be validated; namely, mult mode bases
   should be finite and nonzero, quant mode must have `0 < k <= MANTISSA_BITS`,
   int modes cannot apply to floats, and vice versa.
+  Parsing the `dict` value is more complex than the others: it is formed by
+  reading 25 bits for `dict_len`, followed by 0s until byte-aligned, followed by
+  `dict_len` raw values that consitute `dict`.
 * [4 bits] `delta_encoding`, using this table:
 
   | value | delta encoding | n latent variables | `extra_delta_bits` |
