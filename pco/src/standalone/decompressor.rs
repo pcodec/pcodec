@@ -37,14 +37,14 @@ unsafe fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberTy
 /// Example of the lowest level API for reading a .pco file:
 /// ```
 /// use pco::FULL_BATCH_N;
-/// use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+/// use pco::standalone::{FileDecompressor, DecompressorItem};
 /// # use pco::errors::PcoResult;
 ///
 /// # fn main() -> PcoResult<()> {
 /// let compressed = vec![112, 99, 111, 33, 0, 0]; // the minimal .pco file, for the sake of example
 /// let mut nums = vec![0; FULL_BATCH_N];
 /// let (file_decompressor, mut src) = FileDecompressor::new(compressed.as_slice())?;
-/// while let MaybeChunkDecompressor::Some(mut chunk_decompressor) = file_decompressor.chunk_decompressor::<i64, _>(src)? {
+/// while let DecompressorItem::Chunk(mut chunk_decompressor) = file_decompressor.chunk_decompressor::<i64, _>(src)? {
 ///   let mut finished_chunk = false;
 ///   while !finished_chunk {
 ///     let progress = chunk_decompressor.decompress(&mut nums)?;
@@ -65,7 +65,7 @@ pub struct FileDecompressor {
 
 /// The outcome of starting a new chunk of a standalone file.
 #[allow(clippy::large_enum_variant)]
-pub enum NextItem<T: Number, R: BetterBufRead> {
+pub enum DecompressorItem<T: Number, R: BetterBufRead> {
   /// We get a `ChunkDecompressor` when there is another chunk as evidenced
   /// by the number type byte.
   Chunk(ChunkDecompressor<T, R>),
@@ -178,13 +178,13 @@ impl FileDecompressor {
   pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
     &self,
     src: R,
-  ) -> PcoResult<NextItem<T, R>> {
+  ) -> PcoResult<DecompressorItem<T, R>> {
     let mut reader_builder = BitReaderBuilder::new(src);
     let type_or_termination_byte = reader_builder.with_reader(1, |reader| {
       Ok(reader.read_aligned_bytes(1)?[0])
     })?;
     if type_or_termination_byte == MAGIC_TERMINATION_BYTE {
-      return Ok(NextItem::EndOfData(
+      return Ok(DecompressorItem::EndOfData(
         reader_builder.into_inner(),
       ));
     }
@@ -221,7 +221,7 @@ impl FileDecompressor {
       n,
       n_processed: 0,
     };
-    Ok(NextItem::Chunk(res))
+    Ok(DecompressorItem::Chunk(res))
   }
 
   /// Takes in compressed bytes (after the header, at the start of the chunks)
@@ -237,7 +237,7 @@ impl FileDecompressor {
   /// during compression.
   pub fn simple_decompress<T: Number>(&self, mut src: &[u8]) -> PcoResult<Vec<T>> {
     let mut res = Vec::with_capacity(self.n_hint());
-    while let NextItem::Chunk(mut chunk_decompressor) = self.chunk_decompressor(src)? {
+    while let DecompressorItem::Chunk(mut chunk_decompressor) = self.chunk_decompressor(src)? {
       chunk_decompressor.decompress_remaining_extend(&mut res)?;
       src = chunk_decompressor.into_src();
     }
