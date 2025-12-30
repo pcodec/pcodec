@@ -6,7 +6,7 @@ use crate::data_types::{Number, NumberType};
 use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
-use crate::standalone::decompressor::{FileDecompressor, DecompressorItem};
+use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and an exact configuration and writes compressed

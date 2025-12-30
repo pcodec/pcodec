@@ -11,7 +11,7 @@ use arrow::datatypes::{ArrowPrimitiveType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
 use better_io::BetterBufReader;
-use pco::standalone::{FileDecompressor, DecompressorItem};
+use pco::standalone::{DecompressorItem, FileDecompressor};
 use pco::FULL_BATCH_N;
 
 use crate::core_handlers::CoreHandlerImpl;

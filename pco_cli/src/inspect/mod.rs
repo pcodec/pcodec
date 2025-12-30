@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use pco::standalone::{FileDecompressor, DecompressorItem};
+use pco::standalone::{DecompressorItem, FileDecompressor};
 
 use crate::core_handlers;
 use crate::inspect::handler::{CompressionSummary, Output};
