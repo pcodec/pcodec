@@ -33,7 +33,7 @@ fn read_bin_batch<L: Latent, R: BetterBufRead>(
       if offset_bits > L::BITS {
         reader.check_in_bounds()?;
         return Err(PcoError::corruption(format!(
-          "offset bits of {} exceeds data type of {} bits",
+          "offset bits of {} exceeds type of {} bits",
           offset_bits,
           L::BITS,
         )));
@@ -78,6 +78,7 @@ unsafe fn write_bins<L: Latent, W: Write>(
 ///
 /// This is mainly useful for inspecting how compression was done.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ChunkLatentVarMeta {
   /// The log2 of the number of the number of states in this chunk's tANS
   /// table.

@@ -99,7 +99,7 @@ pub(crate) trait Float:
 /// hold.
 /// Under the hood, when numbers are encoded or decoded, they go through their
 /// corresponding `Latent` representation.
-/// Metadata stores numbers as their latent representations.
+/// Metadata always stores latent representations, never numbers.
 pub trait Latent:
   Add<Output = Self>
   + AddAssign
@@ -154,16 +154,14 @@ pub trait Latent:
 
 /// **unstable API** Trait for data types supported for compression/decompression.
 ///
-/// If you have a new data type you would like to add to the library or,
-/// these are the questions you need to answer:
+/// If you have a new number type you would like to add to the library, these
+/// are some the questions you need to answer:
 /// * What is the corresponding latent type? This is probably the
 ///   smallest unsigned integer with enough bits to represent the number.
 /// * How can I convert to this latent representation and back
 ///   in *a way that preserves ordering*? For instance, transmuting `f32` to `u32`
 ///   wouldn't preserve ordering and would cause pco to fail. In this example,
 ///   one needs to flip the sign bit and, if negative, the rest of the bits.
-///
-/// Custom data types (defined outside of pco) are not currently supported.
 pub trait Number:
   Copy + Debug + Display + Default + PartialEq + private::Sealed + Send + Sync + 'static
 {

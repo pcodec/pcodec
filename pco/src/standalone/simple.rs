@@ -6,7 +6,7 @@ use crate::data_types::{Number, NumberType};
 use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
-use crate::standalone::decompressor::{FileDecompressor, MaybeChunkDecompressor};
+use crate::standalone::decompressor::{FileDecompressor, NextItem};
 use crate::{PagingSpec, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and an exact configuration and writes compressed
@@ -101,8 +101,8 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoRe
     let maybe_cd = file_decompressor.chunk_decompressor(src)?;
     let mut chunk_decompressor;
     match maybe_cd {
-      MaybeChunkDecompressor::Some(cd) => chunk_decompressor = cd,
-      MaybeChunkDecompressor::EndOfData(_) => {
+      NextItem::Chunk(cd) => chunk_decompressor = cd,
+      NextItem::EndOfData(_) => {
         progress.finished = true;
         break;
       }

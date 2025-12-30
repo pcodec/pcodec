@@ -11,6 +11,7 @@ use crate::metadata::per_latent_var::LatentVarKey;
 use std::io::Write;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DeltaLookbackConfig {
   /// The log2 of the number of latents explicitly stored in page metadata
   /// to prepopulate the lookback window.

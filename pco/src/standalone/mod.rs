@@ -1,5 +1,5 @@
 pub use compressor::{ChunkCompressor, FileCompressor};
-pub use decompressor::{ChunkDecompressor, FileDecompressor, MaybeChunkDecompressor};
+pub use decompressor::{ChunkDecompressor, FileDecompressor, NextItem};
 pub use simple::*;
 
 mod compressor;

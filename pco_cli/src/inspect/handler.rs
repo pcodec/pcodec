@@ -10,7 +10,7 @@ use tabled::{Table, Tabled};
 use pco::data_types::{Latent, LatentType, Number};
 use pco::match_latent_enum;
 use pco::metadata::{ChunkMeta, DynBins, DynLatent, LatentVarKey};
-use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+use pco::standalone::{FileDecompressor, NextItem};
 
 use crate::core_handlers::CoreHandlerImpl;
 use crate::dtypes::PcoNumber;
@@ -160,12 +160,12 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       // Rather hacky, but first just measure the metadata size,
       // then reread it to measure the page size
       match fd.chunk_decompressor::<T, _>(src)? {
-        MaybeChunkDecompressor::Some(cd) => {
+        NextItem::Chunk(cd) => {
           chunk_ns.push(cd.n());
           metas.push(cd.meta().clone());
           meta_size += measure_bytes_read(cd.into_src(), prev_src_len);
         }
-        MaybeChunkDecompressor::EndOfData(rest) => {
+        NextItem::EndOfData(rest) => {
           src = rest;
           footer_size += measure_bytes_read(src, prev_src_len);
           break;
@@ -173,7 +173,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       }
 
       match fd.chunk_decompressor::<T, _>(src)? {
-        MaybeChunkDecompressor::Some(mut cd) => {
+        NextItem::Chunk(mut cd) => {
           void.resize(cd.n(), T::default());
           let _ = cd.decompress(&mut void)?;
           src = cd.into_src();

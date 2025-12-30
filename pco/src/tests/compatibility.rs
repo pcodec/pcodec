@@ -143,7 +143,7 @@ fn generate_pseudorandom_f16s() -> Vec<f16> {
 
 #[test]
 fn v0_3_0_f16() -> PcoResult<()> {
-  // v0.3.0 introduced 16-bit data types, including f16, which requires the
+  // v0.3.0 introduced 16-bit number types, including f16, which requires the
   // half crate
   let version = "0.3.0";
   let name = "f16";
