@@ -33,7 +33,7 @@ impl PyFc {
   ) -> PyResult<ChunkCompressor> {
     let arr_ro = arr.readonly();
     let src = arr_ro.as_slice()?;
-    py.allow_threads(|| self.inner.chunk_compressor(src, config))
+    py.detach(|| self.inner.chunk_compressor(src, config))
       .map_err(pco_err_to_py)
   }
 }
@@ -112,7 +112,7 @@ impl PyCc {
   /// :raises: TypeError, RuntimeError
   fn write_page<'py>(&self, py: Python<'py>, page_idx: usize) -> PyResult<Bound<'py, PyBytes>> {
     let mut res = Vec::new();
-    py.allow_threads(|| self.0.write_page(page_idx, &mut res))
+    py.detach(|| self.0.write_page(page_idx, &mut res))
       .map_err(pco_err_to_py)?;
     Ok(PyBytes::new(py, &res))
   }
