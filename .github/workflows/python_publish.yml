@@ -29,7 +29,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13 --manifest-path pco_python/Cargo.toml
+          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13 3.14 --manifest-path pco_python/Cargo.toml
           sccache: 'true'
           manylinux: auto
           rust-toolchain: nightly
@@ -57,7 +57,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13 --manifest-path pco_python/Cargo.toml
+          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13 3.14 --manifest-path pco_python/Cargo.toml
           sccache: 'true'
           rust-toolchain: nightly
       - name: Upload wheels
@@ -83,7 +83,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13 --manifest-path pco_python/Cargo.toml
+          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13 3.14 --manifest-path pco_python/Cargo.toml
           sccache: 'true'
           rust-toolchain: nightly
       - name: Upload wheels
