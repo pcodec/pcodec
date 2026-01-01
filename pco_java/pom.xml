@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.pcodec</groupId>
   <artifactId>pco-jni</artifactId>
-  <version>0.1.3</version>
+  <version>0.1.4</version>
 
   <packaging>jar</packaging>
   <name>${project.groupId}:${project.artifactId}</name>

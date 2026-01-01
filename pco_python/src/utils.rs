@@ -6,13 +6,12 @@ use numpy::{
 use pco::data_types::{Number, NumberType};
 use pco::errors::PcoError;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
-use pyo3::prelude::*;
 use pyo3::{Bound, PyErr, PyResult, Python};
 
 pub fn downcast_to_flat<'a, T: Number + Element>(
   arr: &'a Bound<PyUntypedArray>,
 ) -> PyResult<&'a Bound<'a, PyArray1<T>>> {
-  let res = arr.downcast::<PyArray1<T>>().map_err(|_e| {
+  let res = arr.cast::<PyArray1<T>>().map_err(|_e| {
     PyTypeError::new_err(format!(
       "{}D {} numpy array could not be cast to 1D {} array",
       arr.shape().len(),
