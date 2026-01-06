@@ -109,10 +109,10 @@ impl PyCd {
     let (progress, rest) = match_number_enum!(
       &self.0,
       DynCd<T>(cd) => {
-        let arr = dst.downcast::<PyArray1<T>>()?;
+        let arr = dst.cast::<PyArray1<T>>()?;
         let mut arr_rw = arr.readwrite();
         let dst = arr_rw.as_slice_mut()?;
-        py.allow_threads(|| {
+        py.detach(|| {
           let mut pd = cd.page_decompressor(src, page_n)?;
           let progress = pd.decompress(dst)?;
           Ok((progress, pd.into_src()))

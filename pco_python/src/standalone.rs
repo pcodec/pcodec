@@ -5,7 +5,7 @@ use numpy::{
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyModule, PyNone};
-use pyo3::{pyfunction, wrap_pyfunction, Bound, PyObject, PyResult, Python};
+use pyo3::{pyfunction, wrap_pyfunction, Bound, PyResult, Python};
 
 use pco::data_types::{Number, NumberType};
 use pco::standalone::FileDecompressor;
@@ -22,7 +22,7 @@ fn simple_compress_generic<'py, T: Number + Element>(
   let arr = arr.readonly();
   let src = arr.as_slice()?;
   let compressed = py
-    .allow_threads(|| standalone::simple_compress(src, config))
+    .detach(|| standalone::simple_compress(src, config))
     .map_err(pco_err_to_py)?;
   // TODO apparently all the places we use PyBytes::new() copy the data.
   // Maybe there's a zero-copy way to do this.
@@ -38,7 +38,7 @@ fn simple_decompress_into_generic<T: Number + Element>(
   let dst = out_rw.as_slice_mut()?;
   let src = compressed.as_bytes();
   let progress = py
-    .allow_threads(|| standalone::simple_decompress_into(src, dst))
+    .detach(|| standalone::simple_decompress_into(src, dst))
     .map_err(pco_err_to_py)?;
   Ok(PyProgress::from(progress))
 }
@@ -112,7 +112,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   ///
   /// :raises: TypeError, RuntimeError
   #[pyfunction]
-  fn simple_decompress(py: Python, compressed: &Bound<PyBytes>) -> PyResult<PyObject> {
+  fn simple_decompress(py: Python, compressed: &Bound<PyBytes>) -> PyResult<Py<PyAny>> {
     let src = compressed.as_bytes();
     let (file_decompressor, src) = FileDecompressor::new(src).map_err(pco_err_to_py)?;
     let maybe_number_type = file_decompressor
@@ -123,16 +123,16 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
         match_number_enum!(
           number_type,
           NumberType<T> => {
-            let res = py
-              .allow_threads(|| file_decompressor.simple_decompress::<T>(src))
+            Ok(py
+              .detach(|| file_decompressor.simple_decompress::<T>(src))
               .map_err(pco_err_to_py)?
               .into_pyarray(py)
-              .to_object(py);
-            Ok(res)
+              .into_pyobject(py)?
+              .into())
           }
         )
       }
-      None => Ok(PyNone::get(py).to_object(py)),
+      None => Ok(PyNone::get(py).to_owned().into_pyobject(py)?.into()),
     }
   }
   m.add_function(wrap_pyfunction!(simple_decompress, m)?)?;
