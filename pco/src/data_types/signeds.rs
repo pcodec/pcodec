@@ -1,4 +1,4 @@
-use crate::data_types::{unsigneds, ModeAndLatents, Number};
+use crate::data_types::{unsigneds, ModeAndLatents, Number, Signed};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
@@ -45,6 +45,10 @@ macro_rules! impl_signed {
       ) -> PcoResult<()> {
         unsigneds::join_latents(mode, primary, secondary, dst)
       }
+    }
+
+    impl Signed for $t {
+      const ZERO: Self = 0;
     }
   };
 }

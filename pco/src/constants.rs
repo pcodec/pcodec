@@ -13,8 +13,10 @@ pub const BITS_TO_ENCODE_ANS_SIZE_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_MODE_VARIANT: Bitlen = 4;
 pub const BITS_TO_ENCODE_DELTA_ENCODING_VARIANT: Bitlen = 4;
 pub const BITS_TO_ENCODE_DELTA_ENCODING_ORDER: Bitlen = 3;
-pub const BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG: Bitlen = 5;
-pub const BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG: Bitlen = 4;
+pub const BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION: Bitlen = 5;
+pub const BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS: Bitlen = 6;
+pub const BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG: Bitlen = 5;
+pub const BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_N_BINS: Bitlen = 15;
 // conservative: wide enough to support quantizing float datasets with 255 unused bits of precision
 pub const BITS_TO_ENCODE_QUANTIZE_K: Bitlen = 8;

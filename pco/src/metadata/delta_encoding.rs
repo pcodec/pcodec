@@ -1,13 +1,12 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
-use crate::constants::{
-  Bitlen, BITS_TO_ENCODE_DELTA_ENCODING_ORDER, BITS_TO_ENCODE_DELTA_ENCODING_VARIANT,
-  BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG, BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG,
-};
-use crate::data_types::LatentType;
+use crate::constants::*;
+use crate::data_types::{Latent, LatentType, Number};
 use crate::errors::{PcoError, PcoResult};
+use crate::macros::match_latent_enum;
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::LatentVarKey;
+use crate::metadata::{DynLatent, DynLatents};
 use std::io::Write;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,10 +31,21 @@ impl DeltaLookbackConfig {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+pub struct DeltaIntConv1Config {
+  // avoiding exposing bias and weights because I think it's possible we'll
+  // change their representation in the future
+  pub(crate) bias: i64,
+  pub(crate) weights: Vec<i64>,
+  pub quantization: Bitlen,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LatentVarDeltaEncoding {
   NoOp,
   Consecutive(usize),
   Lookback(DeltaLookbackConfig),
+  IntConv1(DeltaIntConv1Config),
 }
 
 impl LatentVarDeltaEncoding {
@@ -44,6 +54,7 @@ impl LatentVarDeltaEncoding {
       Self::NoOp => 0,
       Self::Consecutive(order) => *order,
       Self::Lookback(config) => 1 << config.state_n_log,
+      Self::IntConv1(config) => config.weights.len(),
     }
   }
 }
@@ -82,12 +93,14 @@ pub enum DeltaEncoding {
     config: DeltaLookbackConfig,
     secondary_uses_delta: bool,
   },
+  /// TODO document
+  IntConv1(DeltaIntConv1Config),
 }
 
 impl DeltaEncoding {
   pub(crate) const MAX_BIT_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
-    + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG
-    + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG
+    + BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG
+    + BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG
     + 1) as usize;
 
   unsafe fn read_from_pre_v3(reader: &mut BitReader) -> Self {
@@ -127,8 +140,8 @@ impl DeltaEncoding {
         }
       }
       2 => {
-        let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG);
-        let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG);
+        let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG);
+        let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG);
         if state_n_log > window_n_log {
           return Err(PcoError::corruption(format!(
             "LZ delta encoding state size log exceeded window size log: {} vs {}",
@@ -158,6 +171,7 @@ impl DeltaEncoding {
       Self::NoOp => 0,
       Self::Consecutive { .. } => 1,
       Self::Lookback { .. } => 2,
+      Self::IntConv1(_) => 3,
     };
     writer.write_bitlen(
       variant,
@@ -179,20 +193,34 @@ impl DeltaEncoding {
       } => {
         writer.write_bitlen(
           config.window_n_log - 1,
-          BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG,
+          BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG,
         );
         writer.write_bitlen(
           config.state_n_log,
-          BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG,
+          BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG,
         );
         writer.write_bool(*secondary_uses_delta);
+      }
+      Self::IntConv1(config) => {
+        writer.write_bitlen(
+          config.quantization,
+          BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION,
+        );
+        writer.write_uint(config.bias.to_latent_ordered(), 64);
+        writer.write_usize(
+          config.weights.len(),
+          BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS,
+        );
+        for &weight in &config.weights {
+          writer.write_uint(weight.to_latent_ordered(), 32);
+        }
       }
     }
   }
 
   pub(crate) fn latent_type(&self) -> Option<LatentType> {
     match self {
-      Self::NoOp | Self::Consecutive { .. } => Option::None,
+      Self::NoOp | Self::Consecutive { .. } | Self::IntConv1(_) => Option::None,
       Self::Lookback { .. } => Some(LatentType::U32),
     }
   }
@@ -237,6 +265,10 @@ impl DeltaEncoding {
         },
         LatentVarKey::Secondary,
       ) => LatentVarDeltaEncoding::NoOp,
+      (Self::IntConv1(config), LatentVarKey::Primary) => {
+        LatentVarDeltaEncoding::IntConv1(config.clone())
+      }
+      (Self::IntConv1(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
     }
   }
 }

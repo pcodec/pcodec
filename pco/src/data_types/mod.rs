@@ -206,3 +206,9 @@ pub trait Number:
     dst: &mut [Self],
   ) -> PcoResult<()>;
 }
+
+pub(crate) trait Signed:
+  AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self>
+{
+  const ZERO: Self;
+}

@@ -1,4 +1,5 @@
 mod consecutive;
+mod int_conv1;
 mod lookback;
 
 use crate::constants::DeltaLookback;
@@ -27,14 +28,14 @@ fn toggle_center_in_place<L: Latent>(latents: &mut [L]) {
 
 pub fn new_buffer_and_pos<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
-  stored_delta_state: Vec<L>,
+  stored_state: Vec<L>,
 ) -> (Vec<L>, usize) {
   match delta_encoding {
-    LatentVarDeltaEncoding::NoOp | LatentVarDeltaEncoding::Consecutive(_) => {
-      (stored_delta_state, 0)
-    }
+    LatentVarDeltaEncoding::NoOp
+    | LatentVarDeltaEncoding::Consecutive(_)
+    | LatentVarDeltaEncoding::IntConv1(_) => (stored_state, 0),
     LatentVarDeltaEncoding::Lookback(config) => {
-      lookback::new_window_buffer_and_pos(*config, &stored_delta_state)
+      lookback::new_window_buffer_and_pos(*config, &stored_state)
     }
   }
 }
@@ -45,7 +46,7 @@ pub fn compute_delta_latent_var(
   range: Range<usize>,
 ) -> Option<DynLatents> {
   match delta_encoding {
-    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } => None,
+    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } | DeltaEncoding::IntConv1(_) => None,
     DeltaEncoding::Lookback { config, .. } => {
       let res = match_latent_enum!(
         primary_latents,
@@ -77,31 +78,34 @@ pub fn encode_in_place(
           let lookbacks = delta_latents.unwrap().downcast_ref::<DeltaLookback>().unwrap();
           lookback::encode_in_place(*config, lookbacks, &mut inner[range])
         }
+        LatentVarDeltaEncoding::IntConv1(config) => {
+          int_conv1::encode_in_place(config, latents)
+        }
       };
       DynLatents::new(delta_state)
     }
   )
 }
 
-pub fn decode_in_place<L: Latent>(
+pub fn decode_in_place(
   delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: Option<DynLatentSlice>,
-  delta_state_pos: &mut usize,
-  delta_state: &mut [L],
-  latents: &mut [L],
+  state_pos: &mut usize,
+  state: DynLatentSlice,
+  latents: DynLatentSlice,
 ) -> PcoResult<()> {
   match delta_encoding {
     LatentVarDeltaEncoding::NoOp => Ok(()),
     LatentVarDeltaEncoding::Consecutive(_) => {
-      consecutive::decode_in_place(delta_state, latents);
+      consecutive::decode_in_place(state, latents);
       Ok(())
     }
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
         delta_latents.unwrap().downcast_unwrap::<DeltaLookback>(),
-        delta_state_pos,
-        delta_state,
+        state_pos,
+        state,
         latents,
       );
       if has_oob_lookbacks {
@@ -111,6 +115,10 @@ pub fn decode_in_place<L: Latent>(
       } else {
         Ok(())
       }
+    }
+    LatentVarDeltaEncoding::IntConv1(config) => {
+      int_conv1::decode_in_place(config, state, latents);
+      Ok(())
     }
   }
 }
