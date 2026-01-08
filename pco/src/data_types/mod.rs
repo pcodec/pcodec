@@ -212,8 +212,8 @@ pub trait Number:
   ) -> PcoResult<()>;
 }
 
-pub(crate) trait Signed:
-  AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self>
+pub trait Signed:
+  AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> + private::Sealed
 {
   const ZERO: Self;
 

@@ -1,12 +1,10 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::constants::*;
-use crate::data_types::{Latent, LatentType, Number, Signed};
+use crate::data_types::{LatentType, Number, Signed};
 use crate::errors::{PcoError, PcoResult};
-use crate::macros::match_latent_enum;
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::LatentVarKey;
-use crate::metadata::{DynLatent, DynLatents};
 use std::io::Write;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -180,6 +178,22 @@ impl DeltaEncoding {
           secondary_uses_delta: reader.read_bool(),
         }
       }
+      3 => {
+        let quantization = reader.read_bitlen(BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION);
+        let bias = i64::from_latent_ordered(reader.read_uint(64));
+        let order = reader.read_usize(BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS);
+        let mut weights = Vec::with_capacity(order);
+        for _ in 0..order {
+          weights.push(i32::from_latent_ordered(reader.read_uint(32)) as i64);
+        }
+        let res = Self::IntConv1(DeltaIntConv1Config {
+          quantization,
+          bias,
+          weights,
+        });
+        println!("read back: {:?}", res);
+        res
+      }
       value => {
         return Err(PcoError::corruption(format!(
           "unknown delta encoding value: {}",
@@ -236,7 +250,7 @@ impl DeltaEncoding {
           BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS,
         );
         for &weight in &config.weights {
-          writer.write_uint(weight.to_latent_ordered(), 32);
+          writer.write_uint((weight as i32).to_latent_ordered(), 32);
         }
       }
     }

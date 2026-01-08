@@ -10,7 +10,7 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_latents::DynLatents;
-use crate::metadata::{DeltaEncoding, DeltaIntConv1Config, DeltaLookbackConfig};
+use crate::metadata::{DeltaEncoding, DeltaLookbackConfig};
 use std::ops::Range;
 
 const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
@@ -46,6 +46,15 @@ pub fn new_lookback(n: usize) -> DeltaEncoding {
 }
 
 pub fn new_int_conv(order: usize, latents: &DynLatents) -> Option<DeltaEncoding> {
+  match latents {
+    DynLatents::U16(_) | DynLatents::U32(_) => (),
+    DynLatents::U64(_) => {
+      // we don't support u64 int conv because of lack of a large enough
+      // efficient accumulator type on regular CPUs
+      return None;
+    }
+  }
+
   let config = match_latent_enum!(
     latents,
     DynLatents<L>(latents) => {

@@ -6,11 +6,9 @@ use std::{
 use crate::{
   constants::{Bitlen, DeltaLookback},
   data_types::Latent,
-  dyn_latent_slice::DynLatentSlice,
   metadata::DeltaLookbackConfig,
   FULL_BATCH_N,
 };
-use crate::{macros::match_latent_enum, metadata::DynLatents};
 
 // there are 3 types of proposed lookbacks:
 // * brute force: just try the most recent few latents

@@ -4,11 +4,9 @@ use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::bit_writer::BitWriter;
 use crate::constants::{MAX_SUPPORTED_PRECISION_BYTES, OVERSHOOT_PADDING};
 use crate::data_types::Latent;
-use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use std::io::Write;
-use std::ops::Range;
 
 define_latent_enum!(
   #[derive(Clone, Debug, PartialEq, Eq)]

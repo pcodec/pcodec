@@ -1,6 +1,4 @@
-use crate::macros::match_latent_enum;
-use crate::metadata::DynLatents;
-use crate::{data_types::Latent, dyn_latent_slice::DynLatentSlice};
+use crate::data_types::Latent;
 
 fn first_order_encode_consecutive_in_place<L: Latent>(latents: &mut [L]) {
   if latents.is_empty() {

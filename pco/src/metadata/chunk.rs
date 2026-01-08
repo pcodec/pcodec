@@ -11,7 +11,7 @@ use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::delta_encoding::DeltaEncoding;
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::Mode;
+use crate::metadata::{DynBins, Mode};
 
 /// The metadata of a pco chunk.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,9 +51,13 @@ impl ChunkMeta {
   }
 
   pub(crate) fn validate_delta_encoding(&self) -> PcoResult<()> {
-    let delta_latent_var = &self.per_latent_var.delta;
-    match (&self.delta_encoding, delta_latent_var) {
-      (DeltaEncoding::Lookback { config, .. }, Some(latent_var)) => {
+    match &self.delta_encoding {
+      DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } => Ok(()),
+      DeltaEncoding::Lookback { config, .. } => {
+        let Some(latent_var) = &self.per_latent_var.delta else {
+          unreachable!("Lookback delta encoding should always have a delta latent var");
+        };
+
         let window_n = config.window_n() as DeltaLookback;
         let bins = latent_var.bins.downcast_ref::<DeltaLookback>().unwrap();
         let maybe_corrupt_bin = bins
@@ -68,8 +72,15 @@ impl ChunkMeta {
           Ok(())
         }
       }
-      (DeltaEncoding::NoOp, None) | (DeltaEncoding::Consecutive { .. }, None) => Ok(()),
-      _ => unreachable!(),
+      DeltaEncoding::IntConv1(_) => {
+        // TODO validate the values of the weights and bias avoid overflow
+        match self.per_latent_var.primary.bins {
+          DynBins::U16(_) | DynBins::U32(_) => Ok(()),
+          DynBins::U64(_) => Err(PcoError::corruption(
+            "IntConv delta encodings are not supported on 64-bit types",
+          )),
+        }
+      }
     }
   }
 

@@ -1,12 +1,8 @@
-use std::ops::{AddAssign, Mul, Rem, Shr};
-use std::{cmp, mem};
+use std::cmp;
 
 use crate::constants::Bitlen;
-use crate::data_types::{Latent, Number, Signed};
-use crate::dyn_latent_slice::DynLatentSlice;
-use crate::errors::{PcoError, PcoResult};
-use crate::macros::match_latent_enum;
-use crate::metadata::{DeltaIntConv1Config, DynLatent, DynLatents};
+use crate::data_types::{Latent, Signed};
+use crate::metadata::DeltaIntConv1Config;
 use crate::{delta, sort_utils};
 
 type Real = f64;
@@ -255,7 +251,7 @@ pub fn choose_config<L: Latent>(
     .collect::<Vec<_>>();
   // println!("center {}", center);
 
-  let n_pts = ranges
+  let _n_pts = ranges
     .iter()
     .map(|(start, end)| *end - *start - order)
     .sum::<usize>();
