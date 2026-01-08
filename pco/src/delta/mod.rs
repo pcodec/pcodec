@@ -2,15 +2,19 @@ mod consecutive;
 mod int_conv1;
 mod lookback;
 
-use crate::constants::DeltaLookback;
+use crate::bits;
+use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_latents::DynLatents;
-use crate::metadata::DeltaEncoding;
+use crate::metadata::{DeltaEncoding, DeltaIntConv1Config, DeltaLookbackConfig};
 use std::ops::Range;
+
+const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
+const LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
 
 pub type DeltaState = DynLatents;
 
@@ -24,6 +28,31 @@ fn toggle_center_in_place<L: Latent>(latents: &mut [L]) {
   for l in latents.iter_mut() {
     *l = l.toggle_center();
   }
+}
+
+// TODO taking deltas of secondary latents has been proven to help slightly
+// in some cases, so we should consider it in the future
+pub fn new_lookback(n: usize) -> DeltaEncoding {
+  DeltaEncoding::Lookback {
+    config: DeltaLookbackConfig {
+      window_n_log: bits::bits_to_encode_offset(n as u32 - 1).clamp(
+        LOOKBACK_MIN_WINDOW_N_LOG,
+        LOOKBACK_MAX_WINDOW_N_LOG,
+      ),
+      state_n_log: 0,
+    },
+    secondary_uses_delta: false,
+  }
+}
+
+pub fn new_int_conv(order: usize, latents: &DynLatents) -> Option<DeltaEncoding> {
+  let config = match_latent_enum!(
+    latents,
+    DynLatents<L>(latents) => {
+      int_conv1::choose_config(order, latents, &[(0, latents.len())])
+    }
+  )?;
+  Some(DeltaEncoding::IntConv1(config))
 }
 
 pub fn new_buffer_and_pos<L: Latent>(
@@ -60,39 +89,31 @@ pub fn compute_delta_latent_var(
   }
 }
 
-pub fn encode_in_place(
+pub fn encode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: Option<&DynLatents>,
-  range: Range<usize>,
-  latents: &mut DynLatents,
-) -> DeltaState {
-  match_latent_enum!(
-    latents,
-    DynLatents<L>(inner) => {
-      let delta_state = match delta_encoding {
-        LatentVarDeltaEncoding::NoOp => Vec::<L>::new(),
-        LatentVarDeltaEncoding::Consecutive(order) => {
-          consecutive::encode_in_place(*order, &mut inner[range])
-        }
-        LatentVarDeltaEncoding::Lookback(config) => {
-          let lookbacks = delta_latents.unwrap().downcast_ref::<DeltaLookback>().unwrap();
-          lookback::encode_in_place(*config, lookbacks, &mut inner[range])
-        }
-        LatentVarDeltaEncoding::IntConv1(config) => {
-          int_conv1::encode_in_place(config, latents)
-        }
-      };
-      DynLatents::new(delta_state)
+  latents: &mut [L],
+) -> Vec<L> {
+  match delta_encoding {
+    LatentVarDeltaEncoding::NoOp => vec![],
+    LatentVarDeltaEncoding::Consecutive(order) => consecutive::encode_in_place(*order, latents),
+    LatentVarDeltaEncoding::Lookback(config) => {
+      let lookbacks = delta_latents
+        .unwrap()
+        .downcast_ref::<DeltaLookback>()
+        .unwrap();
+      lookback::encode_in_place(*config, lookbacks, latents)
     }
-  )
+    LatentVarDeltaEncoding::IntConv1(config) => int_conv1::encode_in_place(config, latents),
+  }
 }
 
-pub fn decode_in_place(
+pub fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: Option<DynLatentSlice>,
   state_pos: &mut usize,
-  state: DynLatentSlice,
-  latents: DynLatentSlice,
+  state: &mut [L],
+  latents: &mut [L],
 ) -> PcoResult<()> {
   match delta_encoding {
     LatentVarDeltaEncoding::NoOp => Ok(()),

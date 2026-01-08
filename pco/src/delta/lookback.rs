@@ -7,10 +7,10 @@ use crate::{
   constants::{Bitlen, DeltaLookback},
   data_types::Latent,
   dyn_latent_slice::DynLatentSlice,
-  match_latent_enum,
   metadata::DeltaLookbackConfig,
   FULL_BATCH_N,
 };
+use crate::{macros::match_latent_enum, metadata::DynLatents};
 
 // there are 3 types of proposed lookbacks:
 // * brute force: just try the most recent few latents
@@ -191,7 +191,8 @@ pub fn new_window_buffer_and_pos<L: Latent>(
   (res, window_n)
 }
 
-pub fn decode_in_place_specialized<L: Latent>(
+// returns whether it was corrupt
+pub fn decode_in_place<L: Latent>(
   config: DeltaLookbackConfig,
   lookbacks: &[DeltaLookback],
   window_buffer_pos: &mut usize,
@@ -237,23 +238,6 @@ pub fn decode_in_place_specialized<L: Latent>(
   *window_buffer_pos = end_pos;
 
   has_oob_lookbacks
-}
-
-// returns whether it was corrupt
-pub fn decode_in_place(
-  config: DeltaLookbackConfig,
-  lookbacks: &[DeltaLookback],
-  window_buffer_pos: &mut usize,
-  window_buffer: DynLatentSlice,
-  latents: DynLatentSlice,
-) -> bool {
-  match_latent_enum!(
-    window_buffer,
-    DynLatents<L>(window_buffer) => {
-      let latents = latents.downcast_unwrap::<L>();
-      decode_in_place_specialized(config, lookbacks, window_buffer_pos, window_buffer, latents)
-    }
-  )
 }
 
 #[cfg(test)]
@@ -306,8 +290,8 @@ mod tests {
       config,
       &lookbacks,
       &mut pos,
-      DynLatentSlice::U32(&mut window_buffer),
-      DynLatentSlice::U32(&mut deltas_to_decode),
+      &mut window_buffer,
+      &mut deltas_to_decode,
     );
     assert!(!has_oob_lookbacks);
     assert_eq!(deltas_to_decode, original_latents);
@@ -328,8 +312,8 @@ mod tests {
       config,
       &lookbacks,
       &mut pos,
-      DynLatentSlice::U32(&mut window_buffer),
-      DynLatentSlice::U32(&mut latents),
+      &mut window_buffer,
+      &mut latents,
     );
     assert!(has_oob_lookbacks);
   }

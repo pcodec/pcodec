@@ -1,4 +1,5 @@
 use crate::macros::match_latent_enum;
+use crate::metadata::DynLatents;
 use crate::{data_types::Latent, dyn_latent_slice::DynLatentSlice};
 
 fn first_order_encode_consecutive_in_place<L: Latent>(latents: &mut [L]) {
@@ -43,17 +44,11 @@ fn first_order_decode_consecutive_in_place<L: Latent>(moment: &mut L, latents: &
 
 // used for a single batch, so we mutate the delta moments
 #[inline(never)]
-pub fn decode_in_place(state: DynLatentSlice, latents: DynLatentSlice) {
-  match_latent_enum!(
-    state,
-    DynLatentSlice<L>(state) => {
-      let latents = latents.downcast_unwrap::<L>();
-      super::toggle_center_in_place(latents);
-      for moment in state.iter_mut().rev() {
-        first_order_decode_consecutive_in_place(moment, latents);
-      }
-    }
-  );
+pub fn decode_in_place<L: Latent>(state: &mut [L], latents: &mut [L]) {
+  super::toggle_center_in_place(latents);
+  for moment in state.iter_mut().rev() {
+    first_order_decode_consecutive_in_place(moment, latents);
+  }
 }
 
 #[cfg(test)]
@@ -77,16 +72,10 @@ mod tests {
     let mut deltas = deltas_to_decode;
 
     // decode in two parts to show we keep state properly
-    decode_in_place(
-      DynLatentSlice::U32(&mut moments),
-      DynLatentSlice::U32(&mut deltas[..3]),
-    );
+    decode_in_place(&mut moments, &mut deltas[..3]);
     assert_eq!(&deltas[..3], &orig_latents[..3]);
 
-    decode_in_place(
-      DynLatentSlice::U32(&mut moments),
-      DynLatentSlice::U32(&mut deltas[3..]),
-    );
+    decode_in_place(&mut moments, &mut deltas[3..]);
     assert_eq!(&deltas[3..5], &orig_latents[3..5]);
   }
 }

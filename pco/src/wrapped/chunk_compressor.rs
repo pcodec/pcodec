@@ -16,7 +16,6 @@ use crate::errors::{PcoError, PcoResult};
 use crate::histograms::histogram;
 use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
-use crate::metadata::delta_encoding::DeltaLookbackConfig;
 use crate::metadata::dyn_bins::DynBins;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::page::PageMeta;
@@ -25,7 +24,7 @@ use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar, PerLatentVarBu
 use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, Mode};
 use crate::mode::classic;
 use crate::wrapped::guarantee;
-use crate::{ans, bin_optimization, bits, delta, ChunkConfig, PagingSpec, FULL_BATCH_N};
+use crate::{ans, bin_optimization, delta, ChunkConfig, PagingSpec, FULL_BATCH_N};
 use std::any;
 use std::cmp::min;
 use std::io::Write;
@@ -35,25 +34,7 @@ use std::io::Write;
 const PAGE_SIZE_OVERESTIMATION: f64 = 1.2;
 const N_PER_EXTRA_DELTA_GROUP: usize = 10000;
 const DELTA_GROUP_SIZE: usize = 200;
-const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
-const LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
 const LOOKBACK_REQUIRED_BYTE_SAVINGS_PER_N: f32 = 0.25;
-
-// TODO taking deltas of secondary latents has been proven to help slightly
-// in some cases, so we should consider it in the future
-
-fn new_lookback_delta_encoding(n: usize) -> DeltaEncoding {
-  DeltaEncoding::Lookback {
-    config: DeltaLookbackConfig {
-      window_n_log: bits::bits_to_encode_offset(n as u32 - 1).clamp(
-        LOOKBACK_MIN_WINDOW_N_LOG,
-        LOOKBACK_MAX_WINDOW_N_LOG,
-      ),
-      state_n_log: 0,
-    },
-    secondary_uses_delta: false,
-  }
-}
 
 // returns table size log
 fn quantize_weights<L: Latent>(
@@ -219,13 +200,17 @@ fn delta_encode_and_build_page_infos(
       start_idx..end_idx,
     );
 
-    let mut per_latent_var = latents.as_mut().map(|key, var_latents| {
+    let mut per_latent_var = latents.as_mut().map(|key, mut var_latents| {
       let encoding_for_var = delta_encoding.for_latent_var(key);
-      let delta_state = delta::encode_in_place(
-        &encoding_for_var,
-        page_delta_latents.as_ref(),
-        start_idx..end_idx,
-        var_latents,
+      let delta_state = match_latent_enum!(
+        &mut var_latents,
+        DynLatents<L>(var_latents) => {
+          DynLatents::new(delta::encode_in_place(
+            &encoding_for_var,
+            page_delta_latents.as_ref(),
+            &mut var_latents[start_idx..end_idx],
+          ))
+        }
       );
       // delta encoding in place leaves junk in the first n_latents_per_state
       let stored_start_idx = min(
@@ -407,14 +392,14 @@ fn choose_delta_encoding(
 
   let lookback_penalty = LOOKBACK_REQUIRED_BYTE_SAVINGS_PER_N * sample_n as f32;
   if best_cost > lookback_penalty {
-    let lookback_encoding = new_lookback_delta_encoding(sample_n);
+    let lookback_encoding = delta::new_lookback(sample_n);
     let lookback_cost = calculate_compressed_sample_size(
       &sample,
       unoptimized_bins_log,
       lookback_encoding.clone(),
     )? + lookback_penalty;
     if lookback_cost < best_cost {
-      best_encoding = new_lookback_delta_encoding(primary_latents.len());
+      best_encoding = delta::new_lookback(primary_latents.len());
       best_cost = lookback_cost;
     }
   }
@@ -470,7 +455,10 @@ fn new_candidate_w_split(
       order,
       secondary_uses_delta: false,
     },
-    DeltaSpec::TryLookback => new_lookback_delta_encoding(n),
+    DeltaSpec::TryLookback => delta::new_lookback(n),
+    DeltaSpec::TryIntConv(order) => {
+      delta::new_int_conv(order, &latents.primary).unwrap_or(DeltaEncoding::NoOp)
+    }
   };
 
   new_candidate_w_split_and_delta_encoding(

@@ -49,6 +49,10 @@ macro_rules! impl_signed {
 
     impl Signed for $t {
       const ZERO: Self = 0;
+
+      fn from_i64(x: i64) -> Self {
+        x as Self
+      }
     }
   };
 }

@@ -1,7 +1,7 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::constants::*;
-use crate::data_types::{Latent, LatentType, Number};
+use crate::data_types::{Latent, LatentType, Number, Signed};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::format_version::FormatVersion;
@@ -32,11 +32,35 @@ impl DeltaLookbackConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DeltaIntConv1Config {
-  // avoiding exposing bias and weights because I think it's possible we'll
-  // change their representation in the future
-  pub(crate) bias: i64,
-  pub(crate) weights: Vec<i64>,
   pub quantization: Bitlen,
+  // Avoiding exposing bias and weights because I think it's possible we'll
+  // change their representation in the future; for now users will have to
+  // satisfy themselves with the Debug string if they are curious
+  bias: i64,
+  weights: Vec<i64>,
+}
+
+impl DeltaIntConv1Config {
+  pub(crate) fn new(quantization: Bitlen, bias: i64, weights: Vec<i64>) -> Self {
+    Self {
+      quantization,
+      bias,
+      weights,
+    }
+  }
+
+  pub(crate) fn bias<S: Signed>(&self) -> S {
+    S::from_i64(self.bias)
+  }
+
+  pub(crate) fn weights<S: Signed>(&self) -> Vec<S> {
+    self
+      .weights
+      .iter()
+      .cloned()
+      .map(|x| S::from_i64(x))
+      .collect()
+  }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

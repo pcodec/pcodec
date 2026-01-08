@@ -62,13 +62,15 @@ pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
 }
 
 macro_rules! impl_latent {
-  ($t: ty) => {
+  ($t: ty, $int_conv: ty) => {
     impl Latent for $t {
       const ZERO: Self = 0;
       const ONE: Self = 1;
       const MID: Self = 1 << (Self::BITS - 1);
       const MAX: Self = Self::MAX;
       const BITS: Bitlen = Self::BITS as Bitlen;
+
+      type IntConv = $int_conv;
 
       #[inline]
       fn from_u32(x: u32) -> Self {
@@ -91,6 +93,16 @@ macro_rules! impl_latent {
       }
 
       #[inline]
+      fn from_int_conv(x: Self::IntConv) -> Self {
+        x as Self
+      }
+
+      #[inline]
+      fn to_int_conv(self) -> Self::IntConv {
+        self as Self::IntConv
+      }
+
+      #[inline]
       fn wrapping_add(self, other: Self) -> Self {
         self.wrapping_add(other)
       }
@@ -103,9 +115,9 @@ macro_rules! impl_latent {
   };
 }
 
-impl_latent!(u16);
-impl_latent!(u32);
-impl_latent!(u64);
+impl_latent!(u16, i32);
+impl_latent!(u32, i64);
+impl_latent!(u64, i64);
 
 macro_rules! impl_unsigned_number {
   ($t: ty, $header_byte: expr) => {

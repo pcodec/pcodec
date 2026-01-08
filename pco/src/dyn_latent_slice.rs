@@ -11,6 +11,21 @@ pub enum DynLatentSlice<'a> {
 }
 
 impl<'a> DynLatentSlice<'a> {
+  pub fn new<L: Latent>(inner: &mut [L]) -> Self {
+    if std::any::TypeId::of::<L>() == std::any::TypeId::of::<u16>() {
+      let ptr = inner as *mut [L] as *mut [u16];
+      Self::U16(unsafe { &mut *ptr })
+    } else if std::any::TypeId::of::<L>() == std::any::TypeId::of::<u32>() {
+      let ptr = inner as *mut [L] as *mut [u32];
+      Self::U32(unsafe { &mut *ptr })
+    } else if std::any::TypeId::of::<L>() == std::any::TypeId::of::<u64>() {
+      let ptr = inner as *mut [L] as *mut [u64];
+      Self::U64(unsafe { &mut *ptr })
+    } else {
+      unreachable!()
+    }
+  }
+
   pub fn downcast_unwrap<L: Latent>(self) -> &'a mut [L] {
     match self {
       Self::U16(inner) if std::any::TypeId::of::<L>() == std::any::TypeId::of::<u16>() => {

@@ -131,6 +131,8 @@ pub trait Latent:
   const MAX: Self;
   const BITS: Bitlen;
 
+  type IntConv: Signed;
+
   /// Converts a `u32` into this type. Panics if the conversion is
   /// impossible.
   fn from_u32(x: u32) -> Self;
@@ -143,6 +145,9 @@ pub trait Latent:
 
   /// Converts the latent to a `u64`, truncating higher bits if necessary.
   fn to_u64(self) -> u64;
+
+  fn from_int_conv(x: Self::IntConv) -> Self;
+  fn to_int_conv(self) -> Self::IntConv;
 
   fn wrapping_add(self, other: Self) -> Self;
   fn wrapping_sub(self, other: Self) -> Self;
@@ -211,4 +216,6 @@ pub(crate) trait Signed:
   AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self>
 {
   const ZERO: Self;
+
+  fn from_i64(x: i64) -> Self;
 }

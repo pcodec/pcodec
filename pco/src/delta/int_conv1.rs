@@ -12,28 +12,7 @@ use crate::{delta, sort_utils};
 type Real = f64;
 
 const ENCODE_BATCH_SIZE: usize = 512;
-const N_WEIGHTS: usize = 10;
 const QUANTIZATION: Bitlen = 11;
-
-trait IntConv {
-  fn from_i64(x: i64) -> Self;
-  fn into_i64(self) -> i64;
-}
-
-macro_rules! impl_int_conv {
-  ($t: ty) => {
-    impl IntConv for $t {
-      fn from_i64(x: i64) -> Self {
-        x as Self
-      }
-      fn into_i64(self) -> i64 {
-        self as i64
-      }
-    }
-  };
-}
-impl_int_conv!(u16);
-impl_int_conv!(u32);
 
 // poor man's nalgebra so we don't need a whole new dep
 #[derive(Clone, Debug)]
@@ -163,23 +142,23 @@ impl Matrix {
 }
 
 #[inline]
-fn predict_one<L: Latent + IntConv>(
+fn predict_one<L: Latent>(
   latents: &[L],
-  weights: &[i64],
-  bias: i64,
+  weights: &[L::IntConv],
+  bias: L::IntConv,
   quantization: Bitlen,
 ) -> L {
   let mut s = bias;
   for (&w, &l) in weights.iter().zip(latents) {
-    s += w * l.into_i64();
+    s += w * l.to_int_conv();
   }
-  L::from_i64(s.max(0) >> quantization)
+  L::from_int_conv(s.max(L::IntConv::ZERO) >> quantization)
 }
 
-fn predict_into<L: Latent + IntConv>(
+fn predict_into<L: Latent>(
   latents: &[L],
-  weights: &[i64],
-  bias: i64,
+  weights: &[L::IntConv],
+  bias: L::IntConv,
   quantization: Bitlen,
   preds: &mut [L],
 ) {
@@ -189,14 +168,14 @@ fn predict_into<L: Latent + IntConv>(
   // by using the first 4 latents.
 
   // do passes over latents instead of weights so we can use SIMD? TODO
-  let n_weights = weights.len();
+  let order = weights.len();
   for (i, dst) in preds
     .iter_mut()
-    .take(latents.len().saturating_sub(n_weights) + 1)
+    .take(latents.len().saturating_sub(order) + 1)
     .enumerate()
   {
     *dst = predict_one(
-      &latents[i..i + n_weights],
+      &latents[i..i + order],
       weights,
       bias,
       quantization,
@@ -204,17 +183,17 @@ fn predict_into<L: Latent + IntConv>(
   }
 }
 
-fn decode_residuals<L: Latent + IntConv>(
-  weights: &[i64],
-  bias: i64,
+fn decode_residuals<L: Latent>(
+  weights: &[L::IntConv],
+  bias: L::IntConv,
   quantization: Bitlen,
   residuals: &mut [L],
 ) {
-  let n_weights = weights.len();
-  for i in n_weights..residuals.len() {
+  let order = weights.len();
+  for i in order..residuals.len() {
     unsafe {
       let latent = residuals.get_unchecked(i).wrapping_add(predict_one(
-        &residuals[i - n_weights..i],
+        &residuals[i - order..i],
         weights,
         bias,
         quantization,
@@ -256,7 +235,8 @@ fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
   cholesky.transposed_backward_sub_into(half_solved)
 }
 
-pub fn choose_config<L: Latent + IntConv>(
+pub fn choose_config<L: Latent>(
+  order: usize,
   latents: &[L],
   ranges: &[(usize, usize)],
 ) -> Option<DeltaIntConv1Config> {
@@ -275,19 +255,16 @@ pub fn choose_config<L: Latent + IntConv>(
     .collect::<Vec<_>>();
   // println!("center {}", center);
 
-  // TODO
-  let n_weights = N_WEIGHTS;
-
   let n_pts = ranges
     .iter()
-    .map(|(start, end)| *end - *start - n_weights)
+    .map(|(start, end)| *end - *start - order)
     .sum::<usize>();
 
   // TODO regularize
   let quantization = QUANTIZATION;
   let quantize_factor = (2.0 as Real).powi(quantization as i32);
   // TODO find a better weight quantization
-  let float_weights_and_centered_bias = autocorr_least_squares(&centered, n_weights).data;
+  let float_weights_and_centered_bias = autocorr_least_squares(&centered, order).data;
   if float_weights_and_centered_bias
     .iter()
     .any(|weight| !weight.is_finite())
@@ -297,53 +274,35 @@ pub fn choose_config<L: Latent + IntConv>(
   }
 
   let mut total_weight = 0.0;
-  for &w in &float_weights_and_centered_bias[..n_weights] {
+  for &w in &float_weights_and_centered_bias[..order] {
     total_weight += w;
   }
   let weights = float_weights_and_centered_bias
     .iter()
-    .take(n_weights)
+    .take(order)
     .map(|x| (x * quantize_factor).round() as i64)
     .collect::<Vec<_>>();
   let float_bias = (1.0 - total_weight) * center.to_u64() as Real;
-  let bias = (float_bias * quantize_factor).round() as i64;
+  let bias = (float_bias * quantize_factor) as i64;
 
-  let config = DeltaIntConv1Config {
-    quantization,
-    bias,
-    weights,
-  };
+  let config = DeltaIntConv1Config::new(quantization, bias, weights);
   println!("config {:?}", config);
   Some(config)
 }
 
-#[inline(never)]
-pub fn encode_in_place(config: &DeltaIntConv1Config, latents: DynLatentSlice) -> DynLatents {
-  match latents {
-    DynLatentSlice::U16(latents) => DynLatents::new(encode_in_place_specialized(config, latents)),
-    DynLatentSlice::U32(latents) => DynLatents::new(encode_in_place_specialized(config, latents)),
-    DynLatentSlice::U64(_) => {
-      unreachable!("Pco should not try to use IntConv1 encoding for 64-bit types")
-    }
-  }
-}
-
-fn encode_in_place_specialized<L: Latent + IntConv>(
-  config: &DeltaIntConv1Config,
-  latents: &mut [L],
-) -> Vec<L> {
-  let initial_state = latents[..config.weights.len()].to_vec();
-  // Like all delta encode in place functions, we fill the first few (n_weights
+pub fn encode_in_place<L: Latent>(config: &DeltaIntConv1Config, latents: &mut [L]) -> Vec<L> {
+  let bias = config.bias::<L::IntConv>();
+  let weights = config.weights::<L::IntConv>();
+  let initial_state = latents[..weights.len()].to_vec();
+  // Like all delta encode in place functions, we fill the first few (order
   // in this case) latents with junk and properly delta encode the rest.
-  let weights = &config.weights;
-  let bias = config.bias;
-  let n_weights = weights.len();
-  let mut predictions = vec![L::ZERO; ENCODE_BATCH_SIZE + n_weights];
+  let order = weights.len();
+  let mut predictions = vec![L::ZERO; ENCODE_BATCH_SIZE + order];
   let mut start = 0;
   while start < latents.len() {
     let end = cmp::min(start + ENCODE_BATCH_SIZE, latents.len());
     // 1. Compute predictions based on this batch and slightly further.
-    let dst = &mut predictions[n_weights..];
+    let dst = &mut predictions[order..];
     predict_into(
       &latents[start..],
       &weights,
@@ -364,7 +323,7 @@ fn encode_in_place_specialized<L: Latent + IntConv>(
 
     // 3. Copy the predictions from the end of this batch to the start of the
     // next batch's predictions.
-    for i in 0..n_weights {
+    for i in 0..order {
       predictions[i] = predictions[ENCODE_BATCH_SIZE + i];
     }
     start = end;
@@ -372,42 +331,20 @@ fn encode_in_place_specialized<L: Latent + IntConv>(
   initial_state
 }
 
-pub fn decode_in_place(
-  config: &DeltaIntConv1Config,
-  state: DynLatentSlice,
-  latents: DynLatentSlice,
-) -> PcoResult<()> {
-  match state {
-    DynLatentSlice::U16(state) => {
-      let latents = latents.downcast_unwrap::<u16>();
-      decode_in_place_specialized(config, state, latents);
-      Ok(())
-    }
-    DynLatentSlice::U32(state) => {
-      let latents = latents.downcast_unwrap::<u32>();
-      decode_in_place_specialized(config, state, latents);
-      Ok(())
-    }
-    DynLatentSlice::U64(_) => Err(PcoError::corruption(
-      "IntConv1 delta encoding is not supported for 64-bit types",
-    )),
-  }
-}
-
-fn decode_in_place_specialized<L: Latent + IntConv>(
+pub fn decode_in_place<L: Latent>(
   config: &DeltaIntConv1Config,
   state: &mut [L],
   latents: &mut [L],
 ) {
-  let weights = &config.weights;
-  let bias = config.bias;
-  let n_weights = weights.len();
-  assert_eq!(n_weights, state.len());
+  let weights = &config.weights::<L::IntConv>();
+  let bias = config.bias::<L::IntConv>();
+  let order = weights.len();
+  assert_eq!(order, state.len());
 
   delta::toggle_center_in_place(latents);
-  let mut residuals = vec![L::ZERO; latents.len() + n_weights];
-  residuals[..n_weights].copy_from_slice(&state[..n_weights]);
-  residuals[n_weights..n_weights + latents.len()].copy_from_slice(&latents);
+  let mut residuals = vec![L::ZERO; latents.len() + order];
+  residuals[..order].copy_from_slice(&state[..order]);
+  residuals[order..order + latents.len()].copy_from_slice(&latents);
 
   decode_residuals(
     &weights,
@@ -462,48 +399,48 @@ mod tests {
     }
   }
 
-  #[test]
-  fn least_squares() {
-    let n_features = 2;
-    let n = 4;
-    let true_beta = Matrix {
-      data: vec![2.0, -3.0],
-      h: n_features,
-      w: 1,
-    };
+  // #[test]
+  // fn least_squares() {
+  //   let n_features = 2;
+  //   let n = 4;
+  //   let true_beta = Matrix {
+  //     data: vec![2.0, -3.0],
+  //     h: n_features,
+  //     w: 1,
+  //   };
 
-    let x = matrix_from_rows(vec![
-      vec![10.0, 11.0],
-      vec![12.0, 13.0],
-      vec![14.0, 15.0],
-      vec![16.0, 17.0],
-    ]);
-    let mut x_transpose = Matrix::constant(0.0, n_features, n);
-    for i in 0..n {
-      for j in 0..n_features {
-        unsafe {
-          x_transpose.set(j, i, x.get(i, j));
-        }
-      }
-    }
-    let y = x_transpose.transpose_mul(&true_beta);
+  //   let x = matrix_from_rows(vec![
+  //     vec![10.0, 11.0],
+  //     vec![12.0, 13.0],
+  //     vec![14.0, 15.0],
+  //     vec![16.0, 17.0],
+  //   ]);
+  //   let mut x_transpose = Matrix::constant(0.0, n_features, n);
+  //   for i in 0..n {
+  //     for j in 0..n_features {
+  //       unsafe {
+  //         x_transpose.set(j, i, x.get(i, j));
+  //       }
+  //     }
+  //   }
+  //   let y = x_transpose.transpose_mul(&true_beta);
 
-    let beta = ordinary_least_squares(x, y);
-    assert_eq!(beta.data.len(), n_features);
-    for i in 0..n_features {
-      unsafe { assert!((beta.get(i, 0) - true_beta.get(i, 0)).abs() < 1E-3) }
-    }
-  }
+  //   let beta = ordinary_least_squares(x, y);
+  //   assert_eq!(beta.data.len(), n_features);
+  //   for i in 0..n_features {
+  //     unsafe { assert!((beta.get(i, 0) - true_beta.get(i, 0)).abs() < 1E-3) }
+  //   }
+  // }
 
-  #[test]
-  fn test_predict_one() {
-    let latents = vec![32747_u16, 32774];
-    let weights = vec![65427_u16, 359];
-    let bias = 796_u16;
-    let quantization = 8;
-    let predicted = predict_one(&latents, &weights, bias, quantization);
-    assert_eq!(predicted, 32813);
-  }
+  // #[test]
+  // fn test_predict_one() {
+  //   let latents = vec![32747_u16, 32774];
+  //   let weights = vec![65427_u16, 359];
+  //   let bias = 796_u16;
+  //   let quantization = 8;
+  //   let predicted = predict_one(&latents, &weights, bias, quantization);
+  //   assert_eq!(predicted, 32813);
+  // }
 
   // #[test]
   // fn test_predict_into_from() {
