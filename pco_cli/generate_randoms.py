@@ -37,6 +37,15 @@ def write_dispatch(dtype, arr, name, base_dir):
 
 
 @writer
+def write_i16(arr, name, base_dir):
+    if arr.dtype != np.int16:
+        arr = np.floor(arr).astype(np.int16)
+    strs = [str(x) for x in arr]
+    full_name = f"i16_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
 def write_i32(arr, name, base_dir):
     if arr.dtype != np.int32:
         arr = np.floor(arr).astype(np.int32)
@@ -328,6 +337,21 @@ def ids():
     weight /= np.sum(weight)
     unique = np.random.randint(0, 2**64, size=n_ids, dtype=np.uint64)
     return np.random.choice(unique, size=n, replace=True, p=weight)
+
+
+@datagen("i16")
+def audio_ish():
+    noise = 16
+    # weights carefully chosen so that noise additions decay toward 0 slowly
+    true_lpc_weights = np.array([0.4455, -1.836, 2.39])
+    n_weights = len(true_lpc_weights)
+    residuals = np.random.uniform(-noise, noise, size=n)
+    res = np.empty(n)
+    res[0:n_weights] = 0.0
+    for i in range(n_weights, n):
+        pred = np.dot(true_lpc_weights, res[i - n_weights : i])
+        res[i] = pred + residuals[i]
+    return res
 
 
 def uniquify_preserving_order(xs):
