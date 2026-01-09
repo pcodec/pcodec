@@ -42,9 +42,9 @@ fn first_order_decode_consecutive_in_place<L: Latent>(moment: &mut L, latents: &
 
 // used for a single batch, so we mutate the delta moments
 #[inline(never)]
-pub fn decode_in_place<L: Latent>(state: &mut [L], latents: &mut [L]) {
+pub fn decode_in_place<L: Latent>(delta_moments: &mut [L], latents: &mut [L]) {
   super::toggle_center_in_place(latents);
-  for moment in state.iter_mut().rev() {
+  for moment in delta_moments.iter_mut().rev() {
     first_order_decode_consecutive_in_place(moment, latents);
   }
 }

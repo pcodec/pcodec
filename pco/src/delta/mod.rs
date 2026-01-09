@@ -45,23 +45,26 @@ pub fn new_lookback(n: usize) -> DeltaEncoding {
   }
 }
 
-pub fn new_int_conv(order: usize, latents: &DynLatents) -> Option<DeltaEncoding> {
+pub fn new_int_conv(order: usize, latents: &DynLatents) -> PcoResult<Option<DeltaEncoding>> {
   match latents {
     DynLatents::U16(_) | DynLatents::U32(_) => (),
     DynLatents::U64(_) => {
       // we don't support u64 int conv because of lack of a large enough
       // efficient accumulator type on regular CPUs
-      return None;
+      return Err(PcoError::invalid_argument(
+        "Conv1 delta encoding cannot be used with 64-bit latents",
+      ));
     }
   }
 
-  let config = match_latent_enum!(
+  let delta_encoding = match_latent_enum!(
     latents,
     DynLatents<L>(latents) => {
-      int_conv1::choose_config(order, latents, &[(0, latents.len())])
+      int_conv1::choose_config(order, latents)
     }
-  )?;
-  Some(DeltaEncoding::IntConv1(config))
+  )
+  .map(DeltaEncoding::IntConv1);
+  Ok(delta_encoding)
 }
 
 pub fn new_buffer_and_pos<L: Latent>(

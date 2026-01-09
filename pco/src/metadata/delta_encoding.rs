@@ -29,7 +29,7 @@ impl DeltaLookbackConfig {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct DeltaIntConv1Config {
+pub struct DeltaConv1Config {
   pub quantization: Bitlen,
   // Avoiding exposing bias and weights because I think it's possible we'll
   // change their representation in the future; for now users will have to
@@ -38,7 +38,7 @@ pub struct DeltaIntConv1Config {
   weights: Vec<i64>,
 }
 
-impl DeltaIntConv1Config {
+impl DeltaConv1Config {
   pub(crate) fn new(quantization: Bitlen, bias: i64, weights: Vec<i64>) -> Self {
     Self {
       quantization,
@@ -67,7 +67,7 @@ pub enum LatentVarDeltaEncoding {
   NoOp,
   Consecutive(usize),
   Lookback(DeltaLookbackConfig),
-  IntConv1(DeltaIntConv1Config),
+  IntConv1(DeltaConv1Config),
 }
 
 impl LatentVarDeltaEncoding {
@@ -116,7 +116,7 @@ pub enum DeltaEncoding {
     secondary_uses_delta: bool,
   },
   /// TODO document
-  IntConv1(DeltaIntConv1Config),
+  IntConv1(DeltaConv1Config),
 }
 
 impl DeltaEncoding {
@@ -183,17 +183,17 @@ impl DeltaEncoding {
       3 => {
         let quantization = reader.read_bitlen(BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION);
         let bias = i64::from_latent_ordered(reader.read_uint(64));
-        let order = reader.read_usize(BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS);
+        let order = 1 + reader.read_usize(BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS);
         let mut weights = Vec::with_capacity(order);
         for _ in 0..order {
           weights.push(i32::from_latent_ordered(reader.read_uint(32)) as i64);
         }
-        let res = Self::IntConv1(DeltaIntConv1Config {
+
+        Self::IntConv1(DeltaConv1Config {
           quantization,
           bias,
           weights,
-        });
-        res
+        })
       }
       value => {
         return Err(PcoError::corruption(format!(
@@ -247,7 +247,7 @@ impl DeltaEncoding {
         );
         writer.write_uint(config.bias.to_latent_ordered(), 64);
         writer.write_usize(
-          config.weights.len(),
+          config.weights.len() - 1,
           BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS,
         );
         for &weight in &config.weights {

@@ -10,7 +10,7 @@ pub struct ChunkConfigOpt {
   #[arg(long, default_value = "8")]
   pub level: usize,
   /// Can be "Auto", "NoOp", "Consecutive@<order>", "Lookback", or
-  /// "IntConv1@<order>".
+  /// "Conv1@<order>".
   #[arg(long, default_value = "Auto", value_parser = parse::delta_spec)]
   pub delta: DeltaSpec,
   /// Can be "Auto", "Classic", "Dict", "FloatMult@<base>", "FloatQuant@<k>", or

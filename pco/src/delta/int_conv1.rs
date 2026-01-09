@@ -2,8 +2,8 @@ use std::cmp;
 
 use crate::constants::Bitlen;
 use crate::data_types::{Latent, Signed};
-use crate::metadata::DeltaIntConv1Config;
-use crate::{delta, sort_utils};
+use crate::delta;
+use crate::metadata::DeltaConv1Config;
 
 type Real = f64;
 
@@ -142,21 +142,21 @@ impl Matrix {
 #[inline]
 fn predict_one<L: Latent>(
   latents: &[L],
-  weights: &[L::IntConv],
-  bias: L::IntConv,
+  weights: &[L::Conv],
+  bias: L::Conv,
   quantization: Bitlen,
 ) -> L {
   let mut s = bias;
   for (&w, &l) in weights.iter().zip(latents) {
-    s += w * l.to_int_conv();
+    s += w * l.to_conv();
   }
-  L::from_int_conv(s.max(L::IntConv::ZERO) >> quantization)
+  L::from_conv(s.max(L::Conv::ZERO) >> quantization)
 }
 
 fn predict_into<L: Latent>(
   latents: &[L],
-  weights: &[L::IntConv],
-  bias: L::IntConv,
+  weights: &[L::Conv],
+  bias: L::Conv,
   quantization: Bitlen,
   preds: &mut [L],
 ) {
@@ -182,8 +182,8 @@ fn predict_into<L: Latent>(
 }
 
 fn decode_residuals<L: Latent>(
-  weights: &[L::IntConv],
-  bias: L::IntConv,
+  weights: &[L::Conv],
+  bias: L::Conv,
   quantization: Bitlen,
   residuals: &mut [L],
 ) {
@@ -206,7 +206,7 @@ fn autocorr_build_xtx_xty(x: &[Real], order: usize) -> (Matrix, Matrix) {
   let n = x.len();
   let mut full_dot_prods = vec![0.0; order + 1];
   fn dot(xi: &[Real], xj: &[Real]) -> Real {
-    xi.into_iter().zip(xj).map(|(&xi, &xj)| xi * xj).sum()
+    xi.iter().zip(xj).map(|(&xi, &xj)| xi * xj).sum()
   }
   for sep in 0..order + 1 {
     full_dot_prods[sep] = dot(x, &x[sep..]);
@@ -261,18 +261,7 @@ fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
   cholesky.transposed_backward_sub_into(half_solved)
 }
 
-pub fn choose_config<L: Latent>(
-  order: usize,
-  latents: &[L],
-  ranges: &[(usize, usize)],
-) -> Option<DeltaIntConv1Config> {
-  // if true {
-  //   return Some(DeltaIntConv1Config::new(
-  //     9,
-  //     0,
-  //     vec![176, -676, 1392, -1915, 1529],
-  //   ));
-  // }
+pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv1Config> {
   let center = L::MID;
   let x = latents
     .iter()
@@ -316,14 +305,14 @@ pub fn choose_config<L: Latent>(
   let float_bias = (1.0 - total_weight) * center.to_u64() as f64;
   let bias = float_bias as i64;
 
-  let config = DeltaIntConv1Config::new(quantization as Bitlen, bias, weights);
+  let config = DeltaConv1Config::new(quantization as Bitlen, bias, weights);
   // println!("config {:?}", config);
   Some(config)
 }
 
-pub fn encode_in_place<L: Latent>(config: &DeltaIntConv1Config, latents: &mut [L]) -> Vec<L> {
-  let bias = config.bias::<L::IntConv>();
-  let weights = config.weights::<L::IntConv>();
+pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) -> Vec<L> {
+  let bias = config.bias::<L::Conv>();
+  let weights = config.weights::<L::Conv>();
   let initial_state = latents[..weights.len()].to_vec();
   // Like all delta encode in place functions, we fill the first few (order
   // in this case) latents with junk and properly delta encode the rest.
@@ -362,23 +351,19 @@ pub fn encode_in_place<L: Latent>(config: &DeltaIntConv1Config, latents: &mut [L
   initial_state
 }
 
-pub fn decode_in_place<L: Latent>(
-  config: &DeltaIntConv1Config,
-  state: &mut [L],
-  latents: &mut [L],
-) {
-  let weights = &config.weights::<L::IntConv>();
-  let bias = config.bias::<L::IntConv>();
+pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
+  let weights = &config.weights::<L::Conv>();
+  let bias = config.bias::<L::Conv>();
   let order = weights.len();
   assert_eq!(order, state.len());
 
   delta::toggle_center_in_place(latents);
   let mut residuals = vec![L::ZERO; latents.len() + order];
   residuals[..order].copy_from_slice(&state[..order]);
-  residuals[order..order + latents.len()].copy_from_slice(&latents);
+  residuals[order..order + latents.len()].copy_from_slice(latents);
 
   decode_residuals(
-    &weights,
+    weights,
     bias,
     config.quantization,
     &mut residuals,

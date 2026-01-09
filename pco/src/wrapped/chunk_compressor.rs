@@ -7,7 +7,7 @@ use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedB
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
   Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
-  MAX_DELTA_ENCODING_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
+  MAX_CONSECUTIVE_DELTA_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, LatentType, Number};
@@ -117,27 +117,6 @@ pub struct ChunkCompressorScratch {
 
 fn bins_from_compression_infos<L: Latent>(infos: &[BinCompressionInfo<L>]) -> Vec<Bin<L>> {
   infos.iter().cloned().map(Bin::from).collect()
-}
-
-fn validate_config(config: &ChunkConfig) -> PcoResult<()> {
-  let compression_level = config.compression_level;
-  if compression_level > MAX_COMPRESSION_LEVEL {
-    return Err(PcoError::invalid_argument(format!(
-      "compression level may not exceed {} (was {})",
-      MAX_COMPRESSION_LEVEL, compression_level,
-    )));
-  }
-
-  if let DeltaSpec::TryConsecutive(order) = config.delta_spec {
-    if order > MAX_DELTA_ENCODING_ORDER {
-      return Err(PcoError::invalid_argument(format!(
-        "delta encoding order may not exceed {} (was {})",
-        MAX_DELTA_ENCODING_ORDER, order,
-      )));
-    }
-  }
-
-  Ok(())
 }
 
 fn validate_chunk_size(n: usize) -> PcoResult<()> {
@@ -404,7 +383,7 @@ fn choose_delta_encoding(
     }
   }
 
-  for delta_encoding_order in 1..MAX_DELTA_ENCODING_ORDER + 1 {
+  for delta_encoding_order in 1..MAX_CONSECUTIVE_DELTA_ORDER + 1 {
     let encoding = DeltaEncoding::Consecutive {
       order: delta_encoding_order,
       secondary_uses_delta: false,
@@ -450,16 +429,14 @@ fn new_candidate_w_split(
   let unoptimized_bins_log = choose_unoptimized_bins_log(config.compression_level, n);
   let delta_encoding = match config.delta_spec {
     DeltaSpec::Auto => choose_delta_encoding(&latents.primary, unoptimized_bins_log)?,
-    DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) | DeltaSpec::TryIntConv(0) => {
-      DeltaEncoding::NoOp
-    }
+    DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) | DeltaSpec::TryConv1(0) => DeltaEncoding::NoOp,
     DeltaSpec::TryConsecutive(order) => DeltaEncoding::Consecutive {
       order,
       secondary_uses_delta: false,
     },
     DeltaSpec::TryLookback => delta::new_lookback(n),
-    DeltaSpec::TryIntConv(order) => {
-      delta::new_int_conv(order, &latents.primary).unwrap_or(DeltaEncoding::NoOp)
+    DeltaSpec::TryConv1(order) => {
+      delta::new_int_conv(order, &latents.primary)?.unwrap_or(DeltaEncoding::NoOp)
     }
   };
 
@@ -518,7 +495,7 @@ fn fallback_chunk_compressor(
 
 // Should this take nums as a slice of slices instead of having a config.paging_spec?
 pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<ChunkCompressor> {
-  validate_config(config)?;
+  config.validate()?;
   let n = nums.len();
   validate_chunk_size(n)?;
 
