@@ -252,9 +252,9 @@ fn build_autocov_mats(v: &[Real], order: usize) -> (Matrix, Matrix) {
 
   unsafe {
     // fill out the left column and top row
-    for i in 0..order {
-      xtx.set(i, 0, initial_dots[i]);
-      xtx.set(0, i, initial_dots[i]);
+    for (i, &dot) in initial_dots.iter().enumerate().take(order) {
+      xtx.set(i, 0, dot);
+      xtx.set(0, i, dot);
     }
     xtx.set(order, 0, initial_sum);
     xtx.set(0, order, initial_sum);
