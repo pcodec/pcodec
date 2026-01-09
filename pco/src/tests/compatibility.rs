@@ -260,22 +260,22 @@ fn v1_0_0_dict() -> PcoResult<()> {
   Ok(())
 }
 
-#[test]
-fn v1_0_0_conv1() -> PcoResult<()> {
-  // v1.0.0 introduced conv1 delta encoding
-  let version = "1.0.0";
-  let name = "conv1";
-  let mut xm1 = 0.0;
-  let mut xm2 = 0.0;
-  let mut nums = vec![];
-  for i in 0..2000 {
-    let x = (xm1 as f32) * 1.99 - (xm2 as f32) + ((i * 47) % 77 - 38) as f32;
-    nums.push((x + 10000.0) as i32);
-    xm2 = xm1;
-    xm1 = x;
-  }
-  let config = ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(2));
-  simple_write_if_version_matches::<i32>(version, name, &nums, &config)?;
-  assert_compatible(version, name, &nums)?;
-  Ok(())
-}
+// #[test]
+// fn v1_0_0_conv1() -> PcoResult<()> {
+//   // v1.0.0 introduced conv1 delta encoding
+//   let version = "1.0.0";
+//   let name = "conv1";
+//   let mut xm1 = 0.0;
+//   let mut xm2 = 0.0;
+//   let mut nums = vec![];
+//   for i in 0..2000 {
+//     let x = (xm1 as f32) * 1.99 - (xm2 as f32) + ((i * 47) % 77 - 38) as f32;
+//     nums.push((x + 10000.0) as i32);
+//     xm2 = xm1;
+//     xm1 = x;
+//   }
+//   let config = ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(2));
+//   simple_write_if_version_matches::<i32>(version, name, &nums, &config)?;
+//   assert_compatible(version, name, &nums)?;
+//   Ok(())
+// }

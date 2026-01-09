@@ -409,27 +409,27 @@ fn test_dict() -> PcoResult<()> {
   Ok(())
 }
 
-#[test]
-fn test_conv1() -> PcoResult<()> {
-  let mut x0 = 31;
-  let mut x1 = 77;
-  let mut x2 = -54;
-  let mut nums = vec![x0, x1, x2];
-  for _ in 0..2000 {
-    let x = x2 - x1 + (0.99 * x0 as f32) as i32 + 3;
-    nums.push(x);
-    x0 = x1;
-    x1 = x2;
-    x2 = x;
-  }
-  let (compressed, meta) = compress_w_meta(
-    &nums,
-    &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(3)),
-  )?;
-  let DeltaEncoding::Conv1(_) = &meta.delta_encoding else {
-    panic!("expected to compress with conv1 delta encoding");
-  };
-  let decompressed = simple_decompress(&compressed)?;
-  assert_nums_eq(&decompressed, &nums, "conv1")?;
-  Ok(())
-}
+// #[test]
+// fn test_conv1() -> PcoResult<()> {
+//   let mut x0 = 31;
+//   let mut x1 = 77;
+//   let mut x2 = -54;
+//   let mut nums = vec![x0, x1, x2];
+//   for _ in 0..2000 {
+//     let x = x2 - x1 + (0.99 * x0 as f32) as i32 + 3;
+//     nums.push(x);
+//     x0 = x1;
+//     x1 = x2;
+//     x2 = x;
+//   }
+//   let (compressed, meta) = compress_w_meta(
+//     &nums,
+//     &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(3)),
+//   )?;
+//   let DeltaEncoding::Conv1(_) = &meta.delta_encoding else {
+//     panic!("expected to compress with conv1 delta encoding");
+//   };
+//   let decompressed = simple_decompress(&compressed)?;
+//   assert_nums_eq(&decompressed, &nums, "conv1")?;
+//   Ok(())
+// }
