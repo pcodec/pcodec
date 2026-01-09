@@ -311,9 +311,10 @@ impl DeltaEncoding {
 
 #[cfg(test)]
 mod tests {
+  use std::i64;
+
+  use super::*;
   use crate::bit_writer::BitWriter;
-  use crate::metadata::delta_encoding::DeltaLookbackConfig;
-  use crate::metadata::DeltaEncoding;
 
   fn check_bit_size(encoding: DeltaEncoding) {
     let mut bytes = Vec::new();
@@ -339,5 +340,10 @@ mod tests {
       },
       secondary_uses_delta: true,
     });
+    check_bit_size(DeltaEncoding::Conv1(DeltaConv1Config {
+      quantization: 31,
+      bias: i64::MAX,
+      weights: vec![i64::MAX; MAX_CONV1_DELTA_ORDER],
+    }));
   }
 }

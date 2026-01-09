@@ -2,8 +2,8 @@ use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
 use crate::bits::bits_to_encode_offset_bits;
 use crate::constants::{
-  Bitlen, Weight, ANS_INTERLEAVING, B2E_ANS_SIZE_LOG, BITS_TO_ENCODE_N_BINS, MAX_ANS_BITS,
-  OVERSHOOT_PADDING,
+  Bitlen, Weight, ANS_INTERLEAVING, BITS_TO_ENCODE_ANS_SIZE_LOG, BITS_TO_ENCODE_N_BINS,
+  MAX_ANS_BITS, OVERSHOOT_PADDING,
 };
 use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
@@ -103,9 +103,9 @@ impl ChunkLatentVarMeta {
     latent_type: LatentType,
   ) -> PcoResult<Self> {
     let (ans_size_log, n_bins) = reader_builder.with_reader(
-      B2E_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + OVERSHOOT_PADDING,
+      BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + OVERSHOOT_PADDING,
       |reader| unsafe {
-        let ans_size_log = reader.read_bitlen(B2E_ANS_SIZE_LOG);
+        let ans_size_log = reader.read_bitlen(BITS_TO_ENCODE_ANS_SIZE_LOG);
         let n_bins = reader.read_usize(BITS_TO_ENCODE_N_BINS);
         Ok((ans_size_log, n_bins))
       },
@@ -154,7 +154,10 @@ impl ChunkLatentVarMeta {
   }
 
   pub(crate) unsafe fn write_to<W: Write>(&self, writer: &mut BitWriter<W>) -> PcoResult<()> {
-    writer.write_bitlen(self.ans_size_log, B2E_ANS_SIZE_LOG);
+    writer.write_bitlen(
+      self.ans_size_log,
+      BITS_TO_ENCODE_ANS_SIZE_LOG,
+    );
 
     match_latent_enum!(&self.bins, DynBins<L>(bins) => {
       write_bins(bins, self.ans_size_log, writer)?;
@@ -169,7 +172,7 @@ impl ChunkLatentVarMeta {
         bins.len() * Bin::<L>::exact_bit_size(self.ans_size_log) as usize
       }
     );
-    B2E_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + total_bin_size
+    BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + total_bin_size
   }
 
   pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: &LatentVarDeltaEncoding) -> usize {

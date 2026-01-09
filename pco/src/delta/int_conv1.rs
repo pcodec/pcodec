@@ -2,8 +2,8 @@ use std::cmp;
 
 use crate::constants::Bitlen;
 use crate::data_types::{Latent, Signed};
-use crate::delta;
 use crate::metadata::DeltaConv1Config;
+use crate::{delta, sort_utils};
 
 type Real = f64;
 
@@ -204,65 +204,66 @@ fn decode_residuals<L: Latent>(
 fn autocorr_build_xtx_xty(x: &[Real], order: usize) -> (Matrix, Matrix) {
   // TODO explain
   let n = x.len();
-  let mut full_dot_prods = vec![0.0; order + 1];
+  let mut initial_dots = Vec::with_capacity(order + 1);
+  let initial_sum: Real = x[..n - order].iter().sum();
   fn dot(xi: &[Real], xj: &[Real]) -> Real {
     xi.iter().zip(xj).map(|(&xi, &xj)| xi * xj).sum()
   }
   for sep in 0..order + 1 {
-    full_dot_prods[sep] = dot(x, &x[sep..]);
+    initial_dots.push(dot(x, &x[sep..n - order + sep]));
   }
 
-  let dot_prod = |i: usize, j: usize| {
-    let lo = i.min(j);
-    let hi = i.max(j);
-    let sep = hi - lo;
-    let mut res = full_dot_prods[sep];
-    for k in 0..lo {
-      res -= x[k] * x[k + sep];
+  let mut xtx = Matrix::constant(0.0, order + 1, order + 1);
+  let mut xty = Matrix::constant(0.0, order + 1, 1);
+
+  unsafe {
+    // fill out the left column and top row
+    for i in 0..order {
+      xtx.set(i, 0, initial_dots[i]);
+      xtx.set(0, i, initial_dots[i]);
     }
-    for k in hi..order {
-      res -= x[n - order + k - sep] * x[n - order + k];
-    }
-    res
-  };
-  // corr with 1s so we can calculate bias term
-  // let full_sum: Real = x.into_iter().sum();
-  // let corr_11 = (x.len() - order) as Real;
-  // let mut xtx = Matrix::constant(0.0, order + 1, order + 1);
-  // let mut xty = Matrix::constant(0.0, order + 1, 1);
-  let mut xtx = Matrix::constant(0.0, order, order);
-  let mut xty = Matrix::constant(0.0, order, 1);
-  for i in 0..order {
-    unsafe {
-      for j in 0..order {
-        xtx.set(i, j, dot_prod(i, j));
+    xtx.set(order, 0, initial_sum);
+    xtx.set(0, order, initial_sum);
+    xty.set(0, 0, initial_dots[order]);
+
+    for i in 1..order {
+      // fill the main dot products
+      for j in 1..=i {
+        let last_dot = xtx.get(i - 1, j - 1);
+        let dot = last_dot + (x[n - order + i - 1] * x[n - order + j - 1] - x[i - 1] * x[j - 1]);
+        xtx.set(i, j, dot);
+        xtx.set(j, i, dot);
       }
-      // xtx.set(i, order, full_sum);
-      // xtx.set(order, i, full_sum);
-      xty.set(i, 0, dot_prod(i, order));
+      // fill the product with 1s for bias term
+      let last_sum = xtx.get(order, i - 1);
+      let sum = last_sum + (x[n - order + i - 1] - x[i - 1]);
+      xtx.set(order, i, sum);
+      xtx.set(i, order, sum);
     }
+    for i in 1..order {
+      // fill the dot products in xty
+      let last_dot = xtx.get(order - 1, i - 1);
+      let dot = last_dot + (x[n - order + i - 1] * x[n - 1] - x[i - 1] * x[order - 1]);
+      xty.set(i, 0, dot);
+    }
+    // bottom right corners
+    xtx.set(order, order, (n - order) as Real);
+    let last_sum = xtx.get(order, order - 1);
+    let sum = last_sum + (x[n - 1] - x[order - 1]);
+    xty.set(order, 0, sum);
   }
-  // unsafe {
-  //   xtx.set(order, order, corr_11);
-  //   xty.set(order, 0, full_sum);
-  // }
-  // println!("xtx {:?}", xtx);
-  // println!("xty {:?}", xty);
-  // let xty = x.transpose_mul(&y);
   (xtx, xty)
 }
 
 fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
   let (xtx, xty) = autocorr_build_xtx_xty(x, order);
   let cholesky = xtx.into_cholesky();
-  // println!("CHOL {:?}", cholesky.data);
   let half_solved = cholesky.forward_sub_into(xty);
-  // println!("HALF {:?}", half_solved.data);
   cholesky.transposed_backward_sub_into(half_solved)
 }
 
 pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv1Config> {
-  let center = L::MID;
+  let center = sort_utils::choose_pivot(latents);
   let x = latents
     .iter()
     .cloned()
@@ -300,9 +301,8 @@ pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv
     .take(order)
     .map(|x| (x * quantize_factor).round() as i64)
     .collect::<Vec<_>>();
-  // let float_bias = ((1.0 - total_weight) * center.to_u64() as f64)
-  //   + *float_weights_and_centered_bias.last().unwrap();
-  let float_bias = (1.0 - total_weight) * center.to_u64() as f64;
+  let float_bias =
+    ((1.0 - total_weight) * center.to_u64() as f64) + float_weights_and_centered_bias[order];
   let bias = float_bias as i64;
 
   let config = DeltaConv1Config::new(quantization as Bitlen, bias, weights);
@@ -369,10 +369,7 @@ pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], la
     &mut residuals,
   );
   latents.copy_from_slice(&residuals[..latents.len()]);
-  // println!("decoded latents {:?}", latents);
-
   state.copy_from_slice(&residuals[latents.len()..]);
-  // println!("new state {:?}", state);
 }
 
 #[cfg(test)]
@@ -393,54 +390,54 @@ mod tests {
     m
   }
 
-  #[test]
-  fn build_autocorr_mats() {
-    let x = [1.0, 2.0, -1.0, 5.0, -3.0];
-    let order = 2;
-    let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
-
-    assert_eq!(xtx.h, 2);
-    assert_eq!(xtx.w, 2);
-    assert_eq!(xtx.data, vec![6.0, -5.0, -5.0, 30.0,]);
-
-    assert_eq!(xty.h, 2);
-    assert_eq!(xty.w, 1);
-    assert_eq!(
-      xty.data,
-      vec![
-        12.0,  //
-        -22.0, //
-      ]
-    );
-  }
   // #[test]
   // fn build_autocorr_mats() {
   //   let x = [1.0, 2.0, -1.0, 5.0, -3.0];
   //   let order = 2;
   //   let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
 
-  //   assert_eq!(xtx.h, 3);
-  //   assert_eq!(xtx.w, 3);
-  //   assert_eq!(
-  //     xtx.data,
-  //     vec![
-  //       6.0, -5.0, 2.0, //
-  //       -5.0, 6.0, 2.0, //
-  //       2.0, 2.0, 3.0, //
-  //     ]
-  //   );
+  //   assert_eq!(xtx.h, 2);
+  //   assert_eq!(xtx.w, 2);
+  //   assert_eq!(xtx.data, vec![6.0, -5.0, -5.0, 30.0,]);
 
-  //   assert_eq!(xty.h, 3);
+  //   assert_eq!(xty.h, 2);
   //   assert_eq!(xty.w, 1);
   //   assert_eq!(
   //     xty.data,
   //     vec![
-  //       12.0, //
-  //       -5.0, //
-  //       2.0,  //
+  //       12.0,  //
+  //       -22.0, //
   //     ]
   //   );
   // }
+  #[test]
+  fn build_autocorr_mats() {
+    let x = [1.0, 2.0, -1.0, 5.0, -3.0];
+    let order = 2;
+    let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
+
+    assert_eq!(xtx.h, 3);
+    assert_eq!(xtx.w, 3);
+    assert_eq!(
+      xtx.data,
+      vec![
+        6.0, -5.0, 2.0, //
+        -5.0, 30.0, 6.0, //
+        2.0, 6.0, 3.0, //
+      ]
+    );
+
+    assert_eq!(xty.h, 3);
+    assert_eq!(xty.w, 1);
+    assert_eq!(
+      xty.data,
+      vec![
+        12.0,  //
+        -22.0, //
+        1.0,   //
+      ]
+    );
+  }
 
   #[test]
   fn cholesky() {
