@@ -15,7 +15,7 @@ pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
       let value = parts.next().ok_or_else(err)?;
       match name {
         "consecutive" => DeltaSpec::TryConsecutive(value.parse()?),
-        "intconv" => DeltaSpec::TryIntConv(value.parse()?),
+        "intconv1" => DeltaSpec::TryIntConv(value.parse()?),
         _ => return Err(err()),
       }
     }

@@ -8,7 +8,6 @@ use crate::{delta, sort_utils};
 type Real = f64;
 
 const ENCODE_BATCH_SIZE: usize = 512;
-const QUANTIZATION: Bitlen = 11;
 
 // poor man's nalgebra so we don't need a whole new dep
 #[derive(Clone, Debug)]
@@ -90,7 +89,8 @@ impl Matrix {
   }
 
   fn transposed_backward_sub_into(&self, mut y: Matrix) -> Matrix {
-    // backward substitution into y, but where self is transposed
+    // assuming self is lower triangular, solves for x in
+    //   Self^T * x = y
     let h = self.h;
     assert_eq!(h, self.w);
     assert_eq!(h, y.h);
@@ -114,6 +114,8 @@ impl Matrix {
   }
 
   fn forward_sub_into(&self, mut y: Matrix) -> Matrix {
+    // assuming self is lower triangular, solves for x in
+    //   Self * x = y
     let h = self.h;
     assert_eq!(h, self.w);
     assert_eq!(h, y.h);
@@ -199,35 +201,63 @@ fn decode_residuals<L: Latent>(
   }
 }
 
-fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
+fn autocorr_build_xtx_xty(x: &[Real], order: usize) -> (Matrix, Matrix) {
+  // TODO explain
   let n = x.len();
-  let x0 = &x[..n - order - 1];
-  let mut autocorrs = vec![0.0; order + 1];
+  let mut full_dot_prods = vec![0.0; order + 1];
   fn dot(xi: &[Real], xj: &[Real]) -> Real {
     xi.into_iter().zip(xj).map(|(&xi, &xj)| xi * xj).sum()
   }
   for sep in 0..order + 1 {
-    autocorrs[sep] = dot(x0, &x[sep..n - order - 1 + sep]);
+    full_dot_prods[sep] = dot(x, &x[sep..]);
   }
+
+  let dot_prod = |i: usize, j: usize| {
+    let lo = i.min(j);
+    let hi = i.max(j);
+    let sep = hi - lo;
+    let mut res = full_dot_prods[sep];
+    for k in 0..lo {
+      res -= x[k] * x[k + sep];
+    }
+    for k in hi..order {
+      res -= x[n - order + k - sep] * x[n - order + k];
+    }
+    res
+  };
+  // corr with 1s so we can calculate bias term
+  // let full_sum: Real = x.into_iter().sum();
+  // let corr_11 = (x.len() - order) as Real;
+  // let mut xtx = Matrix::constant(0.0, order + 1, order + 1);
+  // let mut xty = Matrix::constant(0.0, order + 1, 1);
   let mut xtx = Matrix::constant(0.0, order, order);
   let mut xty = Matrix::constant(0.0, order, 1);
   for i in 0..order {
-    for j in 0..order {
-      unsafe {
-        xtx.set(
-          i,
-          j,
-          autocorrs[(i as i32 - j as i32).abs() as usize],
-        );
-      }
-    }
     unsafe {
-      xty.set(i, 0, autocorrs[order - i]);
+      for j in 0..order {
+        xtx.set(i, j, dot_prod(i, j));
+      }
+      // xtx.set(i, order, full_sum);
+      // xtx.set(order, i, full_sum);
+      xty.set(i, 0, dot_prod(i, order));
     }
   }
+  // unsafe {
+  //   xtx.set(order, order, corr_11);
+  //   xty.set(order, 0, full_sum);
+  // }
+  // println!("xtx {:?}", xtx);
+  // println!("xty {:?}", xty);
   // let xty = x.transpose_mul(&y);
+  (xtx, xty)
+}
+
+fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
+  let (xtx, xty) = autocorr_build_xtx_xty(x, order);
   let cholesky = xtx.into_cholesky();
+  // println!("CHOL {:?}", cholesky.data);
   let half_solved = cholesky.forward_sub_into(xty);
+  // println!("HALF {:?}", half_solved.data);
   cholesky.transposed_backward_sub_into(half_solved)
 }
 
@@ -236,53 +266,58 @@ pub fn choose_config<L: Latent>(
   latents: &[L],
   ranges: &[(usize, usize)],
 ) -> Option<DeltaIntConv1Config> {
-  // TODO
-  let center = sort_utils::choose_pivot(latents);
-  // TODO
-  let centered = latents
+  // if true {
+  //   return Some(DeltaIntConv1Config::new(
+  //     9,
+  //     0,
+  //     vec![176, -676, 1392, -1915, 1529],
+  //   ));
+  // }
+  let center = L::MID;
+  let x = latents
     .iter()
-    .map(|&l| {
-      if l >= center {
-        (l - center).to_u64() as Real
+    .cloned()
+    .map(|x| {
+      if x < center {
+        -((center - x).to_u64() as f64)
       } else {
-        -((center - l).to_u64() as Real)
+        (x - center).to_u64() as f64
       }
     })
     .collect::<Vec<_>>();
-  // println!("center {}", center);
-
-  let _n_pts = ranges
-    .iter()
-    .map(|(start, end)| *end - *start - order)
-    .sum::<usize>();
 
   // TODO regularize
-  let quantization = QUANTIZATION;
-  let quantize_factor = (2.0 as Real).powi(quantization as i32);
   // TODO find a better weight quantization
-  let float_weights_and_centered_bias = autocorr_least_squares(&centered, order).data;
-  if float_weights_and_centered_bias
-    .iter()
-    .any(|weight| !weight.is_finite())
-  {
+  let float_weights_and_centered_bias = autocorr_least_squares(&x, order).data;
+  // println!("fwcb {:?}", float_weights_and_centered_bias);
+  let mut total_weight = 0.0;
+  let mut total_abs_weight = 0.0;
+  for &w in &float_weights_and_centered_bias[..order] {
+    total_abs_weight += w.abs();
+    total_weight += w;
+  }
+  if !total_weight.is_finite() || !total_abs_weight.is_finite() {
     // if we ever add logging, put a debug message here
     return None;
   }
-
-  let mut total_weight = 0.0;
-  for &w in &float_weights_and_centered_bias[..order] {
-    total_weight += w;
+  // TODO explain why this quantization safely avoids overflow
+  let quantization = L::BITS as i32 - 2 - (total_abs_weight + 0.0001).log2().round() as i32;
+  if quantization < 0 {
+    return None;
   }
+  let quantize_factor = (2.0 as Real).powi(quantization);
   let weights = float_weights_and_centered_bias
     .iter()
     .take(order)
     .map(|x| (x * quantize_factor).round() as i64)
     .collect::<Vec<_>>();
-  let float_bias = (1.0 - total_weight) * center.to_u64() as Real;
-  let bias = (float_bias * quantize_factor) as i64;
+  // let float_bias = ((1.0 - total_weight) * center.to_u64() as f64)
+  //   + *float_weights_and_centered_bias.last().unwrap();
+  let float_bias = (1.0 - total_weight) * center.to_u64() as f64;
+  let bias = float_bias as i64;
 
-  let config = DeltaIntConv1Config::new(quantization, bias, weights);
-  println!("config {:?}", config);
+  let config = DeltaIntConv1Config::new(quantization as Bitlen, bias, weights);
+  // println!("config {:?}", config);
   Some(config)
 }
 
@@ -374,9 +409,84 @@ mod tests {
   }
 
   #[test]
+  fn build_autocorr_mats() {
+    let x = [1.0, 2.0, -1.0, 5.0, -3.0];
+    let order = 2;
+    let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
+
+    assert_eq!(xtx.h, 2);
+    assert_eq!(xtx.w, 2);
+    assert_eq!(xtx.data, vec![6.0, -5.0, -5.0, 30.0,]);
+
+    assert_eq!(xty.h, 2);
+    assert_eq!(xty.w, 1);
+    assert_eq!(
+      xty.data,
+      vec![
+        12.0,  //
+        -22.0, //
+      ]
+    );
+  }
+  // #[test]
+  // fn build_autocorr_mats() {
+  //   let x = [1.0, 2.0, -1.0, 5.0, -3.0];
+  //   let order = 2;
+  //   let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
+
+  //   assert_eq!(xtx.h, 3);
+  //   assert_eq!(xtx.w, 3);
+  //   assert_eq!(
+  //     xtx.data,
+  //     vec![
+  //       6.0, -5.0, 2.0, //
+  //       -5.0, 6.0, 2.0, //
+  //       2.0, 2.0, 3.0, //
+  //     ]
+  //   );
+
+  //   assert_eq!(xty.h, 3);
+  //   assert_eq!(xty.w, 1);
+  //   assert_eq!(
+  //     xty.data,
+  //     vec![
+  //       12.0, //
+  //       -5.0, //
+  //       2.0,  //
+  //     ]
+  //   );
+  // }
+
+  #[test]
+  fn cholesky() {
+    // here A = LL^T
+    //  0.1  0   0
+    //  -2   3   0
+    //  -4   5   6
+    let l = matrix_from_rows(vec![
+      vec![0.1, 0.0, 0.0],
+      vec![-2.0, 3.0, 0.0],
+      vec![-4.0, 5.0, 6.0],
+    ]);
+    let a = matrix_from_rows(vec![
+      vec![0.01, -0.2, -0.4],
+      vec![-0.2, 13.0, 23.0],
+      vec![-0.4, 23.0, 77.0],
+    ]);
+    let cholesky = a.into_cholesky();
+    assert_eq!(l.data, cholesky.data);
+  }
+
+  #[test]
   fn forward_sub() {
-    let a = matrix_from_rows(vec![vec![2.0, 0.0], vec![3.0, -4.0]]);
-    let y = matrix_from_rows(vec![vec![1.0], vec![2.0]]);
+    let a = matrix_from_rows(vec![
+      vec![2.0, 0.0],  //
+      vec![3.0, -4.0], //
+    ]);
+    let y = matrix_from_rows(vec![
+      vec![1.0], //
+      vec![2.0], //
+    ]);
     let x = a.forward_sub_into(y);
     let expected = vec![0.5, -0.125];
     for i in 0..expected.len() {
@@ -386,8 +496,14 @@ mod tests {
 
   #[test]
   fn transpose_backward_sub() {
-    let a = matrix_from_rows(vec![vec![2.0, 0.0], vec![3.0, -4.0]]);
-    let y = matrix_from_rows(vec![vec![1.0], vec![2.0]]);
+    let a = matrix_from_rows(vec![
+      vec![2.0, 0.0],  //
+      vec![3.0, -4.0], //
+    ]);
+    let y = matrix_from_rows(vec![
+      vec![1.0], //
+      vec![2.0], //
+    ]);
     let x = a.transposed_backward_sub_into(y);
     let expected = vec![1.25, -0.5];
     for i in 0..expected.len() {
