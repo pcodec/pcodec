@@ -305,8 +305,7 @@ fn autocorr_least_squares(v: &[Real], order: usize) -> Matrix {
 }
 
 pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv1Config> {
-  let center = latents[latents.len() / 2];
-  // let center = sort_utils::choose_pivot(latents);
+  let center = sort_utils::choose_pivot(latents);
   let v = latents
     .iter()
     .cloned()
