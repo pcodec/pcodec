@@ -121,10 +121,9 @@ pub enum DeltaEncoding {
 impl DeltaEncoding {
   pub(crate) const MAX_BIT_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
     + BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION
-    + BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS
+    + BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS) as usize
     + 64
-    + (1 << BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS) * 32)
-    as usize;
+    + MAX_CONV1_DELTA_ORDER * 32;
 
   unsafe fn read_from_pre_v3(reader: &mut BitReader) -> Self {
     let order = reader.read_usize(BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
