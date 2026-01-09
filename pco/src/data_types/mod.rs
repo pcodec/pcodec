@@ -216,6 +216,8 @@ pub trait Signed:
   AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> + private::Sealed
 {
   const ZERO: Self;
+  const MAX: Self;
 
   fn from_i64(x: i64) -> Self;
+  fn to_f64(self) -> f64;
 }

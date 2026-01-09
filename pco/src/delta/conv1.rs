@@ -1,10 +1,9 @@
-use std::cmp;
-
 use crate::constants::Bitlen;
 use crate::data_types::{Latent, Signed};
 use crate::metadata::DeltaConv1Config;
 use crate::{delta, sort_utils};
 
+// For now, using f32 ruins the precision of xtx and xty accumulations
 type Real = f64;
 
 const ENCODE_BATCH_SIZE: usize = 512;
@@ -30,10 +29,10 @@ impl Matrix {
     }
   }
 
-  // TODO make this column-major
   #[inline]
   fn physical_idx(&self, i: usize, j: usize) -> usize {
-    i * self.w + j
+    // column-major is more efficient for our use cases
+    i + j * self.h
   }
 
   #[inline]
@@ -48,6 +47,7 @@ impl Matrix {
     *self.data.get_unchecked(idx)
   }
 
+  #[inline(never)]
   fn into_cholesky(mut self) -> Self {
     // returns L matrix from X = LL* assuming X is positive semi-definite
     // Cholesky-Crout algorithm
@@ -88,6 +88,7 @@ impl Matrix {
     self
   }
 
+  #[inline(never)]
   fn transposed_backward_sub_into(&self, mut y: Matrix) -> Matrix {
     // assuming self is lower triangular, solves for x in
     //   Self^T * x = y
@@ -113,6 +114,7 @@ impl Matrix {
     y
   }
 
+  #[inline(never)]
   fn forward_sub_into(&self, mut y: Matrix) -> Matrix {
     // assuming self is lower triangular, solves for x in
     //   Self * x = y
@@ -165,7 +167,7 @@ fn predict_into<L: Latent>(
   // I.e. if there are 4 weights, then the 1st element of dst will be produced
   // by using the first 4 latents.
 
-  // do passes over latents instead of weights so we can use SIMD? TODO
+  // TODO: do passes over latents instead of weights so we can use SIMD?
   let order = weights.len();
   for (i, dst) in preds
     .iter_mut()
@@ -201,17 +203,49 @@ fn decode_residuals<L: Latent>(
   }
 }
 
-fn autocorr_build_xtx_xty(x: &[Real], order: usize) -> (Matrix, Matrix) {
-  // TODO explain
-  let n = x.len();
-  let mut initial_dots = Vec::with_capacity(order + 1);
-  let initial_sum: Real = x[..n - order].iter().sum();
-  fn dot(xi: &[Real], xj: &[Real]) -> Real {
-    xi.iter().zip(xj).map(|(&xi, &xj)| xi * xj).sum()
+#[inline(never)]
+fn build_initial_autocov_dots(v: &[Real], order: usize) -> Vec<Real> {
+  // Some annoying tricks to improve performance here:
+  // * manually unroll the inner loop by 4 to get SIMD benefit in the tight loop
+  //   and keep things in registers
+  // * advance the outer loop in batches to get cache benefit across all dot
+  //   products
+  assert!(order <= 32);
+  let n = v.len();
+  let mut dots = vec![0.0; order + 1];
+  let almost_n = (n - order) / ENCODE_BATCH_SIZE * ENCODE_BATCH_SIZE;
+  for start in (0..almost_n).step_by(ENCODE_BATCH_SIZE) {
+    for sep in 0..order + 1 {
+      let mut dot0 = 0.0;
+      let mut dot1 = 0.0;
+      let mut dot2 = 0.0;
+      let mut dot3 = 0.0;
+      for i in (start..start + ENCODE_BATCH_SIZE).step_by(4) {
+        dot0 += v[i] * v[i + sep];
+        dot1 += v[i + 1] * v[i + sep + 1];
+        dot2 += v[i + 2] * v[i + sep + 2];
+        dot3 += v[i + 3] * v[i + sep + 3];
+      }
+      dots[sep] += (dot0 + dot1) + (dot2 + dot3);
+    }
   }
-  for sep in 0..order + 1 {
-    initial_dots.push(dot(x, &x[sep..n - order + sep]));
+  for i in almost_n..n - order {
+    for sep in 0..order + 1 {
+      dots[sep] += v[i] * v[i + sep];
+    }
   }
+  dots
+}
+
+#[inline(never)]
+fn build_autocov_mats(v: &[Real], order: usize) -> (Matrix, Matrix) {
+  // Here we take advantage of the structure of the problem to build the x^Tx
+  // and x^Ty matrices with rolling dot products.
+  // This is O(n * order + order^2) instead of the naive O(n * order^2)
+  // approach.
+  let n = v.len();
+  let initial_sum: Real = v[..n - order].iter().sum();
+  let initial_dots = build_initial_autocov_dots(v, order);
 
   let mut xtx = Matrix::constant(0.0, order + 1, order + 1);
   let mut xty = Matrix::constant(0.0, order + 1, 1);
@@ -230,33 +264,41 @@ fn autocorr_build_xtx_xty(x: &[Real], order: usize) -> (Matrix, Matrix) {
       // fill the main dot products
       for j in 1..=i {
         let last_dot = xtx.get(i - 1, j - 1);
-        let dot = last_dot + (x[n - order + i - 1] * x[n - order + j - 1] - x[i - 1] * x[j - 1]);
+        let dot = last_dot + (v[n - order + i - 1] * v[n - order + j - 1] - v[i - 1] * v[j - 1]);
         xtx.set(i, j, dot);
         xtx.set(j, i, dot);
       }
       // fill the product with 1s for bias term
       let last_sum = xtx.get(order, i - 1);
-      let sum = last_sum + (x[n - order + i - 1] - x[i - 1]);
+      let sum = last_sum + (v[n - order + i - 1] - v[i - 1]);
       xtx.set(order, i, sum);
       xtx.set(i, order, sum);
     }
     for i in 1..order {
       // fill the dot products in xty
       let last_dot = xtx.get(order - 1, i - 1);
-      let dot = last_dot + (x[n - order + i - 1] * x[n - 1] - x[i - 1] * x[order - 1]);
+      let dot = last_dot + (v[n - order + i - 1] * v[n - 1] - v[i - 1] * v[order - 1]);
       xty.set(i, 0, dot);
     }
     // bottom right corners
     xtx.set(order, order, (n - order) as Real);
     let last_sum = xtx.get(order, order - 1);
-    let sum = last_sum + (x[n - 1] - x[order - 1]);
+    let sum = last_sum + (v[n - 1] - v[order - 1]);
     xty.set(order, 0, sum);
   }
   (xtx, xty)
 }
 
-fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
-  let (xtx, xty) = autocorr_build_xtx_xty(x, order);
+fn autocorr_least_squares(v: &[Real], order: usize) -> Matrix {
+  // To choose weights and bias, we solve the least squares problem using x features
+  //   v_i ~ [v_{i-order}, v_{i-order+1}, ... v_{i-1}, 1.0] @ beta
+  // The solution to beta gives the `order` weight coefficients, and its last
+  // element is the bias.
+  // To do this efficiently, we use a couple tricks:
+  // * build the xT^x and x^Ty matrices using rolling dot products, avoiding
+  //   duplicate computation
+  // * use the Cholesky decomposition and forward/back substitution
+  let (xtx, xty) = build_autocov_mats(v, order);
   let cholesky = xtx.into_cholesky();
   let half_solved = cholesky.forward_sub_into(xty);
   cholesky.transposed_backward_sub_into(half_solved)
@@ -264,22 +306,19 @@ fn autocorr_least_squares(x: &[Real], order: usize) -> Matrix {
 
 pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv1Config> {
   let center = sort_utils::choose_pivot(latents);
-  let x = latents
+  let v = latents
     .iter()
     .cloned()
-    .map(|x| {
-      if x < center {
-        -((center - x).to_u64() as f64)
+    .map(|v| {
+      if v < center {
+        -((center - v).to_u64() as Real)
       } else {
-        (x - center).to_u64() as f64
+        (v - center).to_u64() as Real
       }
     })
     .collect::<Vec<_>>();
 
-  // TODO regularize
-  // TODO find a better weight quantization
-  let float_weights_and_centered_bias = autocorr_least_squares(&x, order).data;
-  // println!("fwcb {:?}", float_weights_and_centered_bias);
+  let float_weights_and_centered_bias = autocorr_least_squares(&v, order).data;
   let mut total_weight = 0.0;
   let mut total_abs_weight = 0.0;
   for &w in &float_weights_and_centered_bias[..order] {
@@ -290,8 +329,20 @@ pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv
     // if we ever add logging, put a debug message here
     return None;
   }
-  // TODO explain why this quantization safely avoids overflow
-  let quantization = L::BITS as i32 - 2 - (total_abs_weight + 0.0001).log2().round() as i32;
+  let float_bias =
+    ((1.0 - total_weight) * center.to_u64() as Real) + float_weights_and_centered_bias[order];
+  // This quantization should safely avoid overflow: each weight and bias can be rounded
+  // up to at most double its value (0.5 -> 1.0), so the largest possible
+  // quantized value we could obtain during arithmetic is at most
+  //   2^quantization * 2 * (total_abs_weight * L::MAX + abs_bias).
+  // Therefore we require
+  //   2^quantization * 2 * (total_abs_weight * L::MAX + abs_bias) <= L::Conv::MAX
+  //   quantization <= log2(L::Conv::MAX / (total_abs_weight * L::MAX + abs_bias)) - 1
+  let quantization = (L::Conv::MAX.to_f64()
+    / (total_abs_weight * L::MAX.to_u64() as f64 + float_bias.abs() + 1.0))
+    .log2()
+    .floor() as i32
+    - 1;
   if quantization < 0 {
     return None;
   }
@@ -301,12 +352,9 @@ pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv
     .take(order)
     .map(|x| (x * quantize_factor).round() as i64)
     .collect::<Vec<_>>();
-  let float_bias =
-    ((1.0 - total_weight) * center.to_u64() as f64) + float_weights_and_centered_bias[order];
-  let bias = float_bias as i64;
+  let bias = (float_bias * quantize_factor) as i64;
 
   let config = DeltaConv1Config::new(quantization as Bitlen, bias, weights);
-  // println!("config {:?}", config);
   Some(config)
 }
 
@@ -320,7 +368,7 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
   let mut predictions = vec![L::ZERO; ENCODE_BATCH_SIZE + order];
   let mut start = 0;
   while start < latents.len() {
-    let end = cmp::min(start + ENCODE_BATCH_SIZE, latents.len());
+    let end = (start + ENCODE_BATCH_SIZE).min(latents.len());
     // 1. Compute predictions based on this batch and slightly further.
     let dst = &mut predictions[order..];
     predict_into(
@@ -390,31 +438,11 @@ mod tests {
     m
   }
 
-  // #[test]
-  // fn build_autocorr_mats() {
-  //   let x = [1.0, 2.0, -1.0, 5.0, -3.0];
-  //   let order = 2;
-  //   let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
-
-  //   assert_eq!(xtx.h, 2);
-  //   assert_eq!(xtx.w, 2);
-  //   assert_eq!(xtx.data, vec![6.0, -5.0, -5.0, 30.0,]);
-
-  //   assert_eq!(xty.h, 2);
-  //   assert_eq!(xty.w, 1);
-  //   assert_eq!(
-  //     xty.data,
-  //     vec![
-  //       12.0,  //
-  //       -22.0, //
-  //     ]
-  //   );
-  // }
   #[test]
   fn build_autocorr_mats() {
     let x = [1.0, 2.0, -1.0, 5.0, -3.0];
     let order = 2;
-    let (xtx, xty) = autocorr_build_xtx_xty(&x, order);
+    let (xtx, xty) = build_autocov_mats(&x, order);
 
     assert_eq!(xtx.h, 3);
     assert_eq!(xtx.w, 3);
@@ -492,83 +520,4 @@ mod tests {
       assert!((x.data[i] - expected[i]).abs() < 1E-6);
     }
   }
-
-  // #[test]
-  // fn least_squares() {
-  //   let n_features = 2;
-  //   let n = 4;
-  //   let true_beta = Matrix {
-  //     data: vec![2.0, -3.0],
-  //     h: n_features,
-  //     w: 1,
-  //   };
-
-  //   let x = matrix_from_rows(vec![
-  //     vec![10.0, 11.0],
-  //     vec![12.0, 13.0],
-  //     vec![14.0, 15.0],
-  //     vec![16.0, 17.0],
-  //   ]);
-  //   let mut x_transpose = Matrix::constant(0.0, n_features, n);
-  //   for i in 0..n {
-  //     for j in 0..n_features {
-  //       unsafe {
-  //         x_transpose.set(j, i, x.get(i, j));
-  //       }
-  //     }
-  //   }
-  //   let y = x_transpose.transpose_mul(&true_beta);
-
-  //   let beta = ordinary_least_squares(x, y);
-  //   assert_eq!(beta.data.len(), n_features);
-  //   for i in 0..n_features {
-  //     unsafe { assert!((beta.get(i, 0) - true_beta.get(i, 0)).abs() < 1E-3) }
-  //   }
-  // }
-
-  // #[test]
-  // fn test_predict_one() {
-  //   let latents = vec![32747_u16, 32774];
-  //   let weights = vec![65427_u16, 359];
-  //   let bias = 796_u16;
-  //   let quantization = 8;
-  //   let predicted = predict_one(&latents, &weights, bias, quantization);
-  //   assert_eq!(predicted, 32813);
-  // }
-
-  // #[test]
-  // fn test_predict_into_from() {
-  //   // these latents are equivalent to [10, -20, 30, -40]
-  //   let latents = vec![10_u32, u32::MAX - 19, 30_u32, u32::MAX - 39];
-  //   let weights = vec![4, -3];
-  //   let bias = -5;
-  //   let quantization = 3;
-  //   let mut preds = vec![0; latents.len() - weights.len() + 1];
-
-  //   // INTO
-  //   predict_into(
-  //     &latents,
-  //     &weights,
-  //     bias,
-  //     quantization,
-  //     &mut preds,
-  //   );
-  //   // the last prediction here is useless to us, but just to show that it can
-  //   // predict the next one:
-  //   assert_eq!(preds, vec![11, u32::MAX - 21, 29]);
-
-  //   // FROM
-  //   let mut recovered = vec![0; latents.len()];
-  //   recovered[..2].copy_from_slice(&latents[..2]);
-  //   recovered[2..].copy_from_slice(
-  //     &latents
-  //       .iter()
-  //       .skip(2)
-  //       .zip(&preds)
-  //       .map(|(l, &p)| l.wrapping_sub(p))
-  //       .collect::<Vec<_>>(),
-  //   );
-  //   decode_residuals(&weights, bias, quantization, &mut recovered);
-  //   assert_eq!(recovered, latents);
-  // }
 }

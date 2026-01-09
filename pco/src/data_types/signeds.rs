@@ -49,9 +49,13 @@ macro_rules! impl_signed {
 
     impl Signed for $t {
       const ZERO: Self = 0;
+      const MAX: Self = Self::MAX;
 
       fn from_i64(x: i64) -> Self {
         x as Self
+      }
+      fn to_f64(self) -> f64 {
+        self as f64
       }
     }
   };
