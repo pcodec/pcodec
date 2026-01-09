@@ -1,7 +1,4 @@
-use crate::constants::{
-  Bitlen, DEFAULT_MAX_PAGE_N, MAX_COMPRESSION_LEVEL, MAX_CONSECUTIVE_DELTA_ORDER,
-  MAX_CONV1_DELTA_ORDER,
-};
+use crate::constants::*;
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
 

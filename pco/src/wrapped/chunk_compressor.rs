@@ -495,6 +495,7 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
   let n = nums.len();
   validate_chunk_size(n)?;
 
+  // TODO in a later PR: validate mode on initialization of Mode or maybe ChunkMeta
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
   if !T::mode_is_valid(&mode) {
     return Err(PcoError::invalid_argument(format!(

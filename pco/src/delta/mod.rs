@@ -74,7 +74,7 @@ pub fn new_buffer_and_pos<L: Latent>(
   match delta_encoding {
     LatentVarDeltaEncoding::NoOp
     | LatentVarDeltaEncoding::Consecutive(_)
-    | LatentVarDeltaEncoding::IntConv1(_) => (stored_state, 0),
+    | LatentVarDeltaEncoding::Conv1(_) => (stored_state, 0),
     LatentVarDeltaEncoding::Lookback(config) => {
       lookback::new_window_buffer_and_pos(*config, &stored_state)
     }
@@ -116,7 +116,7 @@ pub fn encode_in_place<L: Latent>(
         .unwrap();
       lookback::encode_in_place(*config, lookbacks, latents)
     }
-    LatentVarDeltaEncoding::IntConv1(config) => int_conv1::encode_in_place(config, latents),
+    LatentVarDeltaEncoding::Conv1(config) => int_conv1::encode_in_place(config, latents),
   }
 }
 
@@ -149,7 +149,7 @@ pub fn decode_in_place<L: Latent>(
         Ok(())
       }
     }
-    LatentVarDeltaEncoding::IntConv1(config) => {
+    LatentVarDeltaEncoding::Conv1(config) => {
       int_conv1::decode_in_place(config, state, latents);
       Ok(())
     }

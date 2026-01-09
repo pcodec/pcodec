@@ -52,12 +52,7 @@ impl DeltaConv1Config {
   }
 
   pub(crate) fn weights<S: Signed>(&self) -> Vec<S> {
-    self
-      .weights
-      .iter()
-      .cloned()
-      .map(|x| S::from_i64(x))
-      .collect()
+    self.weights.iter().cloned().map(S::from_i64).collect()
   }
 }
 
@@ -67,7 +62,7 @@ pub enum LatentVarDeltaEncoding {
   NoOp,
   Consecutive(usize),
   Lookback(DeltaLookbackConfig),
-  IntConv1(DeltaConv1Config),
+  Conv1(DeltaConv1Config),
 }
 
 impl LatentVarDeltaEncoding {
@@ -76,7 +71,7 @@ impl LatentVarDeltaEncoding {
       Self::NoOp => 0,
       Self::Consecutive(order) => *order,
       Self::Lookback(config) => 1 << config.state_n_log,
-      Self::IntConv1(config) => config.weights.len(),
+      Self::Conv1(config) => config.weights.len(),
     }
   }
 }
@@ -115,7 +110,11 @@ pub enum DeltaEncoding {
     config: DeltaLookbackConfig,
     secondary_uses_delta: bool,
   },
-  /// TODO document
+  /// Encodes the difference between each value and a convolution of the
+  /// preceding few elements.
+  ///
+  /// This is best if your numbers have local trends that aren't captured by
+  /// simply taking differences.
   Conv1(DeltaConv1Config),
 }
 
@@ -304,9 +303,7 @@ impl DeltaEncoding {
         },
         LatentVarKey::Secondary,
       ) => LatentVarDeltaEncoding::NoOp,
-      (Self::Conv1(config), LatentVarKey::Primary) => {
-        LatentVarDeltaEncoding::IntConv1(config.clone())
-      }
+      (Self::Conv1(config), LatentVarKey::Primary) => LatentVarDeltaEncoding::Conv1(config.clone()),
       (Self::Conv1(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
     }
   }
