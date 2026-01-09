@@ -1,5 +1,5 @@
 mod consecutive;
-mod int_conv1;
+mod conv1;
 mod lookback;
 
 use crate::bits;
@@ -45,7 +45,7 @@ pub fn new_lookback(n: usize) -> DeltaEncoding {
   }
 }
 
-pub fn new_int_conv(order: usize, latents: &DynLatents) -> PcoResult<Option<DeltaEncoding>> {
+pub fn new_conv1(order: usize, latents: &DynLatents) -> PcoResult<Option<DeltaEncoding>> {
   match latents {
     DynLatents::U16(_) | DynLatents::U32(_) => (),
     DynLatents::U64(_) => {
@@ -60,7 +60,7 @@ pub fn new_int_conv(order: usize, latents: &DynLatents) -> PcoResult<Option<Delt
   let delta_encoding = match_latent_enum!(
     latents,
     DynLatents<L>(latents) => {
-      int_conv1::choose_config(order, latents)
+      conv1::choose_config(order, latents)
     }
   )
   .map(DeltaEncoding::Conv1);
@@ -116,7 +116,7 @@ pub fn encode_in_place<L: Latent>(
         .unwrap();
       lookback::encode_in_place(*config, lookbacks, latents)
     }
-    LatentVarDeltaEncoding::Conv1(config) => int_conv1::encode_in_place(config, latents),
+    LatentVarDeltaEncoding::Conv1(config) => conv1::encode_in_place(config, latents),
   }
 }
 
@@ -150,7 +150,7 @@ pub fn decode_in_place<L: Latent>(
       }
     }
     LatentVarDeltaEncoding::Conv1(config) => {
-      int_conv1::decode_in_place(config, state, latents);
+      conv1::decode_in_place(config, state, latents);
       Ok(())
     }
   }

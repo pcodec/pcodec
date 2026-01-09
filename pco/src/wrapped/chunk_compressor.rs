@@ -432,7 +432,7 @@ fn new_candidate_w_split(
     },
     DeltaSpec::TryLookback => delta::new_lookback(n),
     DeltaSpec::TryConv1(order) => {
-      delta::new_int_conv(order, &latents.primary)?.unwrap_or(DeltaEncoding::NoOp)
+      delta::new_conv1(order, &latents.primary)?.unwrap_or(DeltaEncoding::NoOp)
     }
   };
 

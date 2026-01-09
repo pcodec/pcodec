@@ -59,7 +59,7 @@ impl ChunkMeta {
           DynBins::U16(_) | DynBins::U32(_) => (),
           DynBins::U64(_) => {
             return Err(PcoError::corruption(
-              "IntConv delta encodings are not supported on 64-bit types",
+              "Conv1 delta encodings are not supported on 64-bit types",
             ))
           }
         }
