@@ -9,6 +9,7 @@
 //! passed in, returning an insufficient data error if the `&[u8]` passed in is not long enough.
 
 #![allow(clippy::uninit_vec)]
+#![allow(clippy::manual_non_exhaustive)] // sometimes we want to ban explicit construction within the crate too
 #![deny(clippy::unused_unit)]
 #![deny(dead_code)]
 

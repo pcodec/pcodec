@@ -116,7 +116,7 @@ pub enum DeltaEncoding {
     secondary_uses_delta: bool,
   },
   /// TODO document
-  IntConv1(DeltaConv1Config),
+  Conv1(DeltaConv1Config),
 }
 
 impl DeltaEncoding {
@@ -189,7 +189,7 @@ impl DeltaEncoding {
           weights.push(i32::from_latent_ordered(reader.read_uint(32)) as i64);
         }
 
-        Self::IntConv1(DeltaConv1Config {
+        Self::Conv1(DeltaConv1Config {
           quantization,
           bias,
           weights,
@@ -210,7 +210,7 @@ impl DeltaEncoding {
       Self::NoOp => 0,
       Self::Consecutive { .. } => 1,
       Self::Lookback { .. } => 2,
-      Self::IntConv1(_) => 3,
+      Self::Conv1(_) => 3,
     };
     writer.write_bitlen(
       variant,
@@ -240,7 +240,7 @@ impl DeltaEncoding {
         );
         writer.write_bool(*secondary_uses_delta);
       }
-      Self::IntConv1(config) => {
+      Self::Conv1(config) => {
         writer.write_bitlen(
           config.quantization,
           BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION,
@@ -259,7 +259,7 @@ impl DeltaEncoding {
 
   pub(crate) fn latent_type(&self) -> Option<LatentType> {
     match self {
-      Self::NoOp | Self::Consecutive { .. } | Self::IntConv1(_) => Option::None,
+      Self::NoOp | Self::Consecutive { .. } | Self::Conv1(_) => Option::None,
       Self::Lookback { .. } => Some(LatentType::U32),
     }
   }
@@ -304,10 +304,10 @@ impl DeltaEncoding {
         },
         LatentVarKey::Secondary,
       ) => LatentVarDeltaEncoding::NoOp,
-      (Self::IntConv1(config), LatentVarKey::Primary) => {
+      (Self::Conv1(config), LatentVarKey::Primary) => {
         LatentVarDeltaEncoding::IntConv1(config.clone())
       }
-      (Self::IntConv1(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
+      (Self::Conv1(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
     }
   }
 }

@@ -63,7 +63,7 @@ pub fn new_int_conv(order: usize, latents: &DynLatents) -> PcoResult<Option<Delt
       int_conv1::choose_config(order, latents)
     }
   )
-  .map(DeltaEncoding::IntConv1);
+  .map(DeltaEncoding::Conv1);
   Ok(delta_encoding)
 }
 
@@ -87,7 +87,7 @@ pub fn compute_delta_latent_var(
   range: Range<usize>,
 ) -> Option<DynLatents> {
   match delta_encoding {
-    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } | DeltaEncoding::IntConv1(_) => None,
+    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } | DeltaEncoding::Conv1(_) => None,
     DeltaEncoding::Lookback { config, .. } => {
       let res = match_latent_enum!(
         primary_latents,

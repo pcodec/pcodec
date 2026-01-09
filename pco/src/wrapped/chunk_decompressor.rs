@@ -15,8 +15,6 @@ pub struct ChunkDecompressorInner {
 
 impl ChunkDecompressorInner {
   fn new(meta: ChunkMeta) -> PcoResult<Self> {
-    meta.validate_delta_encoding()?;
-
     let per_latent_var = meta.per_latent_var.as_ref().map_result(|key, latent_var| {
       let delta_encoding = meta.delta_encoding.for_latent_var(key);
       DynChunkLatentDecompressor::create(latent_var, delta_encoding)
