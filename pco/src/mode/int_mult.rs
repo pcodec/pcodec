@@ -6,7 +6,9 @@ use std::mem;
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, Number};
-use crate::metadata::DynLatents;
+use crate::dyn_latent_slice::DynLatentSlice;
+use crate::errors::PcoResult;
+use crate::metadata::{DynLatent, DynLatents};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 
 // riemann zeta function
@@ -30,17 +32,26 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
   }
 
   SplitLatents {
-    primary: DynLatents::new(mults).unwrap(),
-    secondary: Some(DynLatents::new(adjs).unwrap()),
+    primary: DynLatents::new(mults),
+    secondary: Some(DynLatents::new(adjs)),
   }
 }
 
 #[inline(never)]
-pub(crate) fn join_latents<L: Latent>(base: L, primary: &mut [L], secondary: Option<&DynLatents>) {
-  let secondary = secondary.unwrap().downcast_ref::<L>().unwrap();
-  for (mult_and_dst, &adj) in primary.iter_mut().zip(secondary.iter()) {
-    *mult_and_dst = (*mult_and_dst * base).wrapping_add(adj);
+pub(crate) fn join_latents<T: Number>(
+  dyn_base: DynLatent,
+  primary: DynLatentSlice,
+  secondary: Option<DynLatentSlice>,
+  dst: &mut [T],
+) -> PcoResult<()> {
+  let base = *dyn_base.downcast_ref::<T::L>().unwrap();
+  let primary = primary.downcast_unwrap::<T::L>();
+  let secondary = secondary.unwrap().downcast_unwrap::<T::L>();
+  for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
+    *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
   }
+
+  Ok(())
 }
 
 fn calc_gcd<L: Latent>(mut x: L, mut y: L) -> L {
@@ -101,19 +112,6 @@ fn calc_triple_gcd<L: Latent>(triple: &[L]) -> L {
   }
 
   calc_gcd(b - a, c - a)
-}
-
-fn single_category_entropy(p: f64) -> f64 {
-  if p == 0.0 || p == 1.0 {
-    0.0
-  } else {
-    -p * p.log2()
-  }
-}
-
-pub(crate) fn worse_case_categorical_entropy(concentrated_p: f64, n_categories_m1: f64) -> f64 {
-  single_category_entropy(concentrated_p)
-    + n_categories_m1 * single_category_entropy((1.0 - concentrated_p) / n_categories_m1)
 }
 
 fn filter_score_triple_gcd(gcd: f64, triples_w_gcd: usize, total_triples: usize) -> Option<f64> {
@@ -178,7 +176,7 @@ fn filter_score_triple_gcd(gcd: f64, triples_w_gcd: usize, total_triples: usize)
   //   converges annoyingly slowly in some cases.
   // So instead we use the method of false position.
   let concentrated_p = solve_root_by_false_position(f, lb, ub)?;
-  let worst_case_entropy_mod_gcd = worse_case_categorical_entropy(concentrated_p, gcd_m1);
+  let worst_case_entropy_mod_gcd = super::worst_case_categorical_entropy(concentrated_p, gcd_m1);
   let worst_case_bits_saved = gcd.log2() - worst_case_entropy_mod_gcd;
   if worst_case_bits_saved < MULT_REQUIRED_BITS_SAVED_PER_NUM {
     return None;
@@ -261,18 +259,21 @@ mod tests {
     let base = 4_u32;
     let latents = split_latents(&nums, base);
     let mut primary = latents.primary.downcast::<u32>().unwrap();
-    let secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
+    let mut secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
+    let mut dst = vec![0; nums.len()];
     assert_eq!(&primary, &vec![2_u32, 0, 1]);
     assert_eq!(&secondary, &vec![0_u32, 1, 1]);
 
     // JOIN
     join_latents(
-      base,
-      &mut primary,
-      DynLatents::new(secondary).as_ref(),
-    );
+      DynLatent::new(base),
+      DynLatentSlice::U32(&mut primary),
+      Some(DynLatentSlice::U32(&mut secondary)),
+      &mut dst,
+    )
+    .unwrap();
 
-    assert_eq!(primary, nums);
+    assert_eq!(dst, nums);
   }
 
   #[test]

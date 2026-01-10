@@ -2,7 +2,7 @@ use std::ptr;
 
 use crate::data_types::Latent;
 
-pub fn choose_pivot<L: Latent>(latents: &mut [L]) -> L {
+pub fn choose_pivot<L: Latent>(latents: &[L]) -> L {
   // Minimum length to choose the median-of-medians method.
   // Shorter slices use the simple median-of-three method.
   const SHORTEST_MEDIAN_OF_MEDIANS: usize = 50;

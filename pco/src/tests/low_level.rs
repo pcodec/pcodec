@@ -102,7 +102,7 @@ fn test_low_level_wrapped() -> PcoResult<()> {
     Chunk {
       nums: (0..1700).collect::<Vec<_>>(),
       config: ChunkConfig {
-        delta_spec: DeltaSpec::None,
+        delta_spec: DeltaSpec::NoOp,
         paging_spec: PagingSpec::EqualPagesUpTo(600),
         ..Default::default()
       },

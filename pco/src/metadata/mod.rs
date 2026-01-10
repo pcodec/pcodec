@@ -1,7 +1,7 @@
 pub use bin::Bin;
 pub use chunk::ChunkMeta;
 pub use chunk_latent_var::ChunkLatentVarMeta;
-pub use delta_encoding::{DeltaConsecutiveConfig, DeltaEncoding, DeltaLookbackConfig};
+pub use delta_encoding::{DeltaConv1Config, DeltaEncoding, DeltaLookbackConfig};
 pub use dyn_bins::DynBins;
 pub use dyn_latent::DynLatent;
 pub use dyn_latents::DynLatents;

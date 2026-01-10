@@ -1,11 +1,11 @@
-use std::mem;
-
-use crate::data_types::{unsigneds, ModeAndLatents, Number};
+use crate::constants::Bitlen;
+use crate::data_types::{unsigneds, ModeAndLatents, Number, Signed};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatents, Mode};
-use crate::{describers, int_mult_utils, ChunkConfig};
+use crate::metadata::{ChunkMeta, Mode};
+use crate::{describers, ChunkConfig};
 
 macro_rules! impl_signed {
   ($t: ty, $latent: ty, $header_byte: expr) => {
@@ -20,7 +20,7 @@ macro_rules! impl_signed {
           .expect("invalid mode for signed type")
       }
 
-      fn mode_is_valid(mode: Mode) -> bool {
+      fn mode_is_valid(mode: &Mode) -> bool {
         unsigneds::mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
@@ -38,23 +38,26 @@ macro_rules! impl_signed {
       fn to_latent_ordered(self) -> Self::L {
         self.wrapping_sub(Self::MIN) as $latent
       }
-      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        match mode {
-          Mode::Classic => (),
-          Mode::IntMult(dyn_latent) => {
-            let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary)
-          }
-          _ => unreachable!("impossible mode for signed ints"),
-        }
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) -> PcoResult<()> {
+        unsigneds::join_latents(mode, primary, secondary, dst)
       }
+    }
 
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        unsafe { mem::transmute(slice) }
+    impl Signed for $t {
+      const BITS: Bitlen = Self::BITS;
+      const ZERO: Self = 0;
+      const MAX: Self = Self::MAX;
+
+      fn from_i64(x: i64) -> Self {
+        x as Self
       }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self.cast_unsigned()
+      fn to_f64(self) -> f64 {
+        self as f64
       }
     }
   };

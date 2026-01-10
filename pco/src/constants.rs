@@ -13,11 +13,14 @@ pub const BITS_TO_ENCODE_ANS_SIZE_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_MODE_VARIANT: Bitlen = 4;
 pub const BITS_TO_ENCODE_DELTA_ENCODING_VARIANT: Bitlen = 4;
 pub const BITS_TO_ENCODE_DELTA_ENCODING_ORDER: Bitlen = 3;
-pub const BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG: Bitlen = 5;
-pub const BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG: Bitlen = 4;
+pub const BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION: Bitlen = 5;
+pub const BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS: Bitlen = 5;
+pub const BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG: Bitlen = 5;
+pub const BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG: Bitlen = 4;
 pub const BITS_TO_ENCODE_N_BINS: Bitlen = 15;
 // conservative: wide enough to support quantizing float datasets with 255 unused bits of precision
 pub const BITS_TO_ENCODE_QUANTIZE_K: Bitlen = 8;
+pub const BITS_TO_ENCODE_DICT_LEN: Bitlen = 25; // enough to encode MAX_ENTRIES
 
 // + 9 because we might read an extra u64 (8 bytes), plus 1 for good measure
 pub const OVERSHOOT_PADDING: usize = 9;
@@ -30,7 +33,9 @@ pub const MAX_ANS_BITS: Bitlen = 14;
 pub const MAX_ANS_BYTES: usize = MAX_ANS_BITS.div_ceil(8) as usize;
 pub const LIMITED_UNOPTIMIZED_BINS_LOG: Bitlen = 6;
 pub const MAX_COMPRESSION_LEVEL: usize = 12;
-pub const MAX_DELTA_ENCODING_ORDER: usize = 7;
+pub const MAX_CONSECUTIVE_DELTA_ORDER: usize = 7;
+pub const MAX_CONV1_DELTA_ORDER: usize = 32;
+pub const MAX_CONV1_DELTA_QUANTIZATION: Bitlen = (1 << BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION) - 1;
 pub const MAX_ENTRIES: usize = 1 << 24;
 pub const MAX_SUPPORTED_PRECISION: Bitlen = 128;
 pub const MAX_SUPPORTED_PRECISION_BYTES: usize = (MAX_SUPPORTED_PRECISION / 8) as usize;
@@ -66,7 +71,7 @@ mod tests {
   fn test_bits_to_encode_delta_encoding_order() {
     assert_can_encode(
       BITS_TO_ENCODE_DELTA_ENCODING_ORDER,
-      MAX_DELTA_ENCODING_ORDER,
+      MAX_CONSECUTIVE_DELTA_ORDER,
     );
   }
 
