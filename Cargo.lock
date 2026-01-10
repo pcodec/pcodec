@@ -638,12 +638,12 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "better_io"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92fde17f91e7ba10b2a07f8dff29530b77144894bc6ae850fbc66e1276af0d28"
 
 [[package]]
 name = "better_io"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92fde17f91e7ba10b2a07f8dff29530b77144894bc6ae850fbc66e1276af0d28"
+version = "0.2.0"
 
 [[package]]
 name = "bindgen"
@@ -946,7 +946,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "libc",
- "pco 0.4.6",
+ "pco 0.4.9",
 ]
 
 [[package]]
@@ -2238,9 +2238,9 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "numpy"
-version = "0.24.0"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7cfbf3f0feededcaa4d289fe3079b03659e85c5b5a177f4ba6fb01ab4fb3e39"
+checksum = "7aac2e6a6e4468ffa092ad43c39b81c79196c2bb773b8db4085f695efe3bba17"
 dependencies = [
  "half",
  "libc",
@@ -2379,23 +2379,23 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 [[package]]
 name = "pco"
 version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab068b64f2c6f074cbdcafc80ebd83a27da92a3848deba2fabc21eba6691fc65"
 dependencies = [
  "better_io 0.1.0",
- "dtype_dispatch 0.1.1",
+ "dtype_dispatch 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "half",
- "rand 0.8.5",
  "rand_xoshiro",
 ]
 
 [[package]]
 name = "pco"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab068b64f2c6f074cbdcafc80ebd83a27da92a3848deba2fabc21eba6691fc65"
+version = "0.4.9"
 dependencies = [
- "better_io 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "dtype_dispatch 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "better_io 0.2.0",
+ "dtype_dispatch 0.1.1",
  "half",
+ "rand 0.8.5",
  "rand_xoshiro",
 ]
 
@@ -2405,7 +2405,7 @@ version = "0.4.3"
 dependencies = [
  "anyhow",
  "arrow",
- "better_io 0.1.0",
+ "better_io 0.2.0",
  "blosc2-src",
  "brotli",
  "bytes",
@@ -2415,7 +2415,7 @@ dependencies = [
  "indicatif",
  "once_cell",
  "parquet",
- "pco 0.4.6",
+ "pco 0.4.9",
  "q_compress",
  "rayon",
  "rust-openzl",
@@ -2436,16 +2436,16 @@ version = "0.1.0"
 dependencies = [
  "half",
  "jni",
- "pco 0.4.6",
+ "pco 0.4.9",
 ]
 
 [[package]]
 name = "pco_python"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "half",
  "numpy",
- "pco 0.4.6",
+ "pco 0.4.9",
  "pyo3",
 ]
 
@@ -2632,11 +2632,10 @@ dependencies = [
 
 [[package]]
 name = "pyo3"
-version = "0.24.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5203598f366b11a02b13aa20cab591229ff0a89fd121a308a5df751d5fc9219"
+checksum = "ab53c047fcd1a1d2a8820fe84f05d6be69e9526be40cb03b73f86b6b03e6d87d"
 dependencies = [
- "cfg-if",
  "indoc",
  "libc",
  "memoffset",
@@ -2650,19 +2649,18 @@ dependencies = [
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.24.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99636d423fa2ca130fa5acde3059308006d46f98caac629418e53f7ebb1e9999"
+checksum = "b455933107de8642b4487ed26d912c2d899dec6114884214a0b3bb3be9261ea6"
 dependencies = [
- "once_cell",
  "target-lexicon",
 ]
 
 [[package]]
 name = "pyo3-ffi"
-version = "0.24.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78f9cf92ba9c409279bc3305b5409d90db2d2c22392d443a87df3a1adad59e33"
+checksum = "1c85c9cbfaddf651b1221594209aed57e9e5cff63c4d11d1feead529b872a089"
 dependencies = [
  "libc",
  "pyo3-build-config",
@@ -2670,9 +2668,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros"
-version = "0.24.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b999cb1a6ce21f9a6b147dcf1be9ffedf02e0043aec74dc390f3007047cecd9"
+checksum = "0a5b10c9bf9888125d917fb4d2ca2d25c8df94c7ab5a52e13313a07e050a3b02"
 dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
@@ -2682,9 +2680,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros-backend"
-version = "0.24.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "822ece1c7e1012745607d5cf0bcb2874769f0f7cb34c4cde03b9358eb9ef911a"
+checksum = "03b51720d314836e53327f5871d4c0cfb4fb37cc2c4a11cc71907a86342c40f9"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -3950,7 +3948,7 @@ dependencies = [
  "oneshot",
  "parking_lot",
  "paste",
- "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pco 0.4.6",
  "pin-project-lite",
  "prost",
  "rustc-hash 2.1.1",
@@ -4004,7 +4002,7 @@ version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9313c2c58af7c605680917d908f2a7df4591a2e018489da4a9489273e456527b"
 dependencies = [
- "pco 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pco 0.4.6",
  "prost",
  "vortex-array",
  "vortex-buffer",

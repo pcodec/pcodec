@@ -53,12 +53,11 @@ impl<L: Latent> State<L> {
   }
 }
 
-// LatentBatchDecompressor does the main work of decoding bytes into Latents
 #[derive(Clone, Debug)]
-pub struct LatentPageDecompressor<L: Latent> {
+pub struct PageLatentDecompressor<L: Latent> {
   // known information about this latent variable
   bytes_per_offset: usize,
-  bin_lowers: Vec<L>,
+  state_lowers: Vec<L>,
   needs_ans: bool,
   decoder: ans::Decoder,
   delta_encoding: DeltaEncoding,
@@ -68,7 +67,7 @@ pub struct LatentPageDecompressor<L: Latent> {
   state: State<L>,
 }
 
-impl<L: Latent> LatentPageDecompressor<L> {
+impl<L: Latent> PageLatentDecompressor<L> {
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
   unsafe fn decompress_full_ans_symbols(&mut self, reader: &mut BitReader) {
@@ -83,8 +82,8 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] =
       self.state.ans_state_idxs;
-    let bin_lowers = self.bin_lowers.as_slice();
     let ans_nodes = self.decoder.nodes.as_slice();
+    let lowers = self.state_lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -99,7 +98,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
           let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
           let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = *unsafe { bin_lowers.get_unchecked(node.symbol as usize) };
+          let lower = unsafe { *lowers.get_unchecked($state_idx as usize) };
           let offset_bits = node.offset_bits as Bitlen;
           self
             .state
@@ -131,13 +130,14 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let mut state_idxs = self.state.ans_state_idxs;
     for i in 0..batch_n {
       let j = i % ANS_INTERLEAVING;
+      let state_idx = state_idxs[j] as usize;
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = unsafe { self.decoder.nodes.get_unchecked(state_idxs[j] as usize) };
+      let node = unsafe { self.decoder.nodes.get_unchecked(state_idx) };
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = self.bin_lowers[node.symbol as usize];
+      let lower = unsafe { *self.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
       self
         .state
@@ -161,30 +161,46 @@ impl<L: Latent> LatentPageDecompressor<L> {
     let base_bit_idx = reader.bit_idx();
     let src = reader.src;
     let state = &mut self.state;
-    for (dst, (&offset_bits, &offset_bits_csum)) in dst.iter_mut().zip(
-      state
-        .offset_bits_scratch
-        .iter()
-        .zip(state.offset_bits_csum_scratch.iter()),
+    for (dst, (&offset_bits, (&offset_bits_csum, &lower))) in dst.iter_mut().zip(
+      state.offset_bits_scratch.iter().zip(
+        state
+          .offset_bits_csum_scratch
+          .iter()
+          .zip(state.lowers_scratch.iter()),
+      ),
     ) {
-      let bit_idx = base_bit_idx + offset_bits_csum as usize;
+      let bit_idx = base_bit_idx as Bitlen + offset_bits_csum;
       let byte_idx = bit_idx / 8;
-      let bits_past_byte = bit_idx as Bitlen % 8;
-      *dst = bit_reader::read_uint_at::<L, READ_BYTES>(src, byte_idx, bits_past_byte, offset_bits);
+      let bits_past_byte = bit_idx % 8;
+      let latent_minus_lower = bit_reader::read_uint_at::<L, READ_BYTES>(
+        src,
+        byte_idx as usize,
+        bits_past_byte,
+        offset_bits,
+      );
+
+      // On aarch64, lowers are added outside this loop for better SIMD; otherwise, add here.
+      *dst = if cfg!(target_arch = "aarch64") {
+        latent_minus_lower
+      } else {
+        latent_minus_lower.wrapping_add(lower)
+      };
     }
     let final_bit_idx = base_bit_idx
       + state.offset_bits_csum_scratch[dst.len() - 1] as usize
       + state.offset_bits_scratch[dst.len() - 1] as usize;
     reader.stale_byte_idx = final_bit_idx / 8;
     reader.bits_past_byte = final_bit_idx as Bitlen % 8;
+
+    // On aarch64, lower is added outside decompress_offsets loop for better SIMD.
+    if cfg!(target_arch = "aarch64") {
+      self.add_lowers(dst);
+    }
   }
 
   #[inline(never)]
   fn add_lowers(&self, dst: &mut [L]) {
-    for (&lower, dst) in self.state.lowers_scratch[0..dst.len()]
-      .iter()
-      .zip(dst.iter_mut())
-    {
+    for (dst, &lower) in dst.iter_mut().zip(self.state.lowers_scratch.iter()) {
       *dst = dst.wrapping_add(lower);
     }
   }
@@ -217,10 +233,7 @@ impl<L: Latent> LatentPageDecompressor<L> {
     // latents.
     match self.bytes_per_offset {
       // all
-      0 => {
-        dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]);
-        return;
-      }
+      0 => dst.copy_from_slice(&self.state.lowers_scratch[..dst.len()]),
       // u8
       1..=2 if L::BITS == 8 => self.decompress_offsets::<2>(reader, dst),
       // u16
@@ -232,13 +245,11 @@ impl<L: Latent> LatentPageDecompressor<L> {
       1..=8 if L::BITS == 64 => self.decompress_offsets::<8>(reader, dst),
       9..=15 if L::BITS == 64 => self.decompress_offsets::<15>(reader, dst),
       _ => panic!(
-        "[LatentBatchDecompressor] {} byte read not supported for {}-bit Latents",
+        "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         self.bytes_per_offset,
         L::BITS
       ),
     }
-
-    self.add_lowers(dst);
   }
 
   pub unsafe fn decompress_batch(
@@ -290,18 +301,18 @@ impl<L: Latent> LatentPageDecompressor<L> {
   }
 }
 
-// Because the size of LatentPageDecompressor is enormous (largely due to
+// Because the size of PageLatentDecompressor is enormous (largely due to
 // scratch buffers), it makes more sense to allocate them on the heap. We only
 // need to derefernce them once per batch, which is plenty infrequent.
 // TODO: consider an arena for these?
-type BoxedLatentPageDecompressor<L> = Box<LatentPageDecompressor<L>>;
+type BoxedPageLatentDecompressor<L> = Box<PageLatentDecompressor<L>>;
 
 define_latent_enum!(
   #[derive()]
-  pub DynLatentPageDecompressor(BoxedLatentPageDecompressor)
+  pub DynPageLatentDecompressor(BoxedPageLatentDecompressor)
 );
 
-impl DynLatentPageDecompressor {
+impl DynPageLatentDecompressor {
   pub fn create<L: Latent>(
     ans_size_log: Bitlen,
     bins: &[Bin<L>],
@@ -310,10 +321,14 @@ impl DynLatentPageDecompressor {
     stored_delta_state: Vec<L>,
   ) -> PcoResult<Self> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
-    let bin_lowers = bins.iter().map(|bin| bin.lower).collect();
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
     let ans_spec = Spec::from_weights(ans_size_log, weights)?;
+    let state_lowers = ans_spec
+      .state_symbols
+      .iter()
+      .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
+      .collect();
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
     let (working_delta_state, delta_state_pos) = match delta_encoding {
@@ -352,15 +367,15 @@ impl DynLatentPageDecompressor {
         None
       };
 
-    let lpd = LatentPageDecompressor {
+    let pld = PageLatentDecompressor {
       bytes_per_offset,
-      bin_lowers,
+      state_lowers,
       needs_ans,
       decoder,
       delta_encoding,
       maybe_constant_value,
       state,
     };
-    Ok(Self::new(Box::new(lpd)).unwrap())
+    Ok(Self::new(Box::new(pld)).unwrap())
   }
 }

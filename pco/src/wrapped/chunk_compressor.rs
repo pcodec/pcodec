@@ -1,19 +1,19 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
-use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar};
+use crate::chunk_latent_compressor::{
+  ChunkLatentCompressor, DynChunkLatentCompressor, DynChunkLatentCompressorScratch,
+};
+use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
-  Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_COMPRESSION_LEVEL, MAX_DELTA_ENCODING_ORDER,
-  MAX_ENTRIES, OVERSHOOT_PADDING, PAGE_PADDING,
+  Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
+  MAX_DELTA_ENCODING_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, LatentType, Number};
 use crate::delta::DeltaState;
 use crate::errors::{PcoError, PcoResult};
 use crate::histograms::histogram;
-use crate::latent_chunk_compressor::{
-  DynLatentChunkCompressor, LatentChunkCompressor, TrainedBins,
-};
 use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::delta_encoding::{DeltaConsecutiveConfig, DeltaLookbackConfig};
@@ -27,6 +27,7 @@ use crate::wrapped::guarantee;
 use crate::{
   ans, bin_optimization, bits, data_types, delta, ChunkConfig, PagingSpec, FULL_BATCH_N,
 };
+use std::any;
 use std::cmp::min;
 use std::io::Write;
 
@@ -121,8 +122,15 @@ fn train_infos<L: Latent>(
 #[derive(Clone, Debug)]
 pub struct ChunkCompressor {
   meta: ChunkMeta,
-  latent_chunk_compressors: PerLatentVar<DynLatentChunkCompressor>,
+  chunk_latent_compressors: PerLatentVar<DynChunkLatentCompressor>,
   page_infos: Vec<PageInfo>,
+}
+
+/// Scratch buffers used by `ChunkCompressor` during compression.
+/// Not Send or Sync, but can be reused across pages within a single chunk to
+/// reduce allocations.
+pub struct ChunkCompressorScratch {
+  per_var: PerLatentVar<DynChunkLatentCompressorScratch>,
 }
 
 fn bins_from_compression_infos<L: Latent>(infos: &[BinCompressionInfo<L>]) -> Vec<Bin<L>> {
@@ -268,7 +276,7 @@ fn new_candidate_w_split_and_delta_encoding(
 
   // training bins
   let mut var_metas = PerLatentVarBuilder::default();
-  let mut latent_chunk_compressors = PerLatentVarBuilder::default();
+  let mut chunk_latent_compressors = PerLatentVarBuilder::default();
   let mut bin_countss = PerLatentVarBuilder::default();
   for (key, latents) in latents.enumerated() {
     let unoptimized_bins_log = match key {
@@ -283,7 +291,7 @@ fn new_candidate_w_split_and_delta_encoding(
       ),
     };
 
-    let (var_meta, lcc, bin_counts) = match_latent_enum!(
+    let (var_meta, clc, bin_counts) = match_latent_enum!(
       latents,
       DynLatents<L>(latents) => {
         let contiguous_deltas = collect_contiguous_latents(&latents, &page_infos, key);
@@ -293,23 +301,23 @@ fn new_candidate_w_split_and_delta_encoding(
 
         let ans_size_log = trained.ans_size_log;
         let bin_counts = trained.counts.to_vec();
-        let lcc = DynLatentChunkCompressor::new(
-          LatentChunkCompressor::new(trained, &bins, latents)?
+        let clc = DynChunkLatentCompressor::new(
+          ChunkLatentCompressor::new(trained, &bins, latents)?
         ).unwrap();
         let var_meta = ChunkLatentVarMeta {
           bins: DynBins::new(bins).unwrap(),
           ans_size_log,
         };
-        (var_meta, lcc, bin_counts)
+        (var_meta, clc, bin_counts)
       }
     );
     var_metas.set(key, var_meta);
-    latent_chunk_compressors.set(key, lcc);
+    chunk_latent_compressors.set(key, clc);
     bin_countss.set(key, bin_counts);
   }
 
   let var_metas = var_metas.into();
-  let latent_chunk_compressors = latent_chunk_compressors.into();
+  let chunk_latent_compressors = chunk_latent_compressors.into();
   let bin_countss = bin_countss.into();
 
   let meta = ChunkMeta {
@@ -319,7 +327,7 @@ fn new_candidate_w_split_and_delta_encoding(
   };
   let chunk_compressor = ChunkCompressor {
     meta,
-    latent_chunk_compressors,
+    chunk_latent_compressors,
     page_infos,
   };
 
@@ -478,7 +486,7 @@ fn fallback_chunk_compressor(
   let (latents, page_infos) =
     delta_encode_and_build_page_infos(DeltaEncoding::None, &n_per_page, latents);
 
-  let (meta, lcc) = match_latent_enum!(
+  let (meta, clc) = match_latent_enum!(
     latents.primary,
     DynLatents<L>(latents) => {
       let infos = vec![BinCompressionInfo::<L> {
@@ -489,7 +497,7 @@ fn fallback_chunk_compressor(
       let meta = guarantee::baseline_chunk_meta::<L>();
       let latent_var_meta = &meta.per_latent_var.primary;
 
-      let lcc = LatentChunkCompressor::new(
+      let clc = ChunkLatentCompressor::new(
         TrainedBins {
           infos,
           ans_size_log: 0,
@@ -498,15 +506,15 @@ fn fallback_chunk_compressor(
         latent_var_meta.bins.downcast_ref::<L>().unwrap(),
         latents,
       )?;
-      (meta, DynLatentChunkCompressor::new(lcc).unwrap())
+      (meta, DynChunkLatentCompressor::new(clc).unwrap())
     }
   );
 
   Ok(ChunkCompressor {
     meta,
-    latent_chunk_compressors: PerLatentVar {
+    chunk_latent_compressors: PerLatentVar {
       delta: None,
-      primary: lcc,
+      primary: clc,
       secondary: None,
     },
     page_infos,
@@ -521,11 +529,13 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
 
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
   if !T::mode_is_valid(mode) {
-    return Err(PcoError::invalid_argument(
+    return Err(PcoError::invalid_argument(format!(
       "The chosen mode of {:?} was invalid for type {}. \
       This is most likely due to an invalid argument, but if using Auto mode \
       spec, it could also be a bug in pco.",
-    ));
+      mode,
+      any::type_name::<T>(),
+    )));
   }
 
   let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
@@ -572,7 +582,7 @@ impl ChunkCompressor {
       });
     }
 
-    let worst_case_size = meta.exact_size()
+    let worst_case_size = meta.max_size()
       + n_pages * meta.exact_page_meta_size()
       + worst_case_body_bit_size.div_ceil(8);
 
@@ -598,39 +608,43 @@ impl ChunkCompressor {
   /// This can be useful when building the file as a `Vec<u8>` in memory;
   /// you can `.reserve()` ahead of time.
   pub fn chunk_meta_size_hint(&self) -> usize {
-    self.meta.exact_size()
+    self.meta.max_size()
   }
 
   /// Writes the chunk metadata to the destination.
   ///
   /// Will return an error if the provided `Write` errors.
   pub fn write_chunk_meta<W: Write>(&self, dst: W) -> PcoResult<W> {
-    let mut writer = BitWriter::new(
-      dst,
-      self.meta.exact_size() + OVERSHOOT_PADDING,
-    );
+    let mut writer = BitWriter::new(dst, self.meta.max_size() + OVERSHOOT_PADDING);
     unsafe { self.meta.write_to(&mut writer)? };
     Ok(writer.into_inner())
   }
 
-  fn dissect_page(&self, page_idx: usize) -> PcoResult<DissectedPage> {
+  fn dissect_page(
+    &self,
+    page_idx: usize,
+    scratch: &mut ChunkCompressorScratch,
+  ) -> PcoResult<DissectedPage> {
     let Self {
-      latent_chunk_compressors,
+      chunk_latent_compressors,
       page_infos,
       ..
     } = self;
 
     let page_info = &page_infos[page_idx];
 
-    let per_latent_var = latent_chunk_compressors.as_ref().map(|key, lcc| {
-      let range = page_info.range_for_latent_var(key);
-      match_latent_enum!(
-        lcc,
-        DynLatentChunkCompressor<L>(inner) => {
-          inner.dissect_page(range)
-        }
-      )
-    });
+    let per_latent_var = chunk_latent_compressors
+      .as_ref()
+      .zip_exact(scratch.per_var.as_mut())
+      .map(|key, (clc, latent_scratch)| {
+        let range = page_info.range_for_latent_var(key);
+        match_latent_enum!(
+          clc,
+          DynChunkLatentCompressor<L>(inner) => {
+            inner.dissect_page(range, latent_scratch.downcast_mut::<L>().unwrap())
+          }
+        )
+      });
 
     Ok(DissectedPage {
       page_n: page_info.page_n,
@@ -649,16 +663,16 @@ impl ChunkCompressor {
   fn page_size_hint_inner(&self, page_idx: usize, page_size_overestimation: f64) -> usize {
     let page_info = &self.page_infos[page_idx];
     let mut body_bit_size = 0;
-    for (_, (lcc, page_info_var)) in self
-      .latent_chunk_compressors
+    for (_, (clc, page_info_var)) in self
+      .chunk_latent_compressors
       .as_ref()
       .zip_exact(page_info.per_latent_var.as_ref())
       .enumerated()
     {
       let n_stored_latents = page_info_var.range.len();
       let avg_bits_per_latent = match_latent_enum!(
-        lcc,
-        DynLatentChunkCompressor<L>(inner) => { inner.avg_bits_per_latent }
+        clc,
+        DynChunkLatentCompressor<L>(inner) => { inner.avg_bits_per_latent }
       );
       let nums_bit_size = n_stored_latents as f64 * avg_bits_per_latent;
       body_bit_size += (nums_bit_size * page_size_overestimation).ceil() as usize;
@@ -678,16 +692,16 @@ impl ChunkCompressor {
         batch_start + FULL_BATCH_N,
         dissected_page.page_n,
       );
-      for (_, (dissected_page_var, lcc)) in dissected_page
+      for (_, (page_dissected_var, clc)) in dissected_page
         .per_latent_var
         .as_ref()
-        .zip_exact(self.latent_chunk_compressors.as_ref())
+        .zip_exact(self.chunk_latent_compressors.as_ref())
         .enumerated()
       {
         match_latent_enum!(
-          lcc,
-          DynLatentChunkCompressor<L>(inner) => {
-            inner.write_dissected_batch(dissected_page_var, batch_start, writer)?;
+          clc,
+          DynChunkLatentCompressor<L>(inner) => {
+            inner.write_dissected_batch(page_dissected_var, batch_start, writer)?;
           }
         );
       }
@@ -696,10 +710,28 @@ impl ChunkCompressor {
     Ok(())
   }
 
-  /// Writes a page to the destination.
+  pub fn build_scratch(&self) -> ChunkCompressorScratch {
+    let per_var = self.chunk_latent_compressors.as_ref().map(|_, clc| {
+      match_latent_enum!(
+        clc,
+        DynChunkLatentCompressor<L>(inner) => {
+          DynChunkLatentCompressorScratch::new(inner.build_scratch()).unwrap()
+        }
+      )
+    });
+    ChunkCompressorScratch { per_var }
+  }
+
+  /// Writes a page to the destination, using pre-allocated scratch space.
   ///
-  /// Will return an error if the provided `Write` errors.
-  pub fn write_page<W: Write>(&self, page_idx: usize, dst: W) -> PcoResult<W> {
+  /// Will return an error if the provided `Write` errors or the scratch comes
+  /// from an incompatible chunk.
+  pub fn write_page_with_scratch<W: Write>(
+    &self,
+    page_idx: usize,
+    scratch: &mut ChunkCompressorScratch,
+    dst: W,
+  ) -> PcoResult<W> {
     let n_pages = self.page_infos.len();
     if page_idx >= n_pages {
       return Err(PcoError::invalid_argument(format!(
@@ -708,15 +740,15 @@ impl ChunkCompressor {
       )));
     }
 
-    let mut writer = BitWriter::new(dst, PAGE_PADDING);
+    let mut writer = BitWriter::new(dst, MAX_BATCH_LATENT_VAR_SIZE);
 
-    let dissected_page = self.dissect_page(page_idx)?;
+    let dissected_page = self.dissect_page(page_idx, scratch)?;
     let page_info = &self.page_infos[page_idx];
 
-    let ans_default_state_and_size_log = self.latent_chunk_compressors.as_ref().map(|_, lcc| {
+    let ans_default_state_and_size_log = self.chunk_latent_compressors.as_ref().map(|_, clc| {
       match_latent_enum!(
-        lcc,
-        DynLatentChunkCompressor<L>(inner) => { (inner.encoder.default_state(), inner.encoder.size_log()) }
+        clc,
+        DynChunkLatentCompressor<L>(inner) => { (inner.encoder.default_state(), inner.encoder.size_log()) }
       )
     });
 
@@ -745,6 +777,14 @@ impl ChunkCompressor {
     writer.finish_byte();
     writer.flush()?;
     Ok(writer.into_inner())
+  }
+
+  /// Writes a page to the destination.
+  ///
+  /// Will return an error if the provided `Write` errors.
+  pub fn write_page<W: Write>(&self, page_idx: usize, dst: W) -> PcoResult<W> {
+    let mut scratch = self.build_scratch();
+    self.write_page_with_scratch(page_idx, &mut scratch, dst)
   }
 }
 

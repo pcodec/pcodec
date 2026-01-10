@@ -16,7 +16,6 @@ pub fn header_size() -> usize {
     + wrapped_guarantee::header_size()
 }
 
-// TODO in 1.0 make these take NumberType enums?
 /// Returns the maximum possible byte size of a standalone chunk for a given
 /// latent type (e.g. u32 or u64) and count of numbers.
 pub fn chunk_size<L: Latent>(n: usize) -> usize {

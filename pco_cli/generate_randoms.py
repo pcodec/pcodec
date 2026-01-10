@@ -37,6 +37,15 @@ def write_dispatch(dtype, arr, name, base_dir):
 
 
 @writer
+def write_i16(arr, name, base_dir):
+    if arr.dtype != np.int16:
+        arr = np.floor(arr).astype(np.int16)
+    strs = [str(x) for x in arr]
+    full_name = f"i16_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
 def write_i32(arr, name, base_dir):
     if arr.dtype != np.int32:
         arr = np.floor(arr).astype(np.int32)
@@ -51,6 +60,15 @@ def write_u32(arr, name, base_dir):
         arr = np.floor(arr).astype(np.uint32)
     strs = [str(x) for x in arr]
     full_name = f"u32_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
+def write_u64(arr, name, base_dir):
+    if arr.dtype != np.uint64:
+        arr = np.floor(arr).astype(np.uint64)
+    strs = [str(x) for x in arr]
+    full_name = f"u64_{name}"
     write_generic(strs, arr, full_name, base_dir)
 
 
@@ -311,6 +329,31 @@ def diablo():
     return the_data
 
 
+@datagen("u64")
+def ids():
+    n_ids = 30000  # too many to have any hope of memorizing with bins
+    logits = np.random.uniform(0, 5, size=n_ids)
+    weight = np.exp(logits)
+    weight /= np.sum(weight)
+    unique = np.random.randint(0, 2**64, size=n_ids, dtype=np.uint64)
+    return np.random.choice(unique, size=n, replace=True, p=weight)
+
+
+@datagen("i16")
+def audio_ish():
+    noise = 16
+    # weights carefully chosen so that noise additions decay toward 0 slowly
+    true_lpc_weights = np.array([0.4455, -1.836, 2.39])
+    n_weights = len(true_lpc_weights)
+    residuals = np.random.uniform(-noise, noise, size=n)
+    res = np.empty(n)
+    res[0:n_weights] = 0.0
+    for i in range(n_weights, n):
+        pred = np.dot(true_lpc_weights, res[i - n_weights : i])
+        res[i] = pred + residuals[i]
+    return res
+
+
 def uniquify_preserving_order(xs):
     return list(dict.fromkeys(xs))
 
@@ -328,9 +371,9 @@ if __name__ == "__main__":
         type=str,
         nargs="*",
         help=(
-            'Datasets to generate. If not provided, all'
-            ' datasets are generated. Available datasets are:'
-            f' {", ".join(DATA_GENS)}'
+            "Datasets to generate. If not provided, all"
+            " datasets are generated. Available datasets are:"
+            f" {', '.join(DATA_GENS)}"
         ),
     )
     args = parser.parse_args()
