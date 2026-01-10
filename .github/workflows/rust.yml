@@ -26,7 +26,7 @@ jobs:
       - name: Install cross
         run: cargo install cross --locked
       - name: Test
-        run: cargo test -p pco
+        run: cargo test
       - name: Tests on aarch64
         run: cross test -p pco --target aarch64-unknown-linux-gnu
       - name: Clippy

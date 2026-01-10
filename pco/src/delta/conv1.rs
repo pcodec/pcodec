@@ -3,7 +3,8 @@ use crate::data_types::{Latent, Signed};
 use crate::metadata::DeltaConv1Config;
 use crate::{delta, sort_utils};
 
-// For now, using f32 ruins the precision of xtx and xty accumulations
+// We haven't yet studied whether f32 can be used in all cases without numerical
+// stability issues; accumulating the xtx and xty matrives is especially tricky.
 type Real = f64;
 
 const ENCODE_BATCH_SIZE: usize = 512;

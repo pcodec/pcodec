@@ -310,8 +310,6 @@ impl DeltaEncoding {
 
 #[cfg(test)]
 mod tests {
-  use std::i64;
-
   use super::*;
   use crate::bit_writer::BitWriter;
 

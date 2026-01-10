@@ -59,6 +59,7 @@ pub enum DeltaSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad delta encoding in adversarial cases.
+  /// At present, this will never consider `Conv1` delta encoding.
   #[default]
   Auto,
   /// Never uses delta encoding.
