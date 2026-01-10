@@ -4,9 +4,10 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
-use crate::constants::{DeltaLookback, OVERSHOOT_PADDING};
-use crate::data_types::LatentType;
+use crate::constants::{DeltaLookback, MAX_CONV1_DELTA_QUANTIZATION, OVERSHOOT_PADDING};
+use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
+use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::delta_encoding::DeltaEncoding;
 use crate::metadata::format_version::FormatVersion;
@@ -53,15 +54,41 @@ impl ChunkMeta {
           )));
         }
       }
-      DeltaEncoding::Conv1(_) => {
-        // TODO validate the values of the weights and bias avoid overflow
+      DeltaEncoding::Conv1(config) => {
         match &per_latent_var.primary.bins {
           DynBins::U16(_) | DynBins::U32(_) => (),
           DynBins::U64(_) => {
             return Err(PcoError::corruption(
-              "Conv1 delta encodings are not supported on 64-bit types",
+              "Conv1 delta encodings are not supported on types larger than 32 bits",
             ))
           }
+        }
+        let (l_bits, conv_bits) = match_latent_enum!(
+          &per_latent_var.primary.bins,
+          DynBins<L>(_bins) => {
+            (L::BITS, <L as Latent>::Conv::BITS)
+          }
+        );
+        let max_quantization = MAX_CONV1_DELTA_QUANTIZATION.min(conv_bits - 1);
+        if config.quantization > max_quantization {
+          return Err(PcoError::corruption(format!(
+            "Conv1 delta encoding quantization of {} exceeds max of {}",
+            config.quantization, max_quantization
+          )));
+        }
+
+        let max_pred = (config.bias::<i64>() as f64).abs()
+          + 2.0_f64.powi(l_bits as i32)
+            * config
+              .weights::<i64>()
+              .iter()
+              .map(|w| w.abs() as f64)
+              .sum::<f64>();
+        if max_pred >= 2.0_f64.powi(conv_bits as i32) {
+          return Err(PcoError::corruption(format!(
+            "Conv1 delta encoding weights and bias risk overflowing as high as {}",
+            max_pred,
+          )));
         }
       }
     }

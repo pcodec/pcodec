@@ -433,3 +433,25 @@ fn test_conv1() -> PcoResult<()> {
   assert_nums_eq(&decompressed, &nums, "conv1")?;
   Ok(())
 }
+
+#[test]
+fn test_conv1_degenerate() -> PcoResult<()> {
+  fn check<T: Number>(nums: Vec<T>, name: &str) -> PcoResult<()> {
+    let (compressed, _) = compress_w_meta(
+      &nums,
+      &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(3)),
+    )?;
+    let decompressed = simple_decompress::<T>(&compressed)?;
+    assert_nums_eq(&decompressed, &nums, name)
+  }
+
+  check::<u16>(vec![3], "short")?;
+  check::<u32>(vec![0; 100], "zeros")?;
+  let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
+  let mut nums = Vec::new();
+  for _ in 0..1000 {
+    nums.push(rng.gen_range(0..1000));
+  }
+  check::<u32>(nums, "no trend")?;
+  Ok(())
+}

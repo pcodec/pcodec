@@ -1,4 +1,4 @@
-use crate::constants::Bitlen;
+use crate::constants::{Bitlen, MAX_CONV1_DELTA_QUANTIZATION};
 use crate::data_types::{Latent, Signed};
 use crate::metadata::DeltaConv1Config;
 use crate::{delta, sort_utils};
@@ -306,6 +306,10 @@ fn autocorr_least_squares(v: &[Real], order: usize) -> Matrix {
 }
 
 pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv1Config> {
+  if latents.len() < order + 1 {
+    return None;
+  }
+
   let center = sort_utils::choose_pivot(latents);
   let v = latents
     .iter()
@@ -339,11 +343,13 @@ pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv
   // Therefore we require
   //   2^quantization * 2 * (total_abs_weight * L::MAX + abs_bias) <= L::Conv::MAX
   //   quantization <= log2(L::Conv::MAX / (total_abs_weight * L::MAX + abs_bias)) - 1
-  let quantization = (L::Conv::MAX.to_f64()
+  let quantization = ((L::Conv::MAX.to_f64()
     / (total_abs_weight * L::MAX.to_u64() as f64 + float_bias.abs() + 1.0))
     .log2()
     .floor() as i32
-    - 1;
+    - 1)
+    .min(MAX_CONV1_DELTA_QUANTIZATION as i32)
+    .min(L::Conv::BITS as i32 - 1);
   if quantization < 0 {
     return None;
   }

@@ -1,3 +1,4 @@
+use crate::constants::Bitlen;
 use crate::data_types::{unsigneds, ModeAndLatents, Number, Signed};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
@@ -48,6 +49,7 @@ macro_rules! impl_signed {
     }
 
     impl Signed for $t {
+      const BITS: Bitlen = Self::BITS;
       const ZERO: Self = 0;
       const MAX: Self = Self::MAX;
 

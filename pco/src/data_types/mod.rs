@@ -217,6 +217,7 @@ pub trait Signed:
 {
   const ZERO: Self;
   const MAX: Self;
+  const BITS: Bitlen;
 
   fn from_i64(x: i64) -> Self;
   fn to_f64(self) -> f64;

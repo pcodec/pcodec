@@ -35,6 +35,7 @@ pub const LIMITED_UNOPTIMIZED_BINS_LOG: Bitlen = 6;
 pub const MAX_COMPRESSION_LEVEL: usize = 12;
 pub const MAX_CONSECUTIVE_DELTA_ORDER: usize = 7;
 pub const MAX_CONV1_DELTA_ORDER: usize = 32;
+pub const MAX_CONV1_DELTA_QUANTIZATION: Bitlen = (1 << BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION) - 1;
 pub const MAX_ENTRIES: usize = 1 << 24;
 pub const MAX_SUPPORTED_PRECISION: Bitlen = 128;
 pub const MAX_SUPPORTED_PRECISION_BYTES: usize = (MAX_SUPPORTED_PRECISION / 8) as usize;
