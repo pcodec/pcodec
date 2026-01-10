@@ -7,7 +7,7 @@ use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedB
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
   Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
-  MAX_DELTA_ENCODING_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
+  MAX_CONSECUTIVE_DELTA_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, LatentType, Number};
@@ -16,7 +16,6 @@ use crate::errors::{PcoError, PcoResult};
 use crate::histograms::histogram;
 use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
-use crate::metadata::delta_encoding::DeltaLookbackConfig;
 use crate::metadata::dyn_bins::DynBins;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::page::PageMeta;
@@ -25,7 +24,7 @@ use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar, PerLatentVarBu
 use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, Mode};
 use crate::mode::classic;
 use crate::wrapped::guarantee;
-use crate::{ans, bin_optimization, bits, delta, ChunkConfig, PagingSpec, FULL_BATCH_N};
+use crate::{ans, bin_optimization, delta, ChunkConfig, PagingSpec, FULL_BATCH_N};
 use std::any;
 use std::cmp::min;
 use std::io::Write;
@@ -35,25 +34,7 @@ use std::io::Write;
 const PAGE_SIZE_OVERESTIMATION: f64 = 1.2;
 const N_PER_EXTRA_DELTA_GROUP: usize = 10000;
 const DELTA_GROUP_SIZE: usize = 200;
-const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
-const LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
 const LOOKBACK_REQUIRED_BYTE_SAVINGS_PER_N: f32 = 0.25;
-
-// TODO taking deltas of secondary latents has been proven to help slightly
-// in some cases, so we should consider it in the future
-
-fn new_lookback_delta_encoding(n: usize) -> DeltaEncoding {
-  DeltaEncoding::Lookback {
-    config: DeltaLookbackConfig {
-      window_n_log: bits::bits_to_encode_offset(n as u32 - 1).clamp(
-        LOOKBACK_MIN_WINDOW_N_LOG,
-        LOOKBACK_MAX_WINDOW_N_LOG,
-      ),
-      state_n_log: 0,
-    },
-    secondary_uses_delta: false,
-  }
-}
 
 // returns table size log
 fn quantize_weights<L: Latent>(
@@ -138,27 +119,6 @@ fn bins_from_compression_infos<L: Latent>(infos: &[BinCompressionInfo<L>]) -> Ve
   infos.iter().cloned().map(Bin::from).collect()
 }
 
-fn validate_config(config: &ChunkConfig) -> PcoResult<()> {
-  let compression_level = config.compression_level;
-  if compression_level > MAX_COMPRESSION_LEVEL {
-    return Err(PcoError::invalid_argument(format!(
-      "compression level may not exceed {} (was {})",
-      MAX_COMPRESSION_LEVEL, compression_level,
-    )));
-  }
-
-  if let DeltaSpec::TryConsecutive(order) = config.delta_spec {
-    if order > MAX_DELTA_ENCODING_ORDER {
-      return Err(PcoError::invalid_argument(format!(
-        "delta encoding order may not exceed {} (was {})",
-        MAX_DELTA_ENCODING_ORDER, order,
-      )));
-    }
-  }
-
-  Ok(())
-}
-
 fn validate_chunk_size(n: usize) -> PcoResult<()> {
   if n == 0 {
     return Err(PcoError::invalid_argument(
@@ -219,13 +179,17 @@ fn delta_encode_and_build_page_infos(
       start_idx..end_idx,
     );
 
-    let mut per_latent_var = latents.as_mut().map(|key, var_latents| {
+    let mut per_latent_var = latents.as_mut().map(|key, mut var_latents| {
       let encoding_for_var = delta_encoding.for_latent_var(key);
-      let delta_state = delta::encode_in_place(
-        &encoding_for_var,
-        page_delta_latents.as_ref(),
-        start_idx..end_idx,
-        var_latents,
+      let delta_state = match_latent_enum!(
+        &mut var_latents,
+        DynLatents<L>(var_latents) => {
+          DynLatents::new(delta::encode_in_place(
+            &encoding_for_var,
+            page_delta_latents.as_ref(),
+            &mut var_latents[start_idx..end_idx],
+          ))
+        }
       );
       // delta encoding in place leaves junk in the first n_latents_per_state
       let stored_start_idx = min(
@@ -321,11 +285,7 @@ fn new_candidate_w_split_and_delta_encoding(
   let chunk_latent_compressors = chunk_latent_compressors.into();
   let bin_countss = bin_countss.into();
 
-  let meta = ChunkMeta {
-    mode,
-    delta_encoding,
-    per_latent_var: var_metas,
-  };
+  let meta = ChunkMeta::new(mode, delta_encoding, var_metas)?;
   let chunk_compressor = ChunkCompressor {
     meta,
     chunk_latent_compressors,
@@ -407,19 +367,19 @@ fn choose_delta_encoding(
 
   let lookback_penalty = LOOKBACK_REQUIRED_BYTE_SAVINGS_PER_N * sample_n as f32;
   if best_cost > lookback_penalty {
-    let lookback_encoding = new_lookback_delta_encoding(sample_n);
+    let lookback_encoding = delta::new_lookback(sample_n);
     let lookback_cost = calculate_compressed_sample_size(
       &sample,
       unoptimized_bins_log,
       lookback_encoding.clone(),
     )? + lookback_penalty;
     if lookback_cost < best_cost {
-      best_encoding = new_lookback_delta_encoding(primary_latents.len());
+      best_encoding = delta::new_lookback(primary_latents.len());
       best_cost = lookback_cost;
     }
   }
 
-  for delta_encoding_order in 1..MAX_DELTA_ENCODING_ORDER + 1 {
+  for delta_encoding_order in 1..MAX_CONSECUTIVE_DELTA_ORDER + 1 {
     let encoding = DeltaEncoding::Consecutive {
       order: delta_encoding_order,
       secondary_uses_delta: false,
@@ -465,12 +425,15 @@ fn new_candidate_w_split(
   let unoptimized_bins_log = choose_unoptimized_bins_log(config.compression_level, n);
   let delta_encoding = match config.delta_spec {
     DeltaSpec::Auto => choose_delta_encoding(&latents.primary, unoptimized_bins_log)?,
-    DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) => DeltaEncoding::NoOp,
+    DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) | DeltaSpec::TryConv1(0) => DeltaEncoding::NoOp,
     DeltaSpec::TryConsecutive(order) => DeltaEncoding::Consecutive {
       order,
       secondary_uses_delta: false,
     },
-    DeltaSpec::TryLookback => new_lookback_delta_encoding(n),
+    DeltaSpec::TryLookback => delta::new_lookback(n),
+    DeltaSpec::TryConv1(order) => {
+      delta::new_conv1(order, &latents.primary)?.unwrap_or(DeltaEncoding::NoOp)
+    }
   };
 
   new_candidate_w_split_and_delta_encoding(
@@ -528,10 +491,11 @@ fn fallback_chunk_compressor(
 
 // Should this take nums as a slice of slices instead of having a config.paging_spec?
 pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<ChunkCompressor> {
-  validate_config(config)?;
+  config.validate()?;
   let n = nums.len();
   validate_chunk_size(n)?;
 
+  // TODO in a later PR: validate mode on initialization of Mode or maybe ChunkMeta
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
   if !T::mode_is_valid(&mode) {
     return Err(PcoError::invalid_argument(format!(

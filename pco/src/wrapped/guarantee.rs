@@ -18,15 +18,16 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
     }]),
   };
 
-  ChunkMeta {
-    mode: Mode::Classic,
-    delta_encoding: DeltaEncoding::NoOp,
-    per_latent_var: PerLatentVar {
+  ChunkMeta::new(
+    Mode::Classic,
+    DeltaEncoding::NoOp,
+    PerLatentVar {
       delta: None,
       primary,
       secondary: None,
     },
-  }
+  )
+  .unwrap()
 }
 
 /// Returns the maximum possible byte size of a wrapped chunk for a given

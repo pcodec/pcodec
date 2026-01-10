@@ -136,8 +136,12 @@ fn build_latent_var_summaries<T: Number>(meta: &ChunkMeta) -> BTreeMap<String, L
 
 fn short_debug_str<T: Debug>(val: &T) -> String {
   let res = format!("{:?}", val);
-  if res.len() > 60 {
-    format!("{}...{}", &res[..45], &res[res.len() - 15..])
+  if res.len() > 200 {
+    format!(
+      "{}...{}",
+      &res[..150],
+      &res[res.len() - 47..]
+    )
   } else {
     res
   }

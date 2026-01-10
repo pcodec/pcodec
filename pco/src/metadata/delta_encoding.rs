@@ -1,10 +1,7 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
-use crate::constants::{
-  Bitlen, BITS_TO_ENCODE_DELTA_ENCODING_ORDER, BITS_TO_ENCODE_DELTA_ENCODING_VARIANT,
-  BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG, BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG,
-};
-use crate::data_types::LatentType;
+use crate::constants::*;
+use crate::data_types::{LatentType, Number, Signed};
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::LatentVarKey;
@@ -32,10 +29,40 @@ impl DeltaLookbackConfig {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+pub struct DeltaConv1Config {
+  pub quantization: Bitlen,
+  // Avoiding exposing bias and weights because I think it's possible we'll
+  // change their representation in the future; for now users will have to
+  // satisfy themselves with the Debug string if they are curious
+  bias: i64,
+  weights: Vec<i64>,
+}
+
+impl DeltaConv1Config {
+  pub(crate) fn new(quantization: Bitlen, bias: i64, weights: Vec<i64>) -> Self {
+    Self {
+      quantization,
+      bias,
+      weights,
+    }
+  }
+
+  pub(crate) fn bias<S: Signed>(&self) -> S {
+    S::from_i64(self.bias)
+  }
+
+  pub(crate) fn weights<S: Signed>(&self) -> Vec<S> {
+    self.weights.iter().cloned().map(S::from_i64).collect()
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LatentVarDeltaEncoding {
   NoOp,
   Consecutive(usize),
   Lookback(DeltaLookbackConfig),
+  Conv1(DeltaConv1Config),
 }
 
 impl LatentVarDeltaEncoding {
@@ -44,6 +71,7 @@ impl LatentVarDeltaEncoding {
       Self::NoOp => 0,
       Self::Consecutive(order) => *order,
       Self::Lookback(config) => 1 << config.state_n_log,
+      Self::Conv1(config) => config.weights.len(),
     }
   }
 }
@@ -82,13 +110,20 @@ pub enum DeltaEncoding {
     config: DeltaLookbackConfig,
     secondary_uses_delta: bool,
   },
+  /// Encodes the difference between each value and a convolution of the
+  /// preceding few elements.
+  ///
+  /// This is best if your numbers have local trends that aren't captured by
+  /// simply taking differences.
+  Conv1(DeltaConv1Config),
 }
 
 impl DeltaEncoding {
   pub(crate) const MAX_BIT_SIZE: usize = (BITS_TO_ENCODE_DELTA_ENCODING_VARIANT
-    + BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG
-    + BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG
-    + 1) as usize;
+    + BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION
+    + BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS) as usize
+    + 64
+    + MAX_CONV1_DELTA_ORDER * 32;
 
   unsafe fn read_from_pre_v3(reader: &mut BitReader) -> Self {
     let order = reader.read_usize(BITS_TO_ENCODE_DELTA_ENCODING_ORDER);
@@ -127,8 +162,8 @@ impl DeltaEncoding {
         }
       }
       2 => {
-        let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG);
-        let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG);
+        let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG);
+        let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG);
         if state_n_log > window_n_log {
           return Err(PcoError::corruption(format!(
             "LZ delta encoding state size log exceeded window size log: {} vs {}",
@@ -142,6 +177,21 @@ impl DeltaEncoding {
           },
           secondary_uses_delta: reader.read_bool(),
         }
+      }
+      3 => {
+        let quantization = reader.read_bitlen(BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION);
+        let bias = i64::from_latent_ordered(reader.read_uint(64));
+        let order = 1 + reader.read_usize(BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS);
+        let mut weights = Vec::with_capacity(order);
+        for _ in 0..order {
+          weights.push(i32::from_latent_ordered(reader.read_uint(32)) as i64);
+        }
+
+        Self::Conv1(DeltaConv1Config {
+          quantization,
+          bias,
+          weights,
+        })
       }
       value => {
         return Err(PcoError::corruption(format!(
@@ -158,6 +208,7 @@ impl DeltaEncoding {
       Self::NoOp => 0,
       Self::Consecutive { .. } => 1,
       Self::Lookback { .. } => 2,
+      Self::Conv1(_) => 3,
     };
     writer.write_bitlen(
       variant,
@@ -179,20 +230,34 @@ impl DeltaEncoding {
       } => {
         writer.write_bitlen(
           config.window_n_log - 1,
-          BITS_TO_ENCODE_LZ_DELTA_WINDOW_N_LOG,
+          BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG,
         );
         writer.write_bitlen(
           config.state_n_log,
-          BITS_TO_ENCODE_LZ_DELTA_STATE_N_LOG,
+          BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG,
         );
         writer.write_bool(*secondary_uses_delta);
+      }
+      Self::Conv1(config) => {
+        writer.write_bitlen(
+          config.quantization,
+          BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION,
+        );
+        writer.write_uint(config.bias.to_latent_ordered(), 64);
+        writer.write_usize(
+          config.weights.len() - 1,
+          BITS_TO_ENCODE_DELTA_CONV_N_WEIGHTS,
+        );
+        for &weight in &config.weights {
+          writer.write_uint((weight as i32).to_latent_ordered(), 32);
+        }
       }
     }
   }
 
   pub(crate) fn latent_type(&self) -> Option<LatentType> {
     match self {
-      Self::NoOp | Self::Consecutive { .. } => Option::None,
+      Self::NoOp | Self::Consecutive { .. } | Self::Conv1(_) => Option::None,
       Self::Lookback { .. } => Some(LatentType::U32),
     }
   }
@@ -237,19 +302,23 @@ impl DeltaEncoding {
         },
         LatentVarKey::Secondary,
       ) => LatentVarDeltaEncoding::NoOp,
+      (Self::Conv1(config), LatentVarKey::Primary) => LatentVarDeltaEncoding::Conv1(config.clone()),
+      (Self::Conv1(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
     }
   }
 }
 
 #[cfg(test)]
 mod tests {
+  use super::*;
   use crate::bit_writer::BitWriter;
-  use crate::metadata::delta_encoding::DeltaLookbackConfig;
-  use crate::metadata::DeltaEncoding;
 
   fn check_bit_size(encoding: DeltaEncoding) {
     let mut bytes = Vec::new();
-    let mut writer = BitWriter::new(&mut bytes, 100);
+    let mut writer = BitWriter::new(
+      &mut bytes,
+      DeltaEncoding::MAX_BIT_SIZE as usize, // this is like 8x more than we need
+    );
     unsafe {
       encoding.write_to(&mut writer);
     }
@@ -271,5 +340,10 @@ mod tests {
       },
       secondary_uses_delta: true,
     });
+    check_bit_size(DeltaEncoding::Conv1(DeltaConv1Config {
+      quantization: 31,
+      bias: i64::MAX,
+      weights: vec![i64::MAX; MAX_CONV1_DELTA_ORDER],
+    }));
   }
 }

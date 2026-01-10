@@ -1,4 +1,4 @@
-use crate::constants::{Bitlen, DEFAULT_MAX_PAGE_N};
+use crate::constants::*;
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
 
@@ -59,6 +59,7 @@ pub enum DeltaSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad delta encoding in adversarial cases.
+  /// At present, this will never consider `Conv1` delta encoding.
   #[default]
   Auto,
   /// Never uses delta encoding.
@@ -71,13 +72,21 @@ pub enum DeltaSpec {
   /// Supports a delta encoding order up to 7.
   /// For instance, 1st order is just regular delta encoding, 2nd is
   /// deltas-of-deltas, etc.
-  /// It is legal to use 0th order, but it is identical to `None`.
+  /// It is legal to use 0th order, but it is identical to `NoOp`.
   TryConsecutive(usize),
   /// Tries delta encoding according to an extra latent variable of "lookback".
   ///
   /// This can improve compression ratio when there are nontrivial patterns in
   /// your numbers, but reduces compression speed substantially.
   TryLookback,
+  /// Tries delta encoding by subtracting a convolution of the previous `order`
+  /// elements.
+  ///
+  /// Supports order up to 32.
+  /// In practice, the weights for the convolution are chosen via linear
+  /// regression.
+  /// It is legal to use 0th order, but it is identical to `NoOp`.
+  TryConv1(usize),
 }
 
 // TODO consider adding a "lossiness" spec that allows dropping secondary latent
@@ -153,6 +162,38 @@ impl ChunkConfig {
   pub fn with_paging_spec(mut self, paging_spec: PagingSpec) -> Self {
     self.paging_spec = paging_spec;
     self
+  }
+
+  pub(crate) fn validate(&self) -> PcoResult<()> {
+    let compression_level = self.compression_level;
+    if compression_level > MAX_COMPRESSION_LEVEL {
+      return Err(PcoError::invalid_argument(format!(
+        "compression level may not exceed {} (was {})",
+        MAX_COMPRESSION_LEVEL, compression_level,
+      )));
+    }
+
+    match self.delta_spec {
+      DeltaSpec::Auto | DeltaSpec::NoOp | DeltaSpec::TryLookback => (),
+      DeltaSpec::TryConsecutive(order) => {
+        if order > MAX_CONSECUTIVE_DELTA_ORDER {
+          return Err(PcoError::invalid_argument(format!(
+            "consecutive delta order may not exceed {} (was {})",
+            MAX_CONSECUTIVE_DELTA_ORDER, order,
+          )));
+        }
+      }
+      DeltaSpec::TryConv1(order) => {
+        if order > MAX_CONV1_DELTA_ORDER {
+          return Err(PcoError::invalid_argument(format!(
+            "conv1 delta order may not exceed {} (was {})",
+            MAX_CONV1_DELTA_ORDER, order,
+          )));
+        }
+      }
+    }
+
+    Ok(())
   }
 }
 

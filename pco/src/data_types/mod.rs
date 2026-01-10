@@ -131,6 +131,8 @@ pub trait Latent:
   const MAX: Self;
   const BITS: Bitlen;
 
+  type Conv: Signed;
+
   /// Converts a `u32` into this type. Panics if the conversion is
   /// impossible.
   fn from_u32(x: u32) -> Self;
@@ -143,6 +145,9 @@ pub trait Latent:
 
   /// Converts the latent to a `u64`, truncating higher bits if necessary.
   fn to_u64(self) -> u64;
+
+  fn from_conv(x: Self::Conv) -> Self;
+  fn to_conv(self) -> Self::Conv;
 
   fn wrapping_add(self, other: Self) -> Self;
   fn wrapping_sub(self, other: Self) -> Self;
@@ -205,4 +210,15 @@ pub trait Number:
     secondary: Option<DynLatentSlice>,
     dst: &mut [Self],
   ) -> PcoResult<()>;
+}
+
+pub trait Signed:
+  AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> + private::Sealed
+{
+  const ZERO: Self;
+  const MAX: Self;
+  const BITS: Bitlen;
+
+  fn from_i64(x: i64) -> Self;
+  fn to_f64(self) -> f64;
 }

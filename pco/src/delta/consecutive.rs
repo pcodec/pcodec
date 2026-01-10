@@ -70,10 +70,10 @@ mod tests {
     let mut deltas = deltas_to_decode;
 
     // decode in two parts to show we keep state properly
-    decode_in_place::<u32>(&mut moments, &mut deltas[..3]);
+    decode_in_place(&mut moments, &mut deltas[..3]);
     assert_eq!(&deltas[..3], &orig_latents[..3]);
 
-    decode_in_place::<u32>(&mut moments, &mut deltas[3..]);
+    decode_in_place(&mut moments, &mut deltas[3..]);
     assert_eq!(&deltas[3..5], &orig_latents[3..5]);
   }
 }

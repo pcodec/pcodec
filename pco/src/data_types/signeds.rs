@@ -1,4 +1,5 @@
-use crate::data_types::{unsigneds, ModeAndLatents, Number};
+use crate::constants::Bitlen;
+use crate::data_types::{unsigneds, ModeAndLatents, Number, Signed};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
@@ -44,6 +45,19 @@ macro_rules! impl_signed {
         dst: &mut [Self],
       ) -> PcoResult<()> {
         unsigneds::join_latents(mode, primary, secondary, dst)
+      }
+    }
+
+    impl Signed for $t {
+      const BITS: Bitlen = Self::BITS;
+      const ZERO: Self = 0;
+      const MAX: Self = Self::MAX;
+
+      fn from_i64(x: i64) -> Self {
+        x as Self
+      }
+      fn to_f64(self) -> f64 {
+        self as f64
       }
     }
   };
