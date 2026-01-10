@@ -317,7 +317,10 @@ mod tests {
 
   fn check_bit_size(encoding: DeltaEncoding) {
     let mut bytes = Vec::new();
-    let mut writer = BitWriter::new(&mut bytes, 100);
+    let mut writer = BitWriter::new(
+      &mut bytes,
+      DeltaEncoding::MAX_BIT_SIZE as usize, // this is like 8x more than we need
+    );
     unsafe {
       encoding.write_to(&mut writer);
     }
