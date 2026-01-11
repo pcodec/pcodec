@@ -55,6 +55,8 @@ pub enum ModeSpec {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum DeltaSpec {
+  // TODO in the future: make Auto consider Conv1, assuming we can make it
+  // performant enough.
   /// Automatically detects a good delta encoding.
   ///
   /// This works well most of the time, but costs some compression time and can

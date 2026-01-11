@@ -225,7 +225,7 @@ fn delta_encode_and_build_page_infos(
   (latents, page_infos)
 }
 
-fn new_candidate_w_split_and_delta_encoding(
+fn new_candidate(
   latents: SplitLatents, // start out plain, gets delta encoded in place
   paging_spec: &PagingSpec,
   mode: Mode,
@@ -331,7 +331,7 @@ fn calculate_compressed_sample_size(
   delta_encoding: DeltaEncoding,
 ) -> PcoResult<f32> {
   let sample_n = sample.len();
-  let (sample_cc, _) = new_candidate_w_split_and_delta_encoding(
+  let (sample_cc, _) = new_candidate(
     SplitLatents {
       primary: sample.clone(),
       secondary: None,
@@ -346,7 +346,7 @@ fn calculate_compressed_sample_size(
 }
 
 #[inline(never)]
-fn choose_delta_encoding(
+fn choose_auto_delta_encoding(
   primary_latents: &DynLatents,
   unoptimized_bins_log: Bitlen,
 ) -> PcoResult<DeltaEncoding> {
@@ -412,19 +412,14 @@ fn choose_unoptimized_bins_log(compression_level: usize, n: usize) -> Bitlen {
   }
 }
 
-// We pull this stuff out of `new` because it only depends on the latent type
-// and we don't need a specialization for each full number type.
-// Returns a chunk compressor and the counts (per latent var) of numbers in
-// each bin.
-fn new_candidate_w_split(
-  mode: Mode,
-  latents: SplitLatents,
+fn choose_delta_encoding(
+  latents: &SplitLatents,
   config: &ChunkConfig,
-) -> PcoResult<(ChunkCompressor, PerLatentVar<Vec<Weight>>)> {
+  unoptimized_bins_log: Bitlen,
+) -> PcoResult<DeltaEncoding> {
   let n = latents.primary.len();
-  let unoptimized_bins_log = choose_unoptimized_bins_log(config.compression_level, n);
   let delta_encoding = match config.delta_spec {
-    DeltaSpec::Auto => choose_delta_encoding(&latents.primary, unoptimized_bins_log)?,
+    DeltaSpec::Auto => choose_auto_delta_encoding(&latents.primary, unoptimized_bins_log)?,
     DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) | DeltaSpec::TryConv1(0) => DeltaEncoding::NoOp,
     DeltaSpec::TryConsecutive(order) => DeltaEncoding::Consecutive {
       order,
@@ -432,17 +427,12 @@ fn new_candidate_w_split(
     },
     DeltaSpec::TryLookback => delta::new_lookback(n),
     DeltaSpec::TryConv1(order) => {
+      // We use the entire chunk to fit the weights and bias here. In the
+      // future, it may be ideal to take into account the page boundaries.
       delta::new_conv1(order, &latents.primary)?.unwrap_or(DeltaEncoding::NoOp)
     }
   };
-
-  new_candidate_w_split_and_delta_encoding(
-    latents,
-    &config.paging_spec,
-    mode,
-    delta_encoding,
-    unoptimized_bins_log,
-  )
+  Ok(delta_encoding)
 }
 
 fn fallback_chunk_compressor(
@@ -489,12 +479,13 @@ fn fallback_chunk_compressor(
   })
 }
 
-// Should this take nums as a slice of slices instead of having a config.paging_spec?
+// This is where the bulk of compression happens.
 pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<ChunkCompressor> {
   config.validate()?;
   let n = nums.len();
   validate_chunk_size(n)?;
 
+  // 1. choose mode and split the latents
   // TODO in a later PR: validate mode on initialization of Mode or maybe ChunkMeta
   let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
   if !T::mode_is_valid(&mode) {
@@ -507,7 +498,22 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
     )));
   }
 
-  let (candidate, bin_counts) = new_candidate_w_split(mode, latents, config)?;
+  // 2. choose delta encoding
+  let unoptimized_bins_log = choose_unoptimized_bins_log(config.compression_level, n);
+  let delta_encoding = choose_delta_encoding(&latents, config, unoptimized_bins_log)?;
+
+  // 3. apply the delta encoding and choose bins
+  // These steps are together because it's convenient; they both do logic per
+  // page and in a latent-type-specialized way.
+  let (candidate, bin_counts) = new_candidate(
+    latents,
+    &config.paging_spec,
+    mode,
+    delta_encoding,
+    unoptimized_bins_log,
+  )?;
+
+  // 4. check that our compressed size meets guarantees and fall back if not
   if candidate.should_fallback(LatentType::new::<T::L>(), n, bin_counts) {
     let split_latents = classic::split_latents(nums);
     return fallback_chunk_compressor(split_latents, config);
@@ -531,7 +537,7 @@ impl ChunkCompressor {
 
     let n_pages = self.page_infos.len();
 
-    // worst case trailing bytes after bit packing
+    // worst case trailing bits after bit packing
     let mut worst_case_body_bit_size = 7 * n_pages;
     for (_, (latent_var_meta, bin_counts)) in meta
       .per_latent_var
