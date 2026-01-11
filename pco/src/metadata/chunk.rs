@@ -84,7 +84,7 @@ impl ChunkMeta {
               .iter()
               .map(|w| w.abs() as f64)
               .sum::<f64>();
-        if max_pred >= 2.0_f64.powi(conv_bits as i32) {
+        if max_pred >= 2.0_f64.powi(conv_bits as i32 - 1) {
           return Err(PcoError::corruption(format!(
             "Conv1 delta encoding weights and bias risk overflowing as high as {}",
             max_pred,

@@ -410,7 +410,7 @@ fn test_dict() -> PcoResult<()> {
 }
 
 #[test]
-fn test_conv1() -> PcoResult<()> {
+fn test_conv1_nominal() -> PcoResult<()> {
   let mut x0 = 31;
   let mut x1 = 77;
   let mut x2 = -54;
