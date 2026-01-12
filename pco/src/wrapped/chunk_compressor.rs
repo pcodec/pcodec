@@ -665,10 +665,12 @@ impl ChunkCompressor {
     Ok(())
   }
 
-  /// Writes a page to the destination, using pre-allocated scratch space.
+  /// Writes a page to the destination.
   ///
-  /// Will return an error if the provided `Write` errors or the scratch comes
-  /// from an incompatible chunk.
+  /// Will return an error if the provided `Write` errors.
+  ///
+  /// Even though this takes `&mut self`, it only mutates scratch buffers and
+  /// has no effect on the compression of later pages.
   pub fn write_page<W: Write>(&mut self, page_idx: usize, dst: W) -> PcoResult<W> {
     let n_pages = self.page_infos.len();
     if page_idx >= n_pages {

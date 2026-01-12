@@ -69,6 +69,10 @@ impl<T: Number> ChunkDecompressor<T> {
   /// remaining input.
   ///
   /// Will return an error if corruptions or insufficient data are found.
+  ///
+  /// Even though this takes `&mut self`, the page decompressor only mutates the
+  /// chunk decompressor's scratch buffers and has no effect on the
+  /// decompression of later pages.
   pub fn page_decompressor<R: BetterBufRead>(
     &mut self,
     src: R,
