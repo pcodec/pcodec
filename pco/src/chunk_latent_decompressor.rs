@@ -1,5 +1,9 @@
+use std::ops::{Deref, DerefMut};
+
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::{ChunkLatentVarMeta, DynBins};
+use crate::FULL_BATCH_N;
 use crate::{
   ans::{self, Spec},
   constants::Bitlen,
@@ -9,14 +13,50 @@ use crate::{
   read_write_uint,
 };
 
+// Struct to enforce alignment of the scratch arrays to 64 bytes. This can
+// improve performance for SIMD operations. The primary goal here is to avoid
+// regression by ensuring that the arrays stay "well-aligned", even if the
+// surrounding code is changed.
+#[derive(Clone, Debug)]
+#[repr(align(64))]
+pub struct ScratchArray<L: Latent>(pub [L; FULL_BATCH_N]);
+
+impl<L: Latent> Deref for ScratchArray<L> {
+  type Target = [L; FULL_BATCH_N];
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+impl<L: Latent> DerefMut for ScratchArray<L> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct ChunkLatentDecompressorScratch<L: Latent> {
+  pub offset_bits_csum_scratch: ScratchArray<Bitlen>,
+  pub offset_bits_scratch: ScratchArray<Bitlen>,
+  pub latents: ScratchArray<L>,
+}
+
+impl<L: Latent> ChunkLatentDecompressorScratch<L> {
+  #[inline]
+  pub unsafe fn set(&mut self, i: usize, offset_bit_idx: Bitlen, offset_bits: Bitlen, lower: L) {
+    *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
+    *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
+    *self.latents.get_unchecked_mut(i) = lower;
+  }
+}
+
 #[derive(Clone, Debug)]
 pub struct ChunkLatentDecompressor<L: Latent> {
   pub delta_encoding: LatentVarDeltaEncoding,
   pub bytes_per_offset: usize,
   pub state_lowers: Vec<L>,
   pub n_bins: usize,
-  pub only_bin: Option<Bin<L>>,
   pub decoder: ans::Decoder,
+  pub scratch: ChunkLatentDecompressorScratch<L>,
 }
 
 impl<L: Latent> ChunkLatentDecompressor<L> {
@@ -38,13 +78,32 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
 
     let only_bin = if bins.len() == 1 { Some(bins[0]) } else { None };
 
+    let mut offset_bits_csum_scratch = ScratchArray([0; FULL_BATCH_N]);
+    let mut offset_bits_scratch = ScratchArray([0; FULL_BATCH_N]);
+    let mut latents = ScratchArray([L::ZERO; FULL_BATCH_N]);
+
+    if let Some(bin) = &only_bin {
+      // we optimize performance by setting state once and never again
+      let mut csum = 0;
+      for i in 0..FULL_BATCH_N {
+        offset_bits_scratch[i] = bin.offset_bits;
+        offset_bits_csum_scratch[i] = csum;
+        latents[i] = bin.lower;
+        csum += bin.offset_bits;
+      }
+    }
+
     Ok(Self {
       bytes_per_offset,
       state_lowers,
       n_bins: bins.len(),
-      only_bin,
       decoder,
       delta_encoding,
+      scratch: ChunkLatentDecompressorScratch {
+        offset_bits_csum_scratch,
+        offset_bits_scratch,
+        latents,
+      },
     })
   }
 }
@@ -71,5 +130,13 @@ impl DynChunkLatentDecompressor {
       }
     );
     Ok(res)
+  }
+
+  pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
+    match self {
+      Self::U16(inner) => DynLatentSlice::U16(&mut *inner.scratch.latents),
+      Self::U32(inner) => DynLatentSlice::U32(&mut *inner.scratch.latents),
+      Self::U64(inner) => DynLatentSlice::U64(&mut *inner.scratch.latents),
+    }
   }
 }

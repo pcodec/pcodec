@@ -272,7 +272,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
   pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    let progress = self.page_state.decompress(&self.inner_cd.inner, dst)?;
+    let progress = self.page_state.decompress(&mut self.inner_cd.inner, dst)?;
 
     self.n_processed += progress.n_processed;
 

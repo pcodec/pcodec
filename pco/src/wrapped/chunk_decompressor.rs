@@ -70,7 +70,7 @@ impl<T: Number> ChunkDecompressor<T> {
   ///
   /// Will return an error if corruptions or insufficient data are found.
   pub fn page_decompressor<R: BetterBufRead>(
-    &self,
+    &mut self,
     src: R,
     n: usize,
   ) -> PcoResult<PageDecompressor<'_, T, R>> {
