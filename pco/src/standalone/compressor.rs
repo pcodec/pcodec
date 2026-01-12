@@ -171,7 +171,7 @@ impl ChunkCompressor {
   /// Writes an entire chunk to the destination.
   ///
   /// Will return an error if the provided `Write` errors.
-  pub fn write_chunk<W: Write>(&self, dst: W) -> PcoResult<W> {
+  pub fn write_chunk<W: Write>(&mut self, dst: W) -> PcoResult<W> {
     let mut writer = BitWriter::new(dst, STANDALONE_CHUNK_PREAMBLE_PADDING);
     writer.write_aligned_bytes(&[self.number_type as u8])?;
     let n = self.inner.n_per_page()[0];

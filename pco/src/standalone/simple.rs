@@ -35,7 +35,7 @@ pub fn simple_compress_into<T: Number, W: Write>(
   for &page_n in &n_per_page {
     let end = start + page_n;
     this_chunk_config.paging_spec = PagingSpec::Exact(vec![page_n]);
-    let chunk_compressor =
+    let mut chunk_compressor =
       file_compressor.chunk_compressor(&nums[start..end], &this_chunk_config)?;
 
     dst = chunk_compressor.write_chunk(dst)?;
@@ -67,7 +67,7 @@ pub fn simple_compress<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult
   for &page_n in &n_per_page {
     let end = start + page_n;
     this_chunk_config.paging_spec = PagingSpec::Exact(vec![page_n]);
-    let chunk_compressor =
+    let mut chunk_compressor =
       file_compressor.chunk_compressor(&nums[start..end], &this_chunk_config)?;
 
     if !hinted_size {
