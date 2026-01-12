@@ -12,7 +12,7 @@ fn assert_panic_safe<T: Number>(nums: Vec<T>) -> PcoResult<ChunkMeta> {
     delta_spec: DeltaSpec::NoOp,
     ..Default::default()
   };
-  let cc = fc.chunk_compressor(&nums, &config)?;
+  let mut cc = fc.chunk_compressor(&nums, &config)?;
   let meta = cc.meta().clone();
   let mut compressed = Vec::new();
   fc.write_header(&mut compressed)?;

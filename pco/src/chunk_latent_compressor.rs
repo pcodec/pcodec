@@ -15,7 +15,6 @@ use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
 use crate::{ans, bit_reader, bit_writer, read_write_uint, FULL_BATCH_N};
-use std::cmp;
 use std::io::Write;
 use std::ops::Range;
 

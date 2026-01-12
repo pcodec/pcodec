@@ -9,7 +9,6 @@ use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
-use crate::metadata::DeltaEncoding;
 use crate::{bit_reader, delta};
 
 #[inline(never)]
@@ -67,7 +66,7 @@ pub struct PageLatentDecompressor<L: Latent> {
   delta_state_pos: usize,
 }
 
-impl<'a, L: Latent> PageLatentDecompressor<L> {
+impl<L: Latent> PageLatentDecompressor<L> {
   pub fn new(
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     delta_encoding: &LatentVarDeltaEncoding,

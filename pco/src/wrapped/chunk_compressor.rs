@@ -1,7 +1,7 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
 use crate::chunk_latent_compressor::{
-  ChunkLatentCompressor, DynChunkLatentCompressor, DynChunkLatentCompressorScratch,
+  ChunkLatentCompressor, DynChunkLatentCompressor,
 };
 use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
