@@ -38,6 +38,23 @@ pub struct DeltaConv1Config {
   weights: Vec<i64>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DeltaConv2Config {
+  pub quantization: Bitlen,
+  // 2D height.
+  pub h: usize,
+  // 2D width.
+  pub w: usize,
+  // Kernel size in height dimension.
+  pub kh: usize,
+  // Kernel size in width dimension.
+  pub kw: usize,
+  // Avoiding exposing parameters for the same reason as Conv1
+  bias: i64,
+  weights: Vec<i64>,
+}
+
 impl DeltaConv1Config {
   pub(crate) fn new(quantization: Bitlen, bias: i64, weights: Vec<i64>) -> Self {
     Self {
@@ -116,6 +133,11 @@ pub enum DeltaEncoding {
   /// This is best if your numbers have local trends that aren't captured by
   /// simply taking differences.
   Conv1(DeltaConv1Config),
+  /// Encodes the difference between each value and a convolution of nearby
+  /// elements in 2D space.
+  ///
+  /// This is best for data like images.
+  Conv2(DeltaConv2Config),
 }
 
 impl DeltaEncoding {
