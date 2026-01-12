@@ -258,7 +258,7 @@ fn new_candidate(
         let ans_size_log = trained.ans_size_log;
         let bin_counts = trained.counts.to_vec();
         let clc = DynChunkLatentCompressor::new(
-          Box::new(ChunkLatentCompressor::new(trained, &bins, latents)?)
+          ChunkLatentCompressor::new(trained, &bins, latents)?
         );
         let var_meta = ChunkLatentVarMeta {
           bins: DynBins::new(bins),
@@ -455,7 +455,7 @@ fn fallback_chunk_compressor(
         latent_var_meta.bins.downcast_ref::<L>().unwrap(),
         latents,
       )?;
-      (meta, DynChunkLatentCompressor::new(Box::new(clc)))
+      (meta, DynChunkLatentCompressor::new(clc))
     }
   );
 

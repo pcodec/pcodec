@@ -43,7 +43,7 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
     ans_size_log: Bitlen,
     bins: &[Bin<L>],
     delta_encoding: LatentVarDeltaEncoding,
-  ) -> PcoResult<Self> {
+  ) -> PcoResult<Box<Self>> {
     let bytes_per_offset = read_write_uint::calc_max_bytes(bins::max_offset_bits(bins));
     let bin_offset_bits = bins.iter().map(|bin| bin.offset_bits).collect::<Vec<_>>();
     let weights = bins::weights(bins);
@@ -72,7 +72,7 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       }
     }
 
-    Ok(Self {
+    Ok(Box::new(Self {
       bytes_per_offset,
       state_lowers,
       n_bins: bins.len(),
@@ -83,7 +83,7 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
         offset_bits: offset_bits_scratch,
         latents,
       },
-    })
+    }))
   }
 }
 
@@ -108,7 +108,7 @@ impl DynChunkLatentDecompressor {
           bins,
           delta_encoding,
         )?;
-        DynChunkLatentDecompressor::new(Box::new(inner))
+        DynChunkLatentDecompressor::new(inner)
       }
     );
     Ok(res)

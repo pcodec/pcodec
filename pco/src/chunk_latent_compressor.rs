@@ -93,7 +93,7 @@ pub struct ChunkLatentCompressor<L: Latent> {
 }
 
 impl<L: Latent> ChunkLatentCompressor<L> {
-  pub fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Self> {
+  pub fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Box<Self>> {
     let needs_ans = bins.len() != 1;
 
     let table = CompressionTable::from(trained.infos);
@@ -105,7 +105,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     let max_u64s_per_offset = read_write_uint::calc_max_u64s_for_writing(max_bits_per_offset);
     let default_lower = table.only_bin().map(|info| info.lower).unwrap_or(L::ZERO);
 
-    Ok(ChunkLatentCompressor {
+    Ok(Box::new(ChunkLatentCompressor {
       table,
       encoder,
       avg_bits_per_latent: bins::avg_bits_per_latent(bins, trained.ans_size_log),
@@ -117,7 +117,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
         lowers: ScratchArray([default_lower; FULL_BATCH_N]),
         symbols: ScratchArray([0; FULL_BATCH_N]),
       },
-    })
+    }))
   }
 
   #[inline(never)]
