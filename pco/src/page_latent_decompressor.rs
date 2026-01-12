@@ -205,8 +205,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       ($rb: literal) => {
         decompress_offsets::<L, $rb>(
           reader,
-          &cld.scratch.offset_bits_csum_scratch.0,
-          &cld.scratch.offset_bits_scratch.0,
+          &cld.scratch.offset_bits_csum.0,
+          &cld.scratch.offset_bits.0,
           &mut cld.scratch.latents.0,
           batch_n,
         )

@@ -35,16 +35,16 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
 
 #[derive(Clone, Debug)]
 pub struct ChunkLatentDecompressorScratch<L: Latent> {
-  pub offset_bits_csum_scratch: ScratchArray<Bitlen>,
-  pub offset_bits_scratch: ScratchArray<Bitlen>,
+  pub offset_bits_csum: ScratchArray<Bitlen>,
+  pub offset_bits: ScratchArray<Bitlen>,
   pub latents: ScratchArray<L>,
 }
 
 impl<L: Latent> ChunkLatentDecompressorScratch<L> {
   #[inline]
   pub unsafe fn set(&mut self, i: usize, offset_bit_idx: Bitlen, offset_bits: Bitlen, lower: L) {
-    *self.offset_bits_csum_scratch.get_unchecked_mut(i) = offset_bit_idx;
-    *self.offset_bits_scratch.get_unchecked_mut(i) = offset_bits;
+    *self.offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
+    *self.offset_bits.get_unchecked_mut(i) = offset_bits;
     *self.latents.get_unchecked_mut(i) = lower;
   }
 }
@@ -100,8 +100,8 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       decoder,
       delta_encoding,
       scratch: ChunkLatentDecompressorScratch {
-        offset_bits_csum_scratch,
-        offset_bits_scratch,
+        offset_bits_csum: offset_bits_csum_scratch,
+        offset_bits: offset_bits_scratch,
         latents,
       },
     })
