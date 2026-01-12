@@ -59,7 +59,7 @@ fn make_latent_decompressors(
             &cld.delta_encoding,
             delta_state,
           );
-          DynPageLatentDecompressor::new(Box::new(pld))
+          DynPageLatentDecompressor::new(pld)
         }
       );
       Ok(state)

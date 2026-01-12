@@ -1,8 +1,6 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
-use crate::chunk_latent_compressor::{
-  ChunkLatentCompressor, DynChunkLatentCompressor,
-};
+use crate::chunk_latent_compressor::{ChunkLatentCompressor, DynChunkLatentCompressor};
 use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
 use crate::compression_intermediates::{DissectedPage, PageInfo};
 use crate::constants::{
@@ -260,7 +258,7 @@ fn new_candidate(
         let ans_size_log = trained.ans_size_log;
         let bin_counts = trained.counts.to_vec();
         let clc = DynChunkLatentCompressor::new(
-          ChunkLatentCompressor::new(trained, &bins, latents)?
+          Box::new(ChunkLatentCompressor::new(trained, &bins, latents)?)
         );
         let var_meta = ChunkLatentVarMeta {
           bins: DynBins::new(bins),
@@ -457,7 +455,7 @@ fn fallback_chunk_compressor(
         latent_var_meta.bins.downcast_ref::<L>().unwrap(),
         latents,
       )?;
-      (meta, DynChunkLatentCompressor::new(clc))
+      (meta, DynChunkLatentCompressor::new(Box::new(clc)))
     }
   );
 

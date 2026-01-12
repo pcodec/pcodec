@@ -14,20 +14,16 @@ use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
+use crate::scratch_array::ScratchArray;
 use crate::{ans, bit_reader, bit_writer, read_write_uint, FULL_BATCH_N};
 use std::io::Write;
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
 pub struct ChunkLatentCompressorScratch<L: Latent> {
-  lowers: [L; FULL_BATCH_N],
-  symbols: [Symbol; FULL_BATCH_N],
+  lowers: ScratchArray<L>,
+  symbols: ScratchArray<Symbol>,
 }
-
-define_latent_enum!(
-  #[derive(Clone, Debug)]
-  pub DynChunkLatentCompressorScratch(ChunkLatentCompressorScratch)
-);
 
 unsafe fn uninit_vec<T>(n: usize) -> Vec<T> {
   let mut res = Vec::with_capacity(n);
@@ -118,8 +114,8 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       max_u64s_per_offset,
       latents,
       scratch: ChunkLatentCompressorScratch {
-        lowers: [default_lower; FULL_BATCH_N],
-        symbols: [0; FULL_BATCH_N],
+        lowers: ScratchArray([default_lower; FULL_BATCH_N]),
+        symbols: ScratchArray([0; FULL_BATCH_N]),
       },
     })
   }
@@ -335,7 +331,10 @@ impl<L: Latent> ChunkLatentCompressor<L> {
   }
 }
 
+// we allocate these on the heap because they're enormous
+type Boxed<L> = Box<ChunkLatentCompressor<L>>;
+
 define_latent_enum!(
   #[derive(Clone, Debug)]
-  pub DynChunkLatentCompressor(ChunkLatentCompressor)
+  pub DynChunkLatentCompressor(Boxed)
 );

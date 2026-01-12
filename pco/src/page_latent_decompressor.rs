@@ -250,13 +250,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
   }
 }
 
-// Because the size of PageLatentDecompressor is enormous (largely due to
-// scratch buffers), it makes more sense to allocate them on the heap. We only
-// need to derefernce them once per batch, which is plenty infrequent.
-// TODO: consider an arena for these?
-type Boxed<L> = Box<PageLatentDecompressor<L>>;
-
 define_latent_enum!(
   #[derive()]
-  pub DynPageLatentDecompressor(Boxed)
+  pub DynPageLatentDecompressor(PageLatentDecompressor)
 );

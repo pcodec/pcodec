@@ -1,8 +1,7 @@
-use std::ops::{Deref, DerefMut};
-
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::{ChunkLatentVarMeta, DynBins};
+use crate::scratch_array::ScratchArray;
 use crate::FULL_BATCH_N;
 use crate::{
   ans::{self, Spec},
@@ -12,26 +11,6 @@ use crate::{
   metadata::{bins, delta_encoding::LatentVarDeltaEncoding, Bin},
   read_write_uint,
 };
-
-// Struct to enforce alignment of the scratch arrays to 64 bytes. This can
-// improve performance for SIMD operations. The primary goal here is to avoid
-// regression by ensuring that the arrays stay "well-aligned", even if the
-// surrounding code is changed.
-#[derive(Clone, Debug)]
-#[repr(align(64))]
-pub struct ScratchArray<L: Latent>(pub [L; FULL_BATCH_N]);
-
-impl<L: Latent> Deref for ScratchArray<L> {
-  type Target = [L; FULL_BATCH_N];
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-impl<L: Latent> DerefMut for ScratchArray<L> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
-  }
-}
 
 #[derive(Clone, Debug)]
 pub struct ChunkLatentDecompressorScratch<L: Latent> {
@@ -108,9 +87,12 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
   }
 }
 
+// we allocate these on the heap because they're enormous
+type Boxed<L> = Box<ChunkLatentDecompressor<L>>;
+
 define_latent_enum!(
   #[derive(Clone, Debug)]
-  pub DynChunkLatentDecompressor(ChunkLatentDecompressor)
+  pub DynChunkLatentDecompressor(Boxed)
 );
 
 impl DynChunkLatentDecompressor {
@@ -126,7 +108,7 @@ impl DynChunkLatentDecompressor {
           bins,
           delta_encoding,
         )?;
-        DynChunkLatentDecompressor::new(inner)
+        DynChunkLatentDecompressor::new(Box::new(inner))
       }
     );
     Ok(res)
