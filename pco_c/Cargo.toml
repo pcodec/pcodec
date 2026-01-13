@@ -8,6 +8,6 @@ name = "cpcodec"
 crate-type = ["dylib"]
 
 [dependencies]
-half = { version = "2.0.0", features = ["std"] }
-libc = "0.2.132"
+half = { workspace = true, features = ["std"] }
+libc = { workspace = true }
 pco = { version = "1.0.0", path = "../pco" }
