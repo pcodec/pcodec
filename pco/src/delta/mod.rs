@@ -47,7 +47,7 @@ pub fn new_lookback(n: usize) -> DeltaEncoding {
 
 pub fn new_conv1(order: usize, latents: &DynLatents) -> PcoResult<Option<DeltaEncoding>> {
   match latents {
-    DynLatents::U16(_) | DynLatents::U32(_) => (),
+    DynLatents::U8(_) | DynLatents::U16(_) | DynLatents::U32(_) => (),
     DynLatents::U64(_) => {
       // we don't support u64 int conv because of lack of a large enough
       // efficient accumulator type on regular CPUs
