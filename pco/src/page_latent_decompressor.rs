@@ -117,7 +117,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
           let lower = unsafe { *lowers.get_unchecked($state_idx as usize) };
           let offset_bits = node.offset_bits as Bitlen;
-          cld.scratch.set(i, offset_bit_idx, offset_bits, lower);
+          *cld.scratch.offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
+          *cld.scratch.offset_bits.get_unchecked_mut(i) = offset_bits;
+          *cld.scratch.latents.get_unchecked_mut(i) = lower;
           bits_past_byte += bits_to_read;
           offset_bit_idx += offset_bits;
           $state_idx = node.next_state_idx_base as AnsState + ans_val;
@@ -159,7 +161,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
       let lower = unsafe { *cld.state_lowers.get_unchecked(state_idx) };
       let offset_bits = node.offset_bits as Bitlen;
-      cld.scratch.set(i, offset_bit_idx, offset_bits, lower);
+      *cld.scratch.offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
+      *cld.scratch.offset_bits.get_unchecked_mut(i) = offset_bits;
+      *cld.scratch.latents.get_unchecked_mut(i) = lower;
       bits_past_byte += bits_to_read;
       offset_bit_idx += offset_bits;
       state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;

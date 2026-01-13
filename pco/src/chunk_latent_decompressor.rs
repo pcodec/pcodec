@@ -19,15 +19,6 @@ pub struct ChunkLatentDecompressorScratch<L: Latent> {
   pub latents: ScratchArray<L>,
 }
 
-impl<L: Latent> ChunkLatentDecompressorScratch<L> {
-  #[inline]
-  pub unsafe fn set(&mut self, i: usize, offset_bit_idx: Bitlen, offset_bits: Bitlen, lower: L) {
-    *self.offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
-    *self.offset_bits.get_unchecked_mut(i) = offset_bits;
-    *self.latents.get_unchecked_mut(i) = lower;
-  }
-}
-
 #[derive(Clone, Debug)]
 pub struct ChunkLatentDecompressor<L: Latent> {
   pub delta_encoding: LatentVarDeltaEncoding,
