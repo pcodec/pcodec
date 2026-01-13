@@ -115,7 +115,8 @@ Each chunk meta consists of
   | 0     | None           | 0                  | 0                  |
   | 1     | Consecutive    | 0                  | 4                  |
   | 2     | Lookback       | 1                  | 10                 |
-  | 3-15  | \<reserved\>   |                    |                    |
+  | 3     | Conv1          | 0                  | variable           |
+  | 4-15  | \<reserved\>   |                    |                    |
 
 * [`extra_delta_bits` bits]
   * for `consecutive`, this is 3 bits for `order` from 1-7, and 1 bit for
@@ -126,6 +127,9 @@ Each chunk meta consists of
     `state_n_log`, and 1 for whether the mode's secondary latent is delta
     encoded.
     Let `state_n = 1 << state_n_log`.
+  * for `conv1`, this is 5 bits for `quantization`, 64 bits for a raw `bias`
+    value (i64), 5 bits for the order (number of weights), and 32 bits per raw
+    weight value (i32).
 * per latent variable (ordered by delta latent variables followed by mode
   latent variables),
   * [4 bits] `ans_size_log`, the log2 of the size of its tANS table.
@@ -243,6 +247,14 @@ Letting `lookback` be the delta latent variable.
 Mode latents are decoded via `l[i] += l[i - lookback[i]]`.
 
 The decompressor should error if any lookback exceeds the window.
+
+### Conv1
+
+Supposing the latents are k-bit, conv1 arithmetic is mainly done in 2k-bit
+signed values to avoid overflow.
+Latents are decoded in order via
+`l[i] += ((bias + sum[weight[j] * l[i - order + j]]) >> quantization) as L`.
+The bit shift here is arithmetic, not logical.
 
 ### Modes
 
