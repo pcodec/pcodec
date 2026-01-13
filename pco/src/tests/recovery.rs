@@ -14,7 +14,7 @@ fn compress_w_meta<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<(Ve
   let mut compressed = Vec::new();
   let fc = FileCompressor::default();
   fc.write_header(&mut compressed)?;
-  let cd = fc.chunk_compressor(nums, config)?;
+  let mut cd = fc.chunk_compressor(nums, config)?;
   let meta = cd.meta().clone();
   cd.write_chunk(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
