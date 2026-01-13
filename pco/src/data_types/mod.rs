@@ -135,10 +135,6 @@ pub trait Latent:
 
   type Conv: Signed;
 
-  /// Converts a `u16` into this type. Panics if the conversion is
-  /// impossible.
-  fn from_u16(x: u16) -> Self;
-
   /// Converts a `u32` into this type. Panics if the conversion is
   /// impossible.
   fn from_u32(x: u32) -> Self;

@@ -72,10 +72,6 @@ macro_rules! impl_latent {
 
       type Conv = $conv;
 
-      fn from_u16(x: u16) -> Self {
-        x as Self
-      }
-
       #[inline]
       fn from_u32(x: u32) -> Self {
         x as Self
