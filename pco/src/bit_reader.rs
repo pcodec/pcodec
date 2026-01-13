@@ -27,12 +27,6 @@ pub unsafe fn u32_at(src: &[u8], byte_idx: usize) -> u32 {
 }
 
 #[inline]
-pub unsafe fn u16_at(src: &[u8], byte_idx: usize) -> u16 {
-  let raw_bytes = *(src.as_ptr().add(byte_idx) as *const [u8; 2]);
-  u16::from_le_bytes(raw_bytes)
-}
-
-#[inline]
 pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   src: &[u8],
   byte_idx: usize,
@@ -44,8 +38,7 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   //
   // Q: Why does this work?
   // A: We set READ_BYTES so that,
-  //    0  to 9  bit reads -> 4 bytes (1 u32)
-  //    10 to 25  bit reads -> 4 bytes (1 u32)
+  //    0  to 25  bit reads -> 4 bytes (1 u32)
   //    26 to 57  bit reads -> 8 bytes (1 u64)
   //    58 to 113 bit reads -> 15 bytes (almost 2 u64's)
   //    For the 1st u64, we read all bytes from the current u64. Due to our bit
@@ -63,26 +56,11 @@ pub unsafe fn read_uint_at<U: ReadWriteUint, const READ_BYTES: usize>(
   //    shift by is U::BITS - 8, which is safe.
 
   match READ_BYTES {
-    2 => read_u16_at(src, byte_idx, bits_past_byte, n),
     4 => read_u32_at(src, byte_idx, bits_past_byte, n),
     8 => read_u64_at(src, byte_idx, bits_past_byte, n),
     15 => read_almost_u64x2_at(src, byte_idx, bits_past_byte, n),
     _ => unreachable!("invalid read bytes: {}", READ_BYTES),
   }
-}
-
-#[inline]
-unsafe fn read_u16_at<U: ReadWriteUint>(
-  src: &[u8],
-  byte_idx: usize,
-  bits_past_byte: Bitlen,
-  n: Bitlen,
-) -> U {
-  debug_assert!(n <= 9);
-  U::from_u16(bits::lowest_bits_fast(
-    u16_at(src, byte_idx) >> bits_past_byte,
-    n,
-  ))
 }
 
 #[inline]
@@ -189,13 +167,7 @@ impl<'a> BitReader<'a> {
   pub unsafe fn read_uint<U: ReadWriteUint>(&mut self, n: Bitlen) -> U {
     self.refill();
     let res = match U::MAX_BYTES {
-      1..=2 => read_uint_at::<U, 2>(
-        self.src,
-        self.stale_byte_idx,
-        self.bits_past_byte,
-        n,
-      ),
-      3..=4 => read_uint_at::<U, 4>(
+      1..=4 => read_uint_at::<U, 4>(
         self.src,
         self.stale_byte_idx,
         self.bits_past_byte,
