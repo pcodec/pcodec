@@ -231,7 +231,10 @@ impl<'a> BitReader<'a> {
   }
 
   pub unsafe fn read_bool(&mut self) -> bool {
-    self.read_uint::<u32>(1) > 0
+    self.refill();
+    let res = self.src[self.stale_byte_idx] & (1 << self.bits_past_byte) != 0;
+    self.consume(1);
+    res
   }
 
   // checks in bounds and returns bit idx

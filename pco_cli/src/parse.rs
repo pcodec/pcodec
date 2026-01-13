@@ -6,7 +6,7 @@ use pco::{DeltaSpec, ModeSpec};
 pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => DeltaSpec::Auto,
-    "none" => DeltaSpec::None,
+    "noop" => DeltaSpec::NoOp,
     "lookback" => DeltaSpec::TryLookback,
     other => {
       let mut parts = other.split('@');
@@ -15,6 +15,7 @@ pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
       let value = parts.next().ok_or_else(err)?;
       match name {
         "consecutive" => DeltaSpec::TryConsecutive(value.parse()?),
+        "conv1" => DeltaSpec::TryConv1(value.parse()?),
         _ => return Err(err()),
       }
     }
@@ -26,6 +27,7 @@ pub fn mode_spec(s: &str) -> anyhow::Result<ModeSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => ModeSpec::Auto,
     "classic" => ModeSpec::Classic,
+    "dict" => ModeSpec::TryDict,
     other => {
       let mut parts = other.split('@');
       let name = parts.next().unwrap();

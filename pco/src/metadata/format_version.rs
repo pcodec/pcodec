@@ -29,7 +29,7 @@ pub struct FormatVersion {
 /// The default FormatVersion is used when compressing files.
 impl Default for FormatVersion {
   fn default() -> Self {
-    Self { major: 3, minor: 0 }
+    Self { major: 4, minor: 1 }
   }
 }
 
@@ -45,7 +45,7 @@ impl FormatVersion {
   /// Returns the max format version that can definitely be decompressed by the
   /// current library version.
   pub fn max_supported() -> Self {
-    Self { major: 4, minor: 0 }
+    Self { major: 4, minor: 1 }
   }
 
   /// Returns whether this format version can definitely be read by the
@@ -84,14 +84,9 @@ impl FormatVersion {
   }
 
   pub(crate) fn write_to<W: Write>(&self, writer: &mut BitWriter<W>) -> PcoResult<usize> {
-    // TODO in 1.0: only ever write major version 4
-    if self.major >= 4 {
-      writer.write_aligned_bytes(&[self.major, self.minor])?;
-      Ok(2)
-    } else {
-      writer.write_aligned_bytes(&[self.major])?;
-      Ok(1)
-    }
+    assert!(self.major >= 4);
+    writer.write_aligned_bytes(&[self.major, self.minor])?;
+    Ok(2)
   }
 
   pub(crate) fn used_old_gcds(&self) -> bool {

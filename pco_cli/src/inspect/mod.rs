@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+use pco::standalone::{DecompressorItem, FileDecompressor};
 
 use crate::core_handlers;
 use crate::inspect::handler::{CompressionSummary, Output};
@@ -24,13 +24,13 @@ fn trivial_inspect(opt: &InspectOpt, src: &[u8]) -> Result<()> {
   let header_size = start_len - src.len();
   let no_cd = fd.chunk_decompressor::<i32, _>(src)?;
   let src = match no_cd {
-    MaybeChunkDecompressor::Some(_) => unreachable!("file was supposed to be trivial"),
-    MaybeChunkDecompressor::EndOfData(src) => src,
+    DecompressorItem::Chunk(_) => unreachable!("file was supposed to be trivial"),
+    DecompressorItem::EndOfData(src) => src,
   };
 
   let summary = Output {
     filename: opt.path.to_str().unwrap().to_string(),
-    data_type: "<none>".to_string(),
+    number_type: "<none>".to_string(),
     format_version: fd.format_version().to_string(),
     n: 0,
     n_chunks: 0,
@@ -44,7 +44,7 @@ fn trivial_inspect(opt: &InspectOpt, src: &[u8]) -> Result<()> {
       footer_size: 1,
       unknown_trailing_bytes: src.len(),
     },
-    chunks: Vec::new(),
+    chunk: Vec::new(),
   };
   println!("{}", toml::to_string_pretty(&summary)?);
   Ok(())

@@ -10,8 +10,8 @@ pub use split_latents::SplitLatents;
 
 use crate::constants::Bitlen;
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
-use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::ChunkConfig;
@@ -23,6 +23,22 @@ mod split_latents;
 mod unsigneds;
 
 pub(crate) type ModeAndLatents = (Mode, SplitLatents);
+
+mod private {
+  pub trait Sealed {}
+
+  impl Sealed for f32 {}
+  impl Sealed for f64 {}
+  impl Sealed for half::f16 {}
+  impl Sealed for i8 {}
+  impl Sealed for i16 {}
+  impl Sealed for i32 {}
+  impl Sealed for i64 {}
+  impl Sealed for u8 {}
+  impl Sealed for u16 {}
+  impl Sealed for u32 {}
+  impl Sealed for u64 {}
+}
 
 /// This is used internally for compressing and decompressing with
 /// float modes.
@@ -78,7 +94,6 @@ pub(crate) trait Float:
   fn from_latent_numerical(l: Self::L) -> Self;
 }
 
-// TODO in 1.0 seal Latent and Number
 /// **unstable API** Trait for data types that behave like unsigned integers.
 ///
 /// This is used extensively in `pco` to guarantee that bitwise
@@ -86,7 +101,7 @@ pub(crate) trait Float:
 /// hold.
 /// Under the hood, when numbers are encoded or decoded, they go through their
 /// corresponding `Latent` representation.
-/// Metadata stores numbers as their latent representations.
+/// Metadata always stores latent representations, never numbers.
 pub trait Latent:
   Add<Output = Self>
   + AddAssign
@@ -105,6 +120,7 @@ pub trait Latent:
   + PartialOrd
   + Rem<Output = Self>
   + RemAssign
+  + private::Sealed
   + Send
   + Sync
   + Shl<Bitlen, Output = Self>
@@ -116,6 +132,8 @@ pub trait Latent:
   const MID: Self;
   const MAX: Self;
   const BITS: Bitlen;
+
+  type Conv: Signed;
 
   /// Converts a `u16` into this type. Panics if the conversion is
   /// impossible.
@@ -134,6 +152,9 @@ pub trait Latent:
   /// Converts the latent to a `u64`, truncating higher bits if necessary.
   fn to_u64(self) -> u64;
 
+  fn from_conv(x: Self::Conv) -> Self;
+  fn to_conv(self) -> Self::Conv;
+
   fn wrapping_add(self, other: Self) -> Self;
   fn wrapping_sub(self, other: Self) -> Self;
 
@@ -144,17 +165,17 @@ pub trait Latent:
 
 /// **unstable API** Trait for data types supported for compression/decompression.
 ///
-/// If you have a new data type you would like to add to the library or,
-/// these are the questions you need to answer:
+/// If you have a new number type you would like to add to the library, these
+/// are some the questions you need to answer:
 /// * What is the corresponding latent type? This is probably the
 ///   smallest unsigned integer with enough bits to represent the number.
 /// * How can I convert to this latent representation and back
 ///   in *a way that preserves ordering*? For instance, transmuting `f32` to `u32`
 ///   wouldn't preserve ordering and would cause pco to fail. In this example,
 ///   one needs to flip the sign bit and, if negative, the rest of the bits.
-///
-/// Custom data types (defined outside of pco) are not currently supported.
-pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + 'static {
+pub trait Number:
+  Copy + Debug + Display + Default + PartialEq + private::Sealed + Send + Sync + 'static
+{
   /// A number from 1-255 that corresponds to the number's data type.
   ///
   /// Each `Number` implementation should have a different `NUMBER_TYPE_BYTE`.
@@ -173,7 +194,7 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 
   fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber>;
 
-  fn mode_is_valid(mode: Mode) -> bool;
+  fn mode_is_valid(mode: &Mode) -> bool;
   /// Breaks the numbers into latent variables for better compression.
   ///
   /// Returns
@@ -189,16 +210,21 @@ pub trait Number: Copy + Debug + Display + Default + PartialEq + Send + Sync + '
 
   fn from_latent_ordered(l: Self::L) -> Self;
   fn to_latent_ordered(self) -> Self::L;
-  fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>);
-
-  fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L];
-  fn transmute_to_latent(self) -> Self::L;
+  fn join_latents(
+    mode: &Mode,
+    primary: DynLatentSlice,
+    secondary: Option<DynLatentSlice>,
+    dst: &mut [Self],
+  ) -> PcoResult<()>;
 }
 
-pub(crate) fn split_latents_classic<T: Number>(nums: &[T]) -> SplitLatents {
-  let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect()).unwrap();
-  SplitLatents {
-    primary,
-    secondary: None,
-  }
+pub trait Signed:
+  AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> + private::Sealed
+{
+  const ZERO: Self;
+  const MAX: Self;
+  const BITS: Bitlen;
+
+  fn from_i64(x: i64) -> Self;
+  fn to_f64(self) -> f64;
 }

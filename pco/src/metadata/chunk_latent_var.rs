@@ -8,8 +8,9 @@ use crate::constants::{
 use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_bins::DynBins;
-use crate::metadata::{Bin, DeltaEncoding};
+use crate::metadata::Bin;
 use better_io::BetterBufRead;
 use std::cmp::min;
 use std::io::Write;
@@ -32,7 +33,7 @@ fn read_bin_batch<L: Latent, R: BetterBufRead>(
       if offset_bits > L::BITS {
         reader.check_in_bounds()?;
         return Err(PcoError::corruption(format!(
-          "offset bits of {} exceeds data type of {} bits",
+          "offset bits of {} exceeds type of {} bits",
           offset_bits,
           L::BITS,
         )));
@@ -77,6 +78,7 @@ unsafe fn write_bins<L: Latent, W: Write>(
 ///
 /// This is mainly useful for inspecting how compression was done.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ChunkLatentVarMeta {
   /// The log2 of the number of the number of states in this chunk's tANS
   /// table.
@@ -92,7 +94,7 @@ impl ChunkLatentVarMeta {
   pub(crate) fn latent_type(&self) -> LatentType {
     match_latent_enum!(
       &self.bins,
-      DynBins<L>(_inner) => { LatentType::new::<L>().unwrap() }
+      DynBins<L>(_inner) => { LatentType::new::<L>() }
     )
   }
 
@@ -144,7 +146,7 @@ impl ChunkLatentVarMeta {
           )?;
         }
 
-        DynBins::new(bins).unwrap()
+        DynBins::new(bins)
       }
     );
 
@@ -173,7 +175,7 @@ impl ChunkLatentVarMeta {
     BITS_TO_ENCODE_ANS_SIZE_LOG as usize + BITS_TO_ENCODE_N_BINS as usize + total_bin_size
   }
 
-  pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: DeltaEncoding) -> usize {
+  pub(crate) fn exact_page_meta_bit_size(&self, delta_encoding: &LatentVarDeltaEncoding) -> usize {
     let bits_per_latent = match_latent_enum!(
       &self.bins,
       DynBins<L>(_bins) => { L::BITS }

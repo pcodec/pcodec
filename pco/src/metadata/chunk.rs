@@ -4,14 +4,15 @@ use better_io::BetterBufRead;
 
 use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
-use crate::constants::{DeltaLookback, OVERSHOOT_PADDING};
-use crate::data_types::LatentType;
+use crate::constants::{DeltaLookback, MAX_CONV1_DELTA_QUANTIZATION, OVERSHOOT_PADDING};
+use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
+use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::delta_encoding::DeltaEncoding;
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::Mode;
+use crate::metadata::{DynBins, Mode};
 
 /// The metadata of a pco chunk.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,16 +25,89 @@ pub struct ChunkMeta {
   /// compress/decompress the inputs
   /// according to the formula used by `mode`.
   pub per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
+  _private: (),
 }
 
 impl ChunkMeta {
+  pub fn new(
+    mode: Mode,
+    delta_encoding: DeltaEncoding,
+    per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
+  ) -> PcoResult<Self> {
+    // validate the delta encoding is compatible with everything else
+    match &delta_encoding {
+      DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } => (),
+      DeltaEncoding::Lookback { config, .. } => {
+        let Some(latent_var) = &per_latent_var.delta else {
+          unreachable!("Lookback delta encoding should always have a delta latent var");
+        };
+
+        let window_n = config.window_n() as DeltaLookback;
+        let bins = latent_var.bins.downcast_ref::<DeltaLookback>().unwrap();
+        let maybe_corrupt_bin = bins
+          .iter()
+          .find(|bin| bin.lower < 1 || bin.lower > window_n);
+        if let Some(corrupt_bin) = maybe_corrupt_bin {
+          return Err(PcoError::corruption(format!(
+            "delta lookback bin had invalid lower bound of {} outside window [1, {}]",
+            corrupt_bin.lower, window_n
+          )));
+        }
+      }
+      DeltaEncoding::Conv1(config) => {
+        match &per_latent_var.primary.bins {
+          DynBins::U16(_) | DynBins::U32(_) => (),
+          DynBins::U64(_) => {
+            return Err(PcoError::corruption(
+              "Conv1 delta encodings are not supported on types larger than 32 bits",
+            ))
+          }
+        }
+        let (l_bits, conv_bits) = match_latent_enum!(
+          &per_latent_var.primary.bins,
+          DynBins<L>(_bins) => {
+            (L::BITS, <L as Latent>::Conv::BITS)
+          }
+        );
+        let max_quantization = MAX_CONV1_DELTA_QUANTIZATION.min(conv_bits - 1);
+        if config.quantization > max_quantization {
+          return Err(PcoError::corruption(format!(
+            "Conv1 delta encoding quantization of {} exceeds max of {}",
+            config.quantization, max_quantization
+          )));
+        }
+
+        let max_pred = (config.bias::<i64>() as f64).abs()
+          + 2.0_f64.powi(l_bits as i32)
+            * config
+              .weights::<i64>()
+              .iter()
+              .map(|w| w.abs() as f64)
+              .sum::<f64>();
+        if max_pred >= 2.0_f64.powi(conv_bits as i32 - 1) {
+          return Err(PcoError::corruption(format!(
+            "Conv1 delta encoding weights and bias risk overflowing as high as {}",
+            max_pred,
+          )));
+        }
+      }
+    }
+
+    Ok(Self {
+      mode,
+      delta_encoding,
+      per_latent_var,
+      _private: (),
+    })
+  }
+
   pub(crate) fn max_size(&self) -> usize {
     let bits_for_latent_vars = self
       .per_latent_var
       .as_ref()
       .map(|_, var_meta| var_meta.exact_bit_size())
       .sum();
-    let n_bits = Mode::MAX_BIT_SIZE + DeltaEncoding::MAX_BIT_SIZE + bits_for_latent_vars;
+    let n_bits = self.mode.max_bit_size() + DeltaEncoding::MAX_BIT_SIZE + bits_for_latent_vars;
     n_bits.div_ceil(8)
   }
 
@@ -43,33 +117,10 @@ impl ChunkMeta {
       .as_ref()
       .map(|key, var_meta| {
         let delta_encoding = self.delta_encoding.for_latent_var(key);
-        var_meta.exact_page_meta_bit_size(delta_encoding)
+        var_meta.exact_page_meta_bit_size(&delta_encoding)
       })
       .sum();
     bit_size.div_ceil(8)
-  }
-
-  pub(crate) fn validate_delta_encoding(&self) -> PcoResult<()> {
-    let delta_latent_var = &self.per_latent_var.delta;
-    match (self.delta_encoding, delta_latent_var) {
-      (DeltaEncoding::Lookback(config), Some(latent_var)) => {
-        let window_n = config.window_n() as DeltaLookback;
-        let bins = latent_var.bins.downcast_ref::<DeltaLookback>().unwrap();
-        let maybe_corrupt_bin = bins
-          .iter()
-          .find(|bin| bin.lower < 1 || bin.lower > window_n);
-        if let Some(corrupt_bin) = maybe_corrupt_bin {
-          Err(PcoError::corruption(format!(
-            "delta lookback bin had invalid lower bound of {} outside window [1, {}]",
-            corrupt_bin.lower, window_n
-          )))
-        } else {
-          Ok(())
-        }
-      }
-      (DeltaEncoding::None, None) | (DeltaEncoding::Consecutive(_), None) => Ok(()),
-      _ => unreachable!(),
-    }
   }
 
   pub(crate) fn read_from<R: BetterBufRead>(
@@ -77,13 +128,10 @@ impl ChunkMeta {
     version: &FormatVersion,
     latent_type: LatentType,
   ) -> PcoResult<Self> {
-    let (mode, delta_encoding) = reader_builder.with_reader(
-      (Mode::MAX_BIT_SIZE + DeltaEncoding::MAX_BIT_SIZE).div_ceil(8) + OVERSHOOT_PADDING,
-      |reader| unsafe {
-        let mode = Mode::read_from(reader, version, latent_type)?;
-        let delta_encoding = DeltaEncoding::read_from(reader, version)?;
-        Ok((mode, delta_encoding))
-      },
+    let mode = Mode::read_from(reader_builder, version, latent_type)?;
+    let delta_encoding = reader_builder.with_reader(
+      DeltaEncoding::MAX_BIT_SIZE.div_ceil(8) + OVERSHOOT_PADDING,
+      |reader| unsafe { DeltaEncoding::read_from(reader, version) },
     )?;
 
     let delta = if let Some(delta_latent_type) = delta_encoding.latent_type() {
@@ -119,11 +167,7 @@ impl ChunkMeta {
       reader.drain_empty_byte("nonzero bits in end of final byte of chunk metadata")
     })?;
 
-    Ok(Self {
-      mode,
-      delta_encoding,
-      per_latent_var,
-    })
+    Self::new(mode, delta_encoding, per_latent_var)
   }
 
   pub(crate) unsafe fn write_to<W: Write>(&self, writer: &mut BitWriter<W>) -> PcoResult<()> {
@@ -148,7 +192,6 @@ mod tests {
   use crate::constants::ANS_INTERLEAVING;
   use crate::data_types::Latent;
   use crate::macros::match_latent_enum;
-  use crate::metadata::delta_encoding::DeltaConsecutiveConfig;
   use crate::metadata::dyn_bins::DynBins;
   use crate::metadata::dyn_latents::DynLatents;
   use crate::metadata::page::PageMeta;
@@ -172,7 +215,7 @@ mod tests {
         let delta_moments = match_latent_enum!(
           &latent_var_meta.bins,
           DynBins<L>(_bins) => {
-            DynLatents::new(vec![L::ZERO; delta_encoding.n_latents_per_state()]).unwrap()
+            DynLatents::new(vec![L::ZERO; delta_encoding.n_latents_per_state()])
           }
         );
         PageLatentVarMeta {
@@ -199,10 +242,10 @@ mod tests {
   fn exact_size_binless() -> PcoResult<()> {
     let meta = ChunkMeta {
       mode: Mode::Classic,
-      delta_encoding: DeltaEncoding::Consecutive(DeltaConsecutiveConfig {
+      delta_encoding: DeltaEncoding::Consecutive {
         order: 5,
         secondary_uses_delta: false,
-      }),
+      },
       per_latent_var: PerLatentVar {
         delta: None,
         primary: ChunkLatentVarMeta {
@@ -211,6 +254,7 @@ mod tests {
         },
         secondary: None,
       },
+      _private: (),
     };
 
     check_sizes(&meta)
@@ -220,7 +264,7 @@ mod tests {
   fn exact_size_trivial() -> PcoResult<()> {
     let meta = ChunkMeta {
       mode: Mode::Classic,
-      delta_encoding: DeltaEncoding::None,
+      delta_encoding: DeltaEncoding::NoOp,
       per_latent_var: PerLatentVar {
         delta: None,
         primary: ChunkLatentVarMeta {
@@ -233,6 +277,7 @@ mod tests {
         },
         secondary: None,
       },
+      _private: (),
     };
 
     check_sizes(&meta)
@@ -242,10 +287,10 @@ mod tests {
   fn exact_size_float_mult() -> PcoResult<()> {
     let meta = ChunkMeta {
       mode: Mode::FloatMult(DynLatent::U32(777_u32)),
-      delta_encoding: DeltaEncoding::Consecutive(DeltaConsecutiveConfig {
+      delta_encoding: DeltaEncoding::Consecutive {
         order: 3,
         secondary_uses_delta: false,
-      }),
+      },
       per_latent_var: PerLatentVar {
         delta: None,
         primary: ChunkLatentVarMeta {
@@ -279,6 +324,7 @@ mod tests {
           ]),
         }),
       },
+      _private: (),
     };
 
     check_sizes(&meta)

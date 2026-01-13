@@ -1,4 +1,4 @@
-use crate::constants::{Bitlen, DEFAULT_MAX_PAGE_N};
+use crate::constants::*;
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
 
@@ -16,6 +16,7 @@ pub enum ModeSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad mode in adversarial cases.
+  /// At present, this will never consider `Dict` mode.
   #[default]
   Auto,
   /// Only uses `Classic` mode.
@@ -32,6 +33,15 @@ pub enum ModeSpec {
   ///
   /// Only applies to integer types.
   TryIntMult(u64),
+  /// Tries using `Dict` mode.
+  ///
+  /// This may be beneficial when the data consists of IDs, i.e. a large number
+  /// of discrete values over a very wide range that often occur multiple times
+  /// each.
+  /// At present, this requires substantially more compression time than others.
+  /// When using Dict mode, it is often advantageous to use very large chunks
+  /// (>1M values) to reuse the large dictionary metadata as much as possible.
+  TryDict,
 }
 
 /// Specifies how Pco should choose a
@@ -45,29 +55,40 @@ pub enum ModeSpec {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum DeltaSpec {
+  // TODO in the future: make Auto consider Conv1, assuming we can make it
+  // performant enough.
   /// Automatically detects a good delta encoding.
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad delta encoding in adversarial cases.
+  /// At present, this will never consider `Conv1` delta encoding.
   #[default]
   Auto,
   /// Never uses delta encoding.
   ///
   /// This is best if your data is in a random order or adjacent numbers have
   /// no relation to each other.
-  None,
+  NoOp,
   /// Tries taking nth order consecutive deltas.
   ///
   /// Supports a delta encoding order up to 7.
   /// For instance, 1st order is just regular delta encoding, 2nd is
   /// deltas-of-deltas, etc.
-  /// It is legal to use 0th order, but it is identical to `None`.
+  /// It is legal to use 0th order, but it is identical to `NoOp`.
   TryConsecutive(usize),
   /// Tries delta encoding according to an extra latent variable of "lookback".
   ///
   /// This can improve compression ratio when there are nontrivial patterns in
   /// your numbers, but reduces compression speed substantially.
   TryLookback,
+  /// Tries delta encoding by subtracting a convolution of the previous `order`
+  /// elements.
+  ///
+  /// Supports order up to 32.
+  /// In practice, the weights for the convolution are chosen via linear
+  /// regression.
+  /// It is legal to use 0th order, but it is identical to `NoOp`.
+  TryConv1(usize),
 }
 
 // TODO consider adding a "lossiness" spec that allows dropping secondary latent
@@ -143,6 +164,38 @@ impl ChunkConfig {
   pub fn with_paging_spec(mut self, paging_spec: PagingSpec) -> Self {
     self.paging_spec = paging_spec;
     self
+  }
+
+  pub(crate) fn validate(&self) -> PcoResult<()> {
+    let compression_level = self.compression_level;
+    if compression_level > MAX_COMPRESSION_LEVEL {
+      return Err(PcoError::invalid_argument(format!(
+        "compression level may not exceed {} (was {})",
+        MAX_COMPRESSION_LEVEL, compression_level,
+      )));
+    }
+
+    match self.delta_spec {
+      DeltaSpec::Auto | DeltaSpec::NoOp | DeltaSpec::TryLookback => (),
+      DeltaSpec::TryConsecutive(order) => {
+        if order > MAX_CONSECUTIVE_DELTA_ORDER {
+          return Err(PcoError::invalid_argument(format!(
+            "consecutive delta order may not exceed {} (was {})",
+            MAX_CONSECUTIVE_DELTA_ORDER, order,
+          )));
+        }
+      }
+      DeltaSpec::TryConv1(order) => {
+        if order > MAX_CONV1_DELTA_ORDER {
+          return Err(PcoError::invalid_argument(format!(
+            "conv1 delta order may not exceed {} (was {})",
+            MAX_CONV1_DELTA_ORDER, order,
+          )));
+        }
+      }
+    }
+
+    Ok(())
   }
 }
 

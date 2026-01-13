@@ -1,11 +1,13 @@
 use super::ModeAndLatents;
 use crate::constants::Bitlen;
-use crate::data_types::{split_latents_classic, Latent, Number};
+use crate::data_types::{Latent, Number};
 use crate::describers::LatentDescriber;
+use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatent, DynLatents, Mode};
-use crate::{describers, int_mult_utils, ChunkConfig, ModeSpec};
+use crate::metadata::{ChunkMeta, DynLatent, Mode};
+use crate::mode::{classic, dict, int_mult};
+use crate::{describers, ChunkConfig, ModeSpec};
 
 pub fn choose_mode_and_split_latents<T: Number>(
   nums: &[T],
@@ -13,44 +15,62 @@ pub fn choose_mode_and_split_latents<T: Number>(
 ) -> PcoResult<ModeAndLatents> {
   match config.mode_spec {
     ModeSpec::Auto => {
-      if let Some(base) = int_mult_utils::choose_base(nums) {
+      if let Some(base) = int_mult::choose_base(nums) {
         let mode = Mode::int_mult(base);
-        let latents = int_mult_utils::split_latents(nums, base);
+        let latents = int_mult::split_latents(nums, base);
         Ok((mode, latents))
       } else {
-        Ok((Mode::Classic, split_latents_classic(nums)))
+        Ok((Mode::Classic, classic::split_latents(nums)))
       }
     }
-
-    ModeSpec::Classic => Ok((Mode::Classic, split_latents_classic(nums))),
+    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
     ModeSpec::TryFloatMult(_) | ModeSpec::TryFloatQuant(_) => Err(PcoError::invalid_argument(
       "unable to use float mode for ints",
     )),
     ModeSpec::TryIntMult(base_u64) => {
       let base = T::L::from_u64(base_u64);
-      let mode = Mode::IntMult(DynLatent::new(base).unwrap());
-      let latents = int_mult_utils::split_latents(nums, base);
+      let mode = Mode::IntMult(DynLatent::new(base));
+      let latents = int_mult::split_latents(nums, base);
       Ok((mode, latents))
+    }
+    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
+  }
+}
+
+pub fn join_latents<T: Number>(
+  mode: &Mode,
+  primary: DynLatentSlice,
+  secondary: Option<DynLatentSlice>,
+  dst: &mut [T],
+) -> PcoResult<()> {
+  match mode {
+    Mode::Classic => classic::join_latents(primary, dst),
+    Mode::Dict(dict) => dict::join_latents(dict, primary, dst),
+    Mode::IntMult(base) => int_mult::join_latents(*base, primary, secondary, dst),
+    Mode::FloatMult(_) | Mode::FloatQuant(_) => {
+      unreachable!("impossible mode for unsigned ints")
     }
   }
 }
 
-pub fn mode_is_valid<L: Latent>(mode: Mode) -> bool {
+pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
   match mode {
-    Mode::Classic => true,
+    Mode::Classic | Mode::Dict(_) => true,
+    Mode::FloatMult(_) | Mode::FloatQuant(_) => false,
     Mode::IntMult(base) => *base.downcast_ref::<L>().unwrap() > L::ZERO,
-    _ => false,
   }
 }
 
 macro_rules! impl_latent {
-  ($t: ty) => {
+  ($t: ty, $conv: ty) => {
     impl Latent for $t {
       const ZERO: Self = 0;
       const ONE: Self = 1;
       const MID: Self = 1 << (Self::BITS - 1);
       const MAX: Self = Self::MAX;
       const BITS: Bitlen = Self::BITS as Bitlen;
+
+      type Conv = $conv;
 
       fn from_u16(x: u16) -> Self {
         x as Self
@@ -77,6 +97,16 @@ macro_rules! impl_latent {
       }
 
       #[inline]
+      fn from_conv(x: Self::Conv) -> Self {
+        x as Self
+      }
+
+      #[inline]
+      fn to_conv(self) -> Self::Conv {
+        self as Self::Conv
+      }
+
+      #[inline]
       fn wrapping_add(self, other: Self) -> Self {
         self.wrapping_add(other)
       }
@@ -89,10 +119,13 @@ macro_rules! impl_latent {
   };
 }
 
-impl_latent!(u8);
-impl_latent!(u16);
-impl_latent!(u32);
-impl_latent!(u64);
+impl_latent!(u8, i16);
+impl_latent!(u16, i32);
+impl_latent!(u32, i64);
+// 64-bit convolutions can't safely be done in any efficient type without risk
+// of overflow, so this i64 is a misnomer; we have runtime checks to prevent
+// attempting this
+impl_latent!(u64, i64);
 
 macro_rules! impl_unsigned_number {
   ($t: ty, $header_byte: expr) => {
@@ -107,7 +140,7 @@ macro_rules! impl_unsigned_number {
           .expect("invalid mode for unsigned type")
       }
 
-      fn mode_is_valid(mode: Mode) -> bool {
+      fn mode_is_valid(mode: &Mode) -> bool {
         mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
@@ -125,23 +158,13 @@ macro_rules! impl_unsigned_number {
       fn to_latent_ordered(self) -> Self::L {
         self
       }
-      fn join_latents(mode: Mode, primary: &mut [Self::L], secondary: Option<&DynLatents>) {
-        match mode {
-          Mode::Classic => (),
-          Mode::IntMult(dyn_latent) => {
-            let base = *dyn_latent.downcast_ref::<Self::L>().unwrap();
-            int_mult_utils::join_latents(base, primary, secondary)
-          }
-          _ => unreachable!("impossible mode for unsigned ints"),
-        }
-      }
-
-      fn transmute_to_latents(slice: &mut [Self]) -> &mut [Self::L] {
-        slice
-      }
-      #[inline]
-      fn transmute_to_latent(self) -> Self::L {
-        self
+      fn join_latents(
+        mode: &Mode,
+        primary: DynLatentSlice,
+        secondary: Option<DynLatentSlice>,
+        dst: &mut [Self],
+      ) -> PcoResult<()> {
+        join_latents(mode, primary, secondary, dst)
       }
     }
   };
@@ -155,20 +178,25 @@ impl_unsigned_number!(u8, 10);
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::metadata::Mode;
+  use crate::metadata::{DynLatents, Mode};
 
   #[test]
   fn test_mode_validation() {
     // CLASSIC
-    assert!(u32::mode_is_valid(Mode::Classic));
+    assert!(u32::mode_is_valid(&Mode::Classic));
+
+    // DICT
+    assert!(u32::mode_is_valid(&Mode::Dict(
+      DynLatents::new(vec![1_u32, 3])
+    )));
 
     // INT MULT
     for base in [1_u32, 77, u32::MAX] {
-      assert!(u32::mode_is_valid(Mode::int_mult(base)))
+      assert!(u32::mode_is_valid(&Mode::int_mult(base)))
     }
-    assert!(!u32::mode_is_valid(Mode::int_mult(0_u32)));
+    assert!(!u32::mode_is_valid(&Mode::int_mult(0_u32)));
 
     // FLOAT
-    assert!(!u32::mode_is_valid(Mode::FloatQuant(3)));
+    assert!(!u32::mode_is_valid(&Mode::FloatQuant(3)));
   }
 }

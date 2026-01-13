@@ -110,7 +110,7 @@ impl PyCc {
   /// :returns: a bytes object containing the encoded page.
   ///
   /// :raises: TypeError, RuntimeError
-  fn write_page<'py>(&self, py: Python<'py>, page_idx: usize) -> PyResult<Bound<'py, PyBytes>> {
+  fn write_page<'py>(&mut self, py: Python<'py>, page_idx: usize) -> PyResult<Bound<'py, PyBytes>> {
     let mut res = Vec::new();
     py.detach(|| self.0.write_page(page_idx, &mut res))
       .map_err(pco_err_to_py)?;

@@ -7,9 +7,10 @@ use crate::dtypes::PcoNumber;
 fn unparse_delta_spec(spec: &DeltaSpec) -> String {
   match spec {
     DeltaSpec::Auto => "Auto".to_string(),
-    DeltaSpec::None => "None".to_string(),
+    DeltaSpec::NoOp => "NoOp".to_string(),
     DeltaSpec::TryConsecutive(order) => format!("Consecutive@{}", order),
     DeltaSpec::TryLookback => "Lookback".to_string(),
+    DeltaSpec::TryConv1(order) => format!("Conv1@{}", order),
     _ => "Unknown".to_string(),
   }
 }
@@ -18,6 +19,7 @@ fn unparse_mode_spec(spec: &ModeSpec) -> String {
   match spec {
     ModeSpec::Auto => "Auto".to_string(),
     ModeSpec::Classic => "Classic".to_string(),
+    ModeSpec::TryDict => "Dict".to_string(),
     ModeSpec::TryFloatMult(base) => format!("FloatMult@{}", base),
     ModeSpec::TryFloatQuant(k) => format!("FloatQuant@{}", k),
     ModeSpec::TryIntMult(base) => format!("IntMult@{}", base),

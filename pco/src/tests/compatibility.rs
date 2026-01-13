@@ -73,7 +73,7 @@ fn v0_0_0_classic() -> PcoResult<()> {
   let name = "classic";
   let nums = (0_i32..1000).chain(2000..3000).collect::<Vec<_>>();
   let config = ChunkConfig {
-    delta_spec: DeltaSpec::None,
+    delta_spec: DeltaSpec::NoOp,
     ..Default::default()
   };
   simple_write_if_version_matches(version, name, &nums, &config)?;
@@ -143,7 +143,7 @@ fn generate_pseudorandom_f16s() -> Vec<f16> {
 
 #[test]
 fn v0_3_0_f16() -> PcoResult<()> {
-  // v0.3.0 introduced 16-bit data types, including f16, which requires the
+  // v0.3.0 introduced 16-bit number types, including f16, which requires the
   // half crate
   let version = "0.3.0";
   let name = "f16";
@@ -242,6 +242,40 @@ fn v0_4_8_minor_version() -> PcoResult<()> {
     fs::write(path, dst)?;
   }
 
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}
+
+#[test]
+fn v1_0_0_dict() -> PcoResult<()> {
+  // v1.0.0 introduced dict mode
+  let version = "1.0.0";
+  let name = "dict";
+  let nums = vec![8924659283, 234897984367, 9827358920].repeat(1000);
+  let config = ChunkConfig::default()
+    .with_mode_spec(ModeSpec::TryDict)
+    .with_delta_spec(DeltaSpec::NoOp);
+  simple_write_if_version_matches::<u64>(version, name, &nums, &config)?;
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}
+
+#[test]
+fn v1_0_0_conv1() -> PcoResult<()> {
+  // v1.0.0 introduced conv1 delta encoding
+  let version = "1.0.0";
+  let name = "conv1";
+  let mut xm1 = 0.0;
+  let mut xm2 = 0.0;
+  let mut nums = vec![];
+  for i in 0..2000 {
+    let x = (xm1 as f32) * 1.99 - (xm2 as f32) + ((i * 47) % 77 - 38) as f32;
+    nums.push((x + 10000.0) as i32);
+    xm2 = xm1;
+    xm1 = x;
+  }
+  let config = ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(2));
+  simple_write_if_version_matches::<i32>(version, name, &nums, &config)?;
   assert_compatible(version, name, &nums)?;
   Ok(())
 }

@@ -66,7 +66,7 @@ impl PyFd {
         let (generic_cd, rest) = fd
           .chunk_decompressor::<T, _>(src)
           .map_err(pco_err_to_py)?;
-        (DynCd::new(generic_cd).unwrap(), rest)
+        (DynCd::new(generic_cd), rest)
       }
     );
 
@@ -98,7 +98,7 @@ impl PyCd {
   ///
   /// :raises: TypeError, RuntimeError
   fn read_page_into(
-    &self,
+    &mut self,
     py: Python,
     src: &Bound<PyBytes>,
     page_n: usize,
@@ -107,7 +107,7 @@ impl PyCd {
     let src = src.as_bytes();
 
     let (progress, rest) = match_number_enum!(
-      &self.0,
+      &mut self.0,
       DynCd<T>(cd) => {
         let arr = dst.cast::<PyArray1<T>>()?;
         let mut arr_rw = arr.readwrite();

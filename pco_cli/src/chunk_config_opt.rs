@@ -9,10 +9,11 @@ pub struct ChunkConfigOpt {
   /// Compression level.
   #[arg(long, default_value = "8")]
   pub level: usize,
-  /// Can be "Auto", "None", "Consecutive@<order>", or "Lookback".
+  /// Can be "Auto", "NoOp", "Consecutive@<order>", "Lookback", or
+  /// "Conv1@<order>".
   #[arg(long, default_value = "Auto", value_parser = parse::delta_spec)]
   pub delta: DeltaSpec,
-  /// Can be "Auto", "Classic", "FloatMult@<base>", "FloatQuant@<k>", or
+  /// Can be "Auto", "Classic", "Dict", "FloatMult@<base>", "FloatQuant@<k>", or
   /// "IntMult@<base>".
   ///
   /// Specs other than Auto and Classic will try the given mode and fall back to

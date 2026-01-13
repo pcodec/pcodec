@@ -25,14 +25,14 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
-          pub fn new<T: $constraint>() -> Option<Self> {
+          pub fn new<T: $constraint>() -> Self {
             let type_id = std::any::TypeId::of::<T>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
-                return Some($name::$variant);
+                return $name::$variant;
               }
             )+
-            None
+            unreachable!();
           }
         }
       };
@@ -46,14 +46,14 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
-          pub fn new<T: $constraint>() -> Option<Self> {
+          pub fn new<T: $constraint>() -> Self {
             let type_id = std::any::TypeId::of::<T>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
-                return Some($name::$variant);
+                return $name::$variant;
               }
             )+
-            None
+            unreachable!();
           }
 
           pub fn from_descriminant(desc: $desc_t) -> Option<Self> {
@@ -74,7 +74,7 @@ macro_rules! build_dtype_macros {
         impl $name {
           #[inline]
           #[allow(clippy::forget_non_drop)]
-          pub fn new<S: $constraint>(inner: $container<S>) -> Option<Self> {
+          pub fn new<S: $constraint>(inner: $container<S>) -> Self {
             let type_id = std::any::TypeId::of::<S>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
@@ -84,10 +84,10 @@ macro_rules! build_dtype_macros {
                 let ptr = &inner as *const $container<S> as *const $container<$t>;
                 let typed = unsafe { ptr.read() };
                 std::mem::forget(inner);
-                return Some($name::$variant(typed));
+                return $name::$variant(typed);
               }
             )+
-            None
+            unreachable!();
           }
 
           #[allow(clippy::forget_non_drop)]
@@ -207,7 +207,7 @@ mod tests {
   // we use this helper just to prove that we can handle generic types, not
   // just concrete types
   fn generic_new<T: Constraint>(inner: Vec<T>) -> MyEnum {
-    MyEnum::new(inner).unwrap()
+    MyEnum::new(inner)
   }
 
   #[test]
@@ -223,6 +223,6 @@ mod tests {
   fn test_multiple_enums_defined_in_same_scope() {
     // This was really tested during compilation, but I'm just using the new
     // enum here to ensure the code doesn't die.
-    AnotherContainerEnumInSameScope::new(HashMap::<u16, usize>::new()).unwrap();
+    AnotherContainerEnumInSameScope::new(HashMap::<u16, usize>::new());
   }
 }

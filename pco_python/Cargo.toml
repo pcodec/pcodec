@@ -12,7 +12,7 @@ name = "pcodec"
 crate-type = ["cdylib"]
 
 [dependencies]
-half = { version = "2.0.0", features = ["std"] }
-numpy = { version = "0.27.1", features = ["half"] }
-pco = { version = "0.4.0", path = "../pco" }
-pyo3 = { version = "0.27.2", features = ["extension-module"] }
+half = { workspace = true, features = ["std"] }
+numpy = { workspace = true, features = ["half"] }
+pco = { version = "1.0.0", path = "../pco" }
+pyo3 = { workspace = true, features = ["extension-module"] }

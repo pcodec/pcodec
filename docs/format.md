@@ -65,13 +65,14 @@ The header simply consists of
 
 So far, these format versions exist:
 
-| format version | first Rust version | format modifications    | format additions              |
-|----------------|--------------------|-------------------------|-------------------------------|
-| 0              | 0.0.0              |                         |                               |
-| 1              | 0.1.0              |                         | IntMult mode                  |
-| 2              | 0.3.0              |                         | FloatQuant mode, 16-bit types |
-| 3              | 0.4.0              | delta encoding variants | Lookback delta encoding       |
-| 4.0            | 1.0.0              | minor version           |                               |
+| format version | 1st reader lib version | 1st writer lib version | format modifications    | format additions              |
+|----------------|------------------------|------------------------|-------------------------|-------------------------------|
+| 0              | 0.0.0                  | 0.0.0                  |                         |                               |
+| 1              | 0.1.0                  | 0.1.0                  |                         | IntMult mode                  |
+| 2              | 0.3.0                  | 0.3.0                  |                         | FloatQuant mode, 16-bit types |
+| 3              | 0.4.0                  | 0.4.0                  | delta encoding variants | Lookback delta encoding       |
+| 4.0            | 0.4.8                  | -                      | minor version           |                               |
+| 4.1            | 1.0.0                  | 1.0.0                  |                         | Dict mode                     |
 
 ### Chunk Metadata
 
@@ -84,20 +85,29 @@ Each chunk meta consists of
 
 * [4 bits] `mode`, using this table:
 
-  | value | mode         | n latent variables | `extra_mode_bits` |
-  |-------|--------------|--------------------|-------------------|
-  | 0     | Classic      | 1                  | 0                 |
-  | 1     | IntMult      | 2                  | `dtype_size`      |
-  | 2     | FloatMult    | 2                  | `dtype_size`      |
-  | 3     | FloatQuant   | 2                  | 8                 |
-  | 4-15  | \<reserved\> |                    |                   |
+  | value | mode         | primary latent | secondary latent  | `extra_mode_bits` |
+  |-------|--------------|----------------|-------------------|-------------------|
+  | 0     | Classic      | `T::L`         |                   | 0                 |
+  | 1     | IntMult      | `T::L`         | `T::L`            | `dtype_size`      |
+  | 2     | FloatMult    | `T::L`         | `T::L`            | `dtype_size`      |
+  | 3     | FloatQuant   | `T::L`         | `T::L`            | 8                 |
+  | 4     | Dict         | `u32`          |                   | variable*         |
+  | 5-15  | \<reserved\> |                |                   |                   |
+
+  Here, `T::L` refers to the latent type with the same number of bits as the
+  number type, e.g. u64 for i64.
+  `Dict` mode's payload is a 25-bit integer for the count of values in the
+  dictionary, followed by those raw values.
 
 * [`extra_mode_bits` bits] for certain modes, extra data is parsed. See the
-  mode-specific formulas below for how this is used, e.g. as the `mult` or `k`
-  values.
+  mode-specific formulas below for how this is used, e.g. as the `mult`, `k`, or
+  `dict` values.
   The value encoded in these bits should be validated; namely, mult mode bases
   should be finite and nonzero, quant mode must have `0 < k <= MANTISSA_BITS`,
   int modes cannot apply to floats, and vice versa.
+  Parsing the `dict` value is more complex than the others: it is formed by
+  reading 25 bits for `dict_len`, followed by 0s until byte-aligned, followed by
+  `dict_len` raw values that consitute `dict`.
 * [4 bits] `delta_encoding`, using this table:
 
   | value | delta encoding | n latent variables | `extra_delta_bits` |
@@ -240,18 +250,19 @@ The decompressor should error if any lookback exceeds the window.
 
 Based on the mode, latents are joined into the finalized numbers.
 Let `l0` and `l1` be the primary and secondary latents respectively.
-Let `MID` be the middle value for the latent type (e.g. 2^31 for `u32`).
 
 | mode       | decoding formula                                                       |
 |------------|------------------------------------------------------------------------|
 | Classic    | `from_latent_ordered(l0)`                                              |
+| Dict       | `from_latent_ordered(dict[l0])`                                        |
 | IntMult    | `from_latent_ordered(l0 * mult + l1)`                                  |
 | FloatMult  | `int_float_from_latent(l0) * mult + (l1 + MID) ULPs`                   |
 | FloatQuant | `from_latent_ordered((l0 << k) + (l0 << k >= MID ? l1 : 2^k - 1 - l1)` |
 
-Here ULP refers to [unit in the last place](https://en.wikipedia.org/wiki/Unit_in_the_last_place).
-
-Each number type has an order-preserving bijection to an unsigned latent type.
+Here ULP refers to [unit in the last place](https://en.wikipedia.org/wiki/Unit_in_the_last_place),
+`MID` is the middle value for the latent type (e.g. 2^31 for `u32`), and `dict` is a dictionary of unique values, stored in as the Dict mode metadata payload.
+Each number type has an order-preserving bijection to an unsigned latent type
+known as `from_latent_ordered` and `to_latent_ordered`.
 For instance, floats have their first bit toggled, and the rest of their bits
 toggled if the float was originally negative:
 

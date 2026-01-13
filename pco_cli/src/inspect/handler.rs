@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 
 use anyhow::Result;
 use serde::Serialize;
@@ -6,10 +7,10 @@ use tabled::settings::object::Columns;
 use tabled::settings::{Alignment, Modify, Style};
 use tabled::{Table, Tabled};
 
-use pco::data_types::{Latent, Number};
+use pco::data_types::{Latent, LatentType, Number};
 use pco::match_latent_enum;
 use pco::metadata::{ChunkMeta, DynBins, DynLatent, LatentVarKey};
-use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+use pco::standalone::{DecompressorItem, FileDecompressor};
 
 use crate::core_handlers::CoreHandlerImpl;
 use crate::dtypes::PcoNumber;
@@ -41,6 +42,7 @@ pub struct BinSummary {
 #[derive(Serialize)]
 pub struct LatentVarSummary {
   name: String,
+  latent_type: String,
   n_bins: usize,
   ans_size_log: u32,
   approx_avg_bits: f64,
@@ -54,19 +56,19 @@ pub struct ChunkSummary {
   mode: String,
   delta_encoding: String,
   // using BTreeMaps to preserve ordering
-  latent_vars: BTreeMap<String, LatentVarSummary>,
+  latent_var: BTreeMap<String, LatentVarSummary>,
 }
 
 #[derive(Serialize)]
 pub struct Output {
   pub filename: String,
-  pub data_type: String,
   pub format_version: String,
+  pub number_type: String,
   pub n: usize,
   pub n_chunks: usize,
   pub uncompressed_size: usize,
   pub compressed: CompressionSummary,
-  pub chunks: Vec<ChunkSummary>,
+  pub chunk: Vec<ChunkSummary>,
 }
 
 fn measure_bytes_read(src: &[u8], prev_src_len: &mut usize) -> usize {
@@ -87,20 +89,21 @@ fn build_latent_var_summaries<T: Number>(meta: &ChunkMeta) -> BTreeMap<String, L
     let unit = describer.latent_units();
 
     let mut approx_total_bits = 0.0;
-    let bin_summaries = match_latent_enum!(
+    let (latent_type, bin_summaries) = match_latent_enum!(
       &latent_var_meta.bins,
       DynBins<L>(bins) => {
+        let latent_type = format!("{:?}", LatentType::new::<L>());
         let mut bin_summaries = Vec::new();
         for bin in bins {
           bin_summaries.push(BinSummary {
             weight: bin.weight,
-            lower: format!("{}{}", describer.latent(DynLatent::new(bin.lower).unwrap()), unit),
+            lower: format!("{}{}", describer.latent(DynLatent::new(bin.lower)), unit),
             offset_bits: bin.offset_bits,
           });
           let weight = bin.weight as f64;
           approx_total_bits += weight * (bin.offset_bits as f64 + latent_var_meta.ans_size_log as f64 - weight.log2());
         }
-        bin_summaries
+        (latent_type, bin_summaries)
       }
     );
     let n_bins = bin_summaries.len();
@@ -112,6 +115,7 @@ fn build_latent_var_summaries<T: Number>(meta: &ChunkMeta) -> BTreeMap<String, L
 
     let summary = LatentVarSummary {
       name: describer.latent_var(),
+      latent_type,
       n_bins,
       ans_size_log: latent_var_meta.ans_size_log,
       approx_avg_bits: approx_total_bits / total_weight,
@@ -128,6 +132,19 @@ fn build_latent_var_summaries<T: Number>(meta: &ChunkMeta) -> BTreeMap<String, L
   }
 
   summaries
+}
+
+fn short_debug_str<T: Debug>(val: &T) -> String {
+  let res = format!("{:?}", val);
+  if res.len() > 200 {
+    format!(
+      "{}...{}",
+      &res[..150],
+      &res[res.len() - 47..]
+    )
+  } else {
+    res
+  }
 }
 
 impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
@@ -147,12 +164,12 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       // Rather hacky, but first just measure the metadata size,
       // then reread it to measure the page size
       match fd.chunk_decompressor::<T, _>(src)? {
-        MaybeChunkDecompressor::Some(cd) => {
+        DecompressorItem::Chunk(cd) => {
           chunk_ns.push(cd.n());
           metas.push(cd.meta().clone());
           meta_size += measure_bytes_read(cd.into_src(), prev_src_len);
         }
-        MaybeChunkDecompressor::EndOfData(rest) => {
+        DecompressorItem::EndOfData(rest) => {
           src = rest;
           footer_size += measure_bytes_read(src, prev_src_len);
           break;
@@ -160,7 +177,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       }
 
       match fd.chunk_decompressor::<T, _>(src)? {
-        MaybeChunkDecompressor::Some(mut cd) => {
+        DecompressorItem::Chunk(mut cd) => {
           void.resize(cd.n(), T::default());
           let _ = cd.decompress(&mut void)?;
           src = cd.into_src();
@@ -181,16 +198,16 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       chunks.push(ChunkSummary {
         idx,
         n: chunk_ns[idx],
-        mode: format!("{:?}", meta.mode),
-        delta_encoding: format!("{:?}", meta.delta_encoding),
-        latent_vars,
+        mode: short_debug_str(&meta.mode),
+        delta_encoding: short_debug_str(&meta.delta_encoding),
+        latent_var: latent_vars,
       });
     }
 
     let output = Output {
       filename: opt.path.to_str().unwrap().to_string(),
-      data_type: utils::dtype_name::<T>(),
       format_version: fd.format_version().to_string(),
+      number_type: utils::dtype_name::<T>(),
       n,
       n_chunks: metas.len(),
       uncompressed_size,
@@ -203,7 +220,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
         footer_size,
         unknown_trailing_bytes,
       },
-      chunks,
+      chunk: chunks,
     };
 
     println!("{}", toml::to_string_pretty(&output)?);

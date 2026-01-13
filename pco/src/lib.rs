@@ -9,6 +9,7 @@
 //! passed in, returning an insufficient data error if the `&[u8]` passed in is not long enough.
 
 #![allow(clippy::uninit_vec)]
+#![allow(clippy::manual_non_exhaustive)] // sometimes we want to ban explicit construction within the crate too
 #![deny(clippy::unused_unit)]
 #![deny(dead_code)]
 
@@ -38,19 +39,20 @@ mod bit_writer;
 mod bits;
 mod chunk_config;
 mod chunk_latent_compressor;
+mod chunk_latent_decompressor;
 mod compression_intermediates;
 mod compression_table;
 mod constants;
 mod delta;
-mod float_mult_utils;
-mod float_quant_utils;
+mod dyn_latent_slice;
 mod histograms;
-mod int_mult_utils;
 mod macros;
+mod mode;
 mod page_latent_decompressor;
 mod progress;
 mod read_write_uint;
 mod sampling;
+mod scratch_array;
 mod sort_utils;
 
 #[cfg(test)]

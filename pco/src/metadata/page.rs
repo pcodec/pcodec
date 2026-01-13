@@ -34,21 +34,23 @@ impl PageMeta {
   }
 
   pub unsafe fn read_from(reader: &mut BitReader, chunk_meta: &ChunkMeta) -> PcoResult<Self> {
-    let per_latent_var = chunk_meta
-      .per_latent_var
-      .as_ref()
-      .map(|key, chunk_latent_var_meta| {
-        let n_latents_per_state = chunk_meta
-          .delta_encoding
-          .for_latent_var(key)
-          .n_latents_per_state();
-        PageLatentVarMeta::read_from(
-          reader,
-          chunk_latent_var_meta.latent_type(),
-          n_latents_per_state,
-          chunk_latent_var_meta.ans_size_log,
-        )
-      });
+    let per_latent_var =
+      chunk_meta
+        .per_latent_var
+        .as_ref()
+        .map_result(|key, chunk_latent_var_meta| {
+          let n_latents_per_state = chunk_meta
+            .delta_encoding
+            .for_latent_var(key)
+            .n_latents_per_state();
+          PageLatentVarMeta::read_from(
+            reader,
+            chunk_latent_var_meta.latent_type(),
+            n_latents_per_state,
+            chunk_latent_var_meta.ans_size_log,
+          )
+        })?;
+
     reader.drain_empty_byte("non-zero bits at end of data page metadata")?;
 
     Ok(Self { per_latent_var })

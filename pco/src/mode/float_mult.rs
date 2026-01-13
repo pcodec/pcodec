@@ -5,24 +5,33 @@ use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, MULT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::SplitLatents;
 use crate::data_types::{Float, Latent};
+use crate::dyn_latent_slice::DynLatentSlice;
+use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
+use crate::mode::int_mult;
+use crate::sampling;
 use crate::sampling::PrimaryLatentAndSavings;
-use crate::{int_mult_utils, sampling};
 
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
   base: F,
-  primary: &mut [F::L],
-  secondary: Option<&DynLatents>,
-) {
-  let secondary = secondary.unwrap().downcast_ref::<F::L>().unwrap();
-  for (mult_and_dst, &adj) in primary.iter_mut().zip(secondary.iter()) {
-    let unadjusted = F::int_float_from_latent(*mult_and_dst) * base;
-    *mult_and_dst = unadjusted
-      .to_latent_ordered()
-      .wrapping_add(adj)
-      .toggle_center();
+  primary: DynLatentSlice,
+  secondary: Option<DynLatentSlice>,
+  dst: &mut [F],
+) -> PcoResult<()> {
+  let primary = primary.downcast_unwrap::<F::L>();
+  let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
+  for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
+    let unadjusted = F::int_float_from_latent(mult) * base;
+    *dst = F::from_latent_ordered(
+      unadjusted
+        .to_latent_ordered()
+        .wrapping_add(adj)
+        .toggle_center(),
+    );
   }
+
+  Ok(())
 }
 
 pub(crate) fn split_latents<F: Float>(page_nums: &[F], config: FloatMultConfig<F>) -> SplitLatents {
@@ -50,8 +59,8 @@ pub(crate) fn split_latents<F: Float>(page_nums: &[F], config: FloatMultConfig<F
   }
 
   SplitLatents {
-    primary: DynLatents::new(primary).unwrap(),
-    secondary: Some(DynLatents::new(adjustments).unwrap()),
+    primary: DynLatents::new(primary),
+    secondary: Some(DynLatents::new(adjustments)),
   }
 }
 
@@ -179,7 +188,7 @@ fn choose_config_by_trailing_zeros<F: Float>(sample: &[F]) -> Option<FloatMultCo
   }
 
   if int_sample.len() >= required_samples {
-    let int_base = int_mult_utils::choose_candidate_base(&mut int_sample)
+    let int_base = int_mult::choose_candidate_base(&mut int_sample)
       .map(|(base, _)| base)
       .unwrap_or(F::L::ONE);
     let base = F::from_latent_numerical(int_base) * F::exp2(k);

@@ -59,7 +59,7 @@ pub trait Arrowable: Sized {
   fn arrow_native_to_bytes(x: <Self::Arrow as ArrowPrimitiveType>::Native) -> Vec<u8>;
 }
 
-#[cfg(all(feature = "full_bench"))]
+#[cfg(feature = "full_bench")]
 pub trait PcoNumber:
   Number + Arrowable + Parquetable + QCompressable + TurboPforable + vortex::dtype::NativePType
 {
