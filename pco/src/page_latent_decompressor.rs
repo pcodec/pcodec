@@ -53,6 +53,7 @@ macro_rules! force_export {
       decompress_offsets::<$l, $rb>;
   };
 }
+force_export!(_FORCE_EXPORT_U8_4, u8, 4);
 force_export!(_FORCE_EXPORT_U16_4, u16, 4);
 force_export!(_FORCE_EXPORT_U32_4, u32, 4);
 force_export!(_FORCE_EXPORT_U32_8, u32, 8);
