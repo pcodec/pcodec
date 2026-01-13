@@ -26,10 +26,10 @@ jobs:
       - name: Install cross
         run: cargo install cross --locked
       - name: Test
-        run: cargo test
+        run: cargo test --all-features
       - name: Tests on aarch64
-        run: cross test -p pco --target aarch64-unknown-linux-gnu
+        run: cross test -p pco --target aarch64-unknown-linux-gnu --all-features
       - name: Clippy
-        run: cargo clippy --no-deps
+        run: cargo clippy --no-deps --all-features
       - name: Ensure formatted
         run: cargo fmt --check
