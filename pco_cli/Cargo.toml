@@ -17,34 +17,34 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.71"
-arrow = { version = "54.3.1", features = ["csv"], default-features = false }
+arrow = { workspace = true, features = ["csv"] }
 better_io = { version = "0.2.0", path = "../better_io" }
-blosc2-src = { version = "0.1.3", features = ["zstd"], optional = true }
-brotli = { version = "7.0.0", optional = true }
+blosc2-src = { workspace = true, features = ["zstd"], optional = true }
+brotli = { workspace = true, optional = true }
 bytes = "1.4.0"
-clap = { version = "4.5.3", features = ["derive"] }
-half = { version = "2.1.0", features = ["std"] }
-hound = { version = "3.5.1", optional = true }
+clap = { workspace = true, features = ["derive"] }
+half = { workspace = true, features = ["std"] }
+hound = { workspace = true, optional = true }
 indicatif = "0.17.8"
-once_cell = { version = "1.21.3", optional = true }
-parquet = { version = "54.3.1", features = [
+once_cell = { workspace = true, optional = true }
+parquet = { workspace = true, features = [
   "arrow",
   "base64",
   "snap",
   "zstd",
-], default-features = false }
+] }
 pco = { version = "1.0.0", path = "../pco" }
 q_compress = { version = "0.11.7", path = "../quantile-compression/q_compress", optional = true }
-rayon = { version = "1.10.0", optional = true }
-rust-openzl = {version = "0.1.0", optional = true }
+rayon = { workspace = true, optional = true }
+rust-openzl = {workspace = true, optional = true }
 snap = "1.1.0"
-spdp_sys = { version = "0.1.0", optional = true }
+spdp_sys = { workspace = true, optional = true }
 toml = "0.8.12"
 tabled = "0.18.0"
-serde = { version = "1.0.197", features = ["derive"] }
-tokio = { version = "1.44.2", features = ["rt-multi-thread"], optional = true }
-turbo_pfor_sys = { version = "0.1.3", optional = true }
-vortex = { version = "0.53", features = ["files", "tokio"], optional = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["rt-multi-thread"], optional = true }
+turbo_pfor_sys = { workspace = true, optional = true }
+vortex = { workspace = true, features = ["files", "tokio"], optional = true }
 zstd = "0.13"
 
 [features]
