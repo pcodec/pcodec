@@ -253,7 +253,10 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     let page_n = page_range.len();
     let mut page_dissected_var = unsafe { self.uninit_page_dissected_var(page_n) };
 
-    // we go through in reverse for ANS!
+    // We go through in reverse for ANS!
+    // Here page_dissected_var is indexed from 0..page_n, whereas latents are
+    // indexed from 0..chunk_n, so we need both an absolute page start index and
+    // a relative range for the batch within the page.
     let n_batches = page_n.div_ceil(FULL_BATCH_N);
     for batch_idx in (0..n_batches).rev() {
       let relative_batch_range =
