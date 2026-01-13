@@ -51,6 +51,7 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
         compression_level,
         delta_spec: DeltaSpec::TryConsecutive(delta_encoding_order),
         mode_spec,
+        enable_8_bit: true,
         ..Default::default()
       };
       let compressed = simple_compress(nums, &config)?;

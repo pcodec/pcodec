@@ -472,7 +472,8 @@ fn fallback_chunk_compressor(
 
 // This is where the bulk of compression happens.
 pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<ChunkCompressor> {
-  config.validate()?;
+  let latent_type = LatentType::new::<T::L>();
+  config.validate(latent_type)?;
   let n = nums.len();
   validate_chunk_size(n)?;
 
@@ -505,7 +506,7 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
   )?;
 
   // 4. check that our compressed size meets guarantees and fall back if not
-  if candidate.should_fallback(LatentType::new::<T::L>(), n, bin_counts) {
+  if candidate.should_fallback(latent_type, n, bin_counts) {
     let split_latents = classic::split_latents(nums);
     return fallback_chunk_compressor(split_latents, config);
   }

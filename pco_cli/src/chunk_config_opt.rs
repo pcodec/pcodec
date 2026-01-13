@@ -22,6 +22,8 @@ pub struct ChunkConfigOpt {
   pub mode: ModeSpec,
   #[arg(long, default_value_t = pco::DEFAULT_MAX_PAGE_N)]
   pub chunk_n: usize,
+  #[arg(long, default_value = "false", value_parser = parse::boolean)]
+  pub enable_8_bit: bool,
 }
 
 impl From<&ChunkConfigOpt> for ChunkConfig {
@@ -31,5 +33,6 @@ impl From<&ChunkConfigOpt> for ChunkConfig {
       .with_delta_spec(opt.delta)
       .with_mode_spec(opt.mode)
       .with_paging_spec(PagingSpec::EqualPagesUpTo(opt.chunk_n))
+      .with_enable_8_bit(opt.enable_8_bit)
   }
 }

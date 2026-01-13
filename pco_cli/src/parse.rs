@@ -91,3 +91,14 @@ pub fn arrow_dtype(s: &str) -> anyhow::Result<DataType> {
       .collect::<Vec<_>>()
   ))
 }
+
+pub fn boolean(s: &str) -> anyhow::Result<bool> {
+  match s.to_lowercase().as_str() {
+    "0" | "f" | "n" | "false" => Ok(false),
+    "1" | "t" | "y" | "true" => Ok(true),
+    _ => Err(anyhow!(
+      "unable to parse boolean: {}. try 't' or 'f'",
+      s
+    )),
+  }
+}
