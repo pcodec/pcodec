@@ -274,7 +274,7 @@ impl QCompressable for u8 {
     nums.iter().map(|&v| v as u16).collect()
   }
   fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self> {
-    vec.iter().map(|&v| v as u8).collect()
+    vec.into_iter().map(|v| v as u8).collect()
   }
 }
 
@@ -286,7 +286,7 @@ impl QCompressable for i8 {
     nums.iter().map(|&v| v as i16).collect()
   }
   fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self> {
-    vec.iter().map(|&v| v as i8).collect()
+    vec.into_iter().map(|v| v as i8).collect()
   }
 }
 
