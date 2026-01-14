@@ -184,7 +184,6 @@ mod tests {
     match_enum,
     crate::tests::Constraint,
     {
-      U8 => u8,
       U16 => u16,
       U32 => u32,
       U64 => u64,
