@@ -148,6 +148,8 @@ impl PyChunkConfig {
   ///
   /// :param paging_spec: a PagingSpec describing how many numbers should
   ///   go into each page.
+  /// 
+  /// :param enable_8_bit: whether to allow compression of 8-bit data types.
   ///
   /// :returns: A new ChunkConfig object.
   #[new]
