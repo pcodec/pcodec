@@ -279,3 +279,27 @@ fn v1_0_0_conv1() -> PcoResult<()> {
   assert_compatible(version, name, &nums)?;
   Ok(())
 }
+
+#[test]
+fn v1_0_0_u8() -> PcoResult<()> {
+  // v1.0.0 introduced 8-bit unsigned integer type
+  let version = "1.0.0";
+  let name = "u8";
+  let config = ChunkConfig::default().with_enable_8_bit(true);
+  let nums = (0_u8..=64).chain(192..=255).collect::<Vec<_>>();
+  simple_write_if_version_matches::<u8>(version, name, &nums, &config)?;
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}
+
+#[test]
+fn v1_0_0_i8() -> PcoResult<()> {
+  // v1.0.0 introduced 8-bit signed integer type
+  let version = "1.0.0";
+  let name = "i8";
+  let config = ChunkConfig::default().with_enable_8_bit(true);
+  let nums = (-128_i8..=-64).chain(64..=127).collect::<Vec<_>>();
+  simple_write_if_version_matches::<i8>(version, name, &nums, &config)?;
+  assert_compatible(version, name, &nums)?;
+  Ok(())
+}
