@@ -78,7 +78,6 @@ macro_rules! impl_unsigned_number {
   };
 }
 
-impl_unsigned_number!(u8, i8, 14);
 impl_unsigned_number!(u16, i16, 12);
 impl_unsigned_number!(u32, i32, 4);
 impl_unsigned_number!(u64, i64, 2);
