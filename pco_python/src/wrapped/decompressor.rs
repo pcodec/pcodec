@@ -21,8 +21,7 @@ pco::define_number_enum!(
   DynCd(ChunkDecompressor)
 );
 
-/// Holds metadata about a chunk and supports decompressing one batch at a
-/// time.
+/// Holds metadata about a chunk and supports decompressing one page at a time.
 #[pyclass(name = "ChunkDecompressor")]
 struct PyCd(DynCd);
 
@@ -112,7 +111,7 @@ impl PyCd {
         let dst = arr_rw.as_slice_mut()?;
         py.detach(|| {
           let mut pd = cd.page_decompressor(src, page_n)?;
-          let progress = pd.decompress(dst)?;
+          let progress = pd.read(dst)?;
           Ok((progress, pd.into_src()))
         }).map_err(pco_err_to_py)?
       }

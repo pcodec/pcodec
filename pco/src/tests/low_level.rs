@@ -23,7 +23,7 @@ fn decompress_by_batch<R: BetterBufRead>(
   loop {
     let end = min(start + FULL_BATCH_N, page_n);
     let batch_size = end - start;
-    let progress = pd.decompress(&mut nums[start..end])?;
+    let progress = pd.read(&mut nums[start..end])?;
     assert_eq!(progress.n_processed, batch_size);
     start = end;
     if end == page_n {

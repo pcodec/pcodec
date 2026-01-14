@@ -10,9 +10,9 @@ use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and an exact configuration and writes compressed
-/// bytes to the destination, retuning the number of bytes written.
+/// bytes to the destination, returning the number of bytes written.
 ///
-/// Will return an error if the compressor config is invalid, there is an IO
+/// Will return an error if the compressor config is invalid or there is an IO
 /// error.
 /// This will use the `PagingSpec` in `ChunkConfig` to decide where to split
 /// chunks.
@@ -88,7 +88,7 @@ pub fn simple_compress<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult
 /// Takes in compressed bytes and writes numbers to the destination, returning
 /// progress into the file.
 ///
-/// Will return an error if there are any corruption or or insufficient data
+/// Will return an error if there are any corruption or insufficient data
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.

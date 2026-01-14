@@ -53,7 +53,7 @@ const FIXED_READ_SIZE: usize = BITS_TO_ENCODE_MODE_VARIANT.div_ceil(8) as usize
 /// processing steps (possible delta encoding and binning) to produce the final
 /// compressed bytes.
 ///
-/// We have delibrately written the formulas below in a slightly wrong way to
+/// We have deliberately written the formulas below in a slightly wrong way to
 /// convey the correct intuition without dealing with implementation
 /// complexities.
 /// Slightly more rigorous formulas are in format.md.

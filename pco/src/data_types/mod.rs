@@ -172,17 +172,15 @@ pub trait Latent:
 pub trait Number:
   Copy + Debug + Display + Default + PartialEq + private::Sealed + Send + Sync + 'static
 {
+  // To choose a header byte for a new data type, review all header bytes in
+  // the library and pick the next higher byte.
+  // `pco` data type implementation.
   /// A number from 1-255 that corresponds to the number's data type.
   ///
   /// Each `Number` implementation should have a different `NUMBER_TYPE_BYTE`.
   /// This byte gets written into the file's header during compression, and
   /// if the wrong header byte shows up during decompression, the decompressor
   /// will return an error.
-  ///
-  /// To choose a header byte for a new data type, review all header bytes in
-  /// the library and pick an unused one. For instance, as of writing, bytes
-  /// 1 through 6 are used, so 7 would be a good choice for another
-  /// `pco` data type implementation.
   const NUMBER_TYPE_BYTE: u8;
 
   /// The latent this type can convert between to do bitwise logic and such.
