@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use numpy::{Element, PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyModule};
@@ -76,12 +74,11 @@ impl PyFc {
     nums: &Bound<PyUntypedArray>,
     config: &PyChunkConfig,
   ) -> PyResult<PyCc> {
-    let config = config.try_into()?;
     let number_type = utils::number_type_from_numpy(py, &nums.dtype())?;
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(nums)?, &config)?;
+        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(nums)?, &config.into())?;
         Ok(PyCc(cc))
       }
     )
