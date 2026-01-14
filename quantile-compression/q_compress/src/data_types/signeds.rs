@@ -59,6 +59,7 @@ macro_rules! impl_signed {
   };
 }
 
+impl_signed!(i8, u8, 15);
 impl_signed!(i16, u16, 13);
 impl_signed!(i32, u32, 3);
 impl_signed!(i64, u64, 1);
