@@ -87,11 +87,11 @@ macro_rules! impl_pforable {
   };
 }
 
-impl_pforable!(u8, u8, p4nenc128v8, p4ndec128v8);
+impl_pforable!(u8, u8, p4nenc8, p4ndec8);
 impl_pforable!(u16, u16, p4nenc128v16, p4ndec128v16);
 impl_pforable!(u32, u32, p4nenc128v32, p4ndec128v32);
 impl_pforable!(u64, u64, p4nenc128v64, p4ndec128v64);
-impl_pforable!(i8, u8, p4nenc128v8, p4ndec128v8);
+impl_pforable!(i8, u8, p4nenc8, p4ndec8);
 impl_pforable!(i16, u16, p4nenc128v16, p4ndec128v16);
 impl_pforable!(i32, u32, p4nenc128v32, p4ndec128v32);
 impl_pforable!(i64, u64, p4nenc128v64, p4ndec128v64);
