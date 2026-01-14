@@ -175,7 +175,6 @@ mod tests {
 
   trait Constraint: 'static {}
 
-  impl Constraint for u8 {}
   impl Constraint for u16 {}
   impl Constraint for u32 {}
   impl Constraint for u64 {}
