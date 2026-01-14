@@ -22,8 +22,19 @@ pub struct ChunkConfigOpt {
   pub mode: ModeSpec,
   #[arg(long, default_value_t = pco::DEFAULT_MAX_PAGE_N)]
   pub chunk_n: usize,
-  #[arg(long, default_value = "false", value_parser = parse::boolean)]
-  pub enable_8_bit: bool,
+  // We can't use default value here because clap will force it to be a no-args
+  // flag, and that doesn't work with the k=v args we use in bench
+  /// Can be "t" or "f".
+  ///
+  /// This must be "t" to enable compression of 8-bit data types.
+  #[arg(long, value_parser = parse::boolean)]
+  enable_8_bit: Option<bool>,
+}
+
+impl ChunkConfigOpt {
+  pub fn enable_8_bit(&self) -> bool {
+    self.enable_8_bit.unwrap_or(false)
+  }
 }
 
 impl From<&ChunkConfigOpt> for ChunkConfig {
@@ -33,6 +44,6 @@ impl From<&ChunkConfigOpt> for ChunkConfig {
       .with_delta_spec(opt.delta)
       .with_mode_spec(opt.mode)
       .with_paging_spec(PagingSpec::EqualPagesUpTo(opt.chunk_n))
-      .with_enable_8_bit(opt.enable_8_bit)
+      .with_enable_8_bit(opt.enable_8_bit())
   }
 }
