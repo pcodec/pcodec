@@ -115,6 +115,7 @@ macro_rules! impl_latent {
   };
 }
 
+impl_latent!(u8, i16);
 impl_latent!(u16, i32);
 impl_latent!(u32, i64);
 // 64-bit convolutions can't safely be done in any efficient type without risk
@@ -168,6 +169,7 @@ macro_rules! impl_unsigned_number {
 impl_unsigned_number!(u32, 1);
 impl_unsigned_number!(u64, 2);
 impl_unsigned_number!(u16, 7);
+impl_unsigned_number!(u8, 10);
 
 #[cfg(test)]
 mod tests {

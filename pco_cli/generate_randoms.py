@@ -37,6 +37,15 @@ def write_dispatch(dtype, arr, name, base_dir):
 
 
 @writer
+def write_i8(arr, name, base_dir):
+    if arr.dtype != np.int8:
+        arr = np.floor(arr).astype(np.int8)
+    strs = [str(x) for x in arr]
+    full_name = f"i8_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
 def write_i16(arr, name, base_dir):
     if arr.dtype != np.int16:
         arr = np.floor(arr).astype(np.int16)
@@ -51,6 +60,24 @@ def write_i32(arr, name, base_dir):
         arr = np.floor(arr).astype(np.int32)
     strs = [str(x) for x in arr]
     full_name = f"i32_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
+def write_u8(arr, name, base_dir):
+    if arr.dtype != np.uint8:
+        arr = np.floor(arr).astype(np.uint8)
+    strs = [str(x) for x in arr]
+    full_name = f"u8_{name}"
+    write_generic(strs, arr, full_name, base_dir)
+
+
+@writer
+def write_u16(arr, name, base_dir):
+    if arr.dtype != np.uint16:
+        arr = np.floor(arr).astype(np.uint16)
+    strs = [str(x) for x in arr]
+    full_name = f"u16_{name}"
     write_generic(strs, arr, full_name, base_dir)
 
 
@@ -192,7 +219,7 @@ def dollars():
     return money["dollars"]
 
 
-@datagen("i64")
+@datagen("u8", "i8", "u16", "i16", "i64")
 def cents():
     gen_money_once()
     return money["cents"]

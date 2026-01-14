@@ -207,9 +207,11 @@ As well as these number type 1-byte representations:
 | f16         | 9 |
 | f32         | 5 |
 | f64         | 6 |
+| i8          | 11 |
 | i16         | 8 |
 | i32         | 3 |
 | i64         | 4 |
+| u8          | 10 |
 | u16         | 7 |
 | u32         | 1 |
 | u64         | 2 |

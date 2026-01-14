@@ -56,7 +56,7 @@ impl ChunkMeta {
       }
       DeltaEncoding::Conv1(config) => {
         match &per_latent_var.primary.bins {
-          DynBins::U16(_) | DynBins::U32(_) => (),
+          DynBins::U8(_) | DynBins::U16(_) | DynBins::U32(_) => (),
           DynBins::U64(_) => {
             return Err(PcoError::corruption(
               "Conv1 delta encodings are not supported on types larger than 32 bits",

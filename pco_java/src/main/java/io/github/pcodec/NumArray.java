@@ -26,6 +26,10 @@ public class NumArray {
         return NumberType.fromByte(numberTypeByte);
     }
 
+    public static NumArray i8Array(byte[] nums) {
+        return new NumArray(nums, NumberType.I8);
+    }
+
     public static NumArray i16Array(short[] nums) {
         return new NumArray(nums, NumberType.I16);
     }
@@ -36,6 +40,10 @@ public class NumArray {
 
     public static NumArray i64Array(long[] nums) {
         return new NumArray(nums, NumberType.I64);
+    }
+
+    public static NumArray u8Array(byte[] nums) {
+        return new NumArray(nums, NumberType.U8);
     }
 
     public static NumArray u16Array(short[] nums) {
@@ -66,6 +74,13 @@ public class NumArray {
         return new IllegalStateException("Cannot cast pco NumArray of " + this.numberType() + " to " + numberType);
     }
 
+    public byte[] as_i8_array() throws IllegalStateException {
+        if (numberTypeByte == NumberType.I8.byte_) {
+            return (byte[]) this.nums;
+        }
+        throw invalidNumberType(NumberType.I8);
+    }
+
     public short[] as_i16_array() throws IllegalStateException {
         if (numberTypeByte == NumberType.I16.byte_) {
             return (short[]) this.nums;
@@ -85,6 +100,13 @@ public class NumArray {
             return (long[]) this.nums;
         }
         throw invalidNumberType(NumberType.I64);
+    }
+
+    public byte[] as_u8_array() throws IllegalStateException {
+        if (numberTypeByte == NumberType.U8.byte_) {
+            return (byte[]) this.nums;
+        }
+        throw invalidNumberType(NumberType.U8);
     }
 
     public short[] as_u16_array() throws IllegalStateException {

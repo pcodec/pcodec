@@ -99,6 +99,7 @@ pub struct PyChunkConfig {
   mode_spec: PyModeSpec,
   delta_spec: PyDeltaSpec,
   paging_spec: PyPagingSpec,
+  enable_8_bit: bool,
 }
 
 #[pymethods]
@@ -148,6 +149,8 @@ impl PyChunkConfig {
   /// :param paging_spec: a PagingSpec describing how many numbers should
   ///   go into each page.
   ///
+  /// :param enable_8_bit: whether to allow compression of 8-bit data types.
+  ///
   /// :returns: A new ChunkConfig object.
   #[new]
   #[pyo3(signature = (
@@ -155,18 +158,21 @@ impl PyChunkConfig {
     mode_spec=PyModeSpec::default(),
     delta_spec=PyDeltaSpec::default(),
     paging_spec=PyPagingSpec::default(),
+    enable_8_bit=false,
   ))]
   fn new(
     compression_level: usize,
     mode_spec: PyModeSpec,
     delta_spec: PyDeltaSpec,
     paging_spec: PyPagingSpec,
+    enable_8_bit: bool,
   ) -> Self {
     Self {
       compression_level,
       delta_spec,
       mode_spec,
       paging_spec,
+      enable_8_bit,
     }
   }
 }
@@ -179,7 +185,8 @@ impl TryFrom<&PyChunkConfig> for ChunkConfig {
       .with_compression_level(py_config.compression_level)
       .with_delta_spec(py_config.delta_spec.0)
       .with_mode_spec(py_config.mode_spec.0)
-      .with_paging_spec(py_config.paging_spec.0.clone());
+      .with_paging_spec(py_config.paging_spec.0.clone())
+      .with_enable_8_bit(py_config.enable_8_bit);
     Ok(res)
   }
 }

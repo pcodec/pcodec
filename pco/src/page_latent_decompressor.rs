@@ -53,6 +53,7 @@ macro_rules! force_export {
       decompress_offsets::<$l, $rb>;
   };
 }
+force_export!(_FORCE_EXPORT_U8_4, u8, 4);
 force_export!(_FORCE_EXPORT_U16_4, u16, 4);
 force_export!(_FORCE_EXPORT_U32_4, u32, 4);
 force_export!(_FORCE_EXPORT_U32_8, u32, 8);
@@ -218,6 +219,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
     match (cld.bytes_per_offset, L::BITS) {
       (0, _) => (),
+      (1..=4, 8) => specialized_decompress_offsets!(4),
       (1..=4, 16) => specialized_decompress_offsets!(4),
       (1..=4, 32) => specialized_decompress_offsets!(4),
       (5..=8, 32) => specialized_decompress_offsets!(8),

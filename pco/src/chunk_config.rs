@@ -1,4 +1,5 @@
 use crate::constants::*;
+use crate::data_types::LatentType;
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
 
@@ -128,6 +129,7 @@ pub struct ChunkConfig {
   /// Specifies how the chunk should be split into pages (default: equal pages
   /// up to 2^18 numbers each).
   pub paging_spec: PagingSpec,
+  pub enable_8_bit: bool,
 }
 
 impl Default for ChunkConfig {
@@ -137,6 +139,7 @@ impl Default for ChunkConfig {
       mode_spec: ModeSpec::default(),
       delta_spec: DeltaSpec::default(),
       paging_spec: PagingSpec::EqualPagesUpTo(DEFAULT_MAX_PAGE_N),
+      enable_8_bit: false,
     }
   }
 }
@@ -166,7 +169,13 @@ impl ChunkConfig {
     self
   }
 
-  pub(crate) fn validate(&self) -> PcoResult<()> {
+  /// Sets [`enable_8_bit`][ChunkConfig::enable_8_bit].
+  pub fn with_enable_8_bit(mut self, enable: bool) -> Self {
+    self.enable_8_bit = enable;
+    self
+  }
+
+  pub(crate) fn validate(&self, latent_type: LatentType) -> PcoResult<()> {
     let compression_level = self.compression_level;
     if compression_level > MAX_COMPRESSION_LEVEL {
       return Err(PcoError::invalid_argument(format!(
@@ -193,6 +202,13 @@ impl ChunkConfig {
           )));
         }
       }
+    }
+
+    if matches!(latent_type, LatentType::U8) && !self.enable_8_bit {
+      return Err(PcoError::invalid_argument(
+        "compressing 8-bit types with Pco is often a mistake; \
+        enable them on the ChunkConfig if you know what you're doing",
+      ));
     }
 
     Ok(())

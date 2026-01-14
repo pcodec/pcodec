@@ -107,6 +107,7 @@ impl DynChunkLatentDecompressor {
 
   pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
     match self {
+      Self::U8(inner) => DynLatentSlice::U8(&mut *inner.scratch.latents),
       Self::U16(inner) => DynLatentSlice::U16(&mut *inner.scratch.latents),
       Self::U32(inner) => DynLatentSlice::U32(&mut *inner.scratch.latents),
       Self::U64(inner) => DynLatentSlice::U64(&mut *inner.scratch.latents),
