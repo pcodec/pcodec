@@ -179,7 +179,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       match fd.chunk_decompressor::<T, _>(src)? {
         DecompressorItem::Chunk(mut cd) => {
           void.resize(cd.n(), T::default());
-          let _ = cd.decompress(&mut void)?;
+          let _ = cd.read(&mut void)?;
           src = cd.into_src();
           page_size += measure_bytes_read(src, prev_src_len);
         }

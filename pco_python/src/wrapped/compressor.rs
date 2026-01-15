@@ -92,7 +92,7 @@ impl PyCc {
   /// :raises: TypeError, RuntimeError
   fn write_chunk_meta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
     let mut res = Vec::new();
-    self.0.write_chunk_meta(&mut res).map_err(pco_err_to_py)?;
+    self.0.write_meta(&mut res).map_err(pco_err_to_py)?;
     Ok(PyBytes::new(py, &res))
   }
 

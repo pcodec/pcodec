@@ -44,7 +44,7 @@ impl<T: PcoNumber> DecompressHandler for CoreHandlerImpl<T> {
         // how many pco should decompress
         let pco_size = (1 + batch_size / FULL_BATCH_N) * FULL_BATCH_N;
         nums.resize(pco_size, T::default());
-        let _ = cd.decompress(&mut nums)?;
+        let _ = cd.read(&mut nums)?;
         src = cd.into_src();
         let arrow_nums = nums
           .iter()

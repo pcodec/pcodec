@@ -1,5 +1,5 @@
 pub use dynamic::{LatentType, NumberType};
-pub use split_latents::SplitLatents;
+pub(crate) use split_latents::SplitLatents;
 
 use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::number_priv::NumberPriv;

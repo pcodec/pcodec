@@ -9,8 +9,8 @@ use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
-/// Takes in a slice of numbers and an exact configuration and writes compressed
-/// bytes to the destination, returning the number of bytes written.
+/// Takes in a slice of numbers and a configuration and writes compressed bytes
+/// to the destination.
 ///
 /// Will return an error if the compressor config is invalid or there is an IO
 /// error.
@@ -46,8 +46,8 @@ pub fn simple_compress_into<T: Number, W: Write>(
   Ok(dst)
 }
 
-/// Takes in a slice of numbers and an exact configuration and returns
-/// compressed bytes.
+/// Takes in a slice of numbers and a configuration and returns compressed
+/// bytes.
 ///
 /// Will return an error if the compressor config is invalid.
 /// This will use the `PagingSpec` in `ChunkConfig` to decide where to split
@@ -114,14 +114,14 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoRe
       (dst.len(), false)
     };
 
-    let new_progress = chunk_decompressor.decompress(&mut dst[..limit])?;
+    let new_progress = chunk_decompressor.read(&mut dst[..limit])?;
     dst = &mut dst[new_progress.n_processed..];
     progress.n_processed += new_progress.n_processed;
 
     // If we're near the end of dst, we do one possibly incomplete batch
     // of numbers and copy them over.
     if !dst.is_empty() {
-      let new_progress = chunk_decompressor.decompress(&mut incomplete_batch_buffer)?;
+      let new_progress = chunk_decompressor.read(&mut incomplete_batch_buffer)?;
       let n_processed = min(dst.len(), new_progress.n_processed);
       dst[..n_processed].copy_from_slice(&incomplete_batch_buffer[..n_processed]);
       dst = &mut dst[n_processed..];
@@ -139,7 +139,7 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoRe
 
 /// Takes in compressed bytes and returns a vector of numbers.
 ///
-/// Will return an error if there are any corruption, or insufficient data
+/// Will return an error if there are any corruption or insufficient data
 /// issues.
 pub fn simple_decompress<T: Number>(src: &[u8]) -> PcoResult<Vec<T>> {
   let (file_decompressor, src) = FileDecompressor::new(src)?;
