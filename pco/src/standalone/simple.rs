@@ -137,21 +137,6 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoRe
   Ok(progress)
 }
 
-/// Compresses the numbers using the given compression level and an otherwise
-/// default configuration.
-///
-/// Will panic if the compression level is invalid (see
-/// [`ChunkConfig`][crate::ChunkConfig] for an explanation of compression
-/// levels).
-/// This wraps [`simple_compress`].
-pub fn simpler_compress<T: Number>(nums: &[T], compression_level: usize) -> PcoResult<Vec<u8>> {
-  let config = ChunkConfig {
-    compression_level,
-    ..Default::default()
-  };
-  simple_compress(nums, &config)
-}
-
 /// Takes in compressed bytes and returns a vector of numbers.
 ///
 /// Will return an error if there are any corruption, or insufficient data
