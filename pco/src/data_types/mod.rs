@@ -1,22 +1,11 @@
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::ops::{
-  Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Div, DivAssign, Mul, MulAssign, Neg,
-  Rem, RemAssign, Shl, Shr, Sub, SubAssign,
-};
-
 pub use dynamic::{LatentType, NumberType};
 pub use split_latents::SplitLatents;
 
-use crate::constants::Bitlen;
 use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::number_priv::NumberPriv;
 use crate::describers::LatentDescriber;
-use crate::dyn_latent_slice::DynLatentSlice;
-use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
-use crate::ChunkConfig;
 
 mod dynamic;
 pub(crate) mod float;

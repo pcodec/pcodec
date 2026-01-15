@@ -7,7 +7,7 @@ use tabled::settings::object::Columns;
 use tabled::settings::{Alignment, Modify, Style};
 use tabled::{Table, Tabled};
 
-use pco::data_types::{Latent, LatentType, Number};
+use pco::data_types::{LatentType, Number};
 use pco::match_latent_enum;
 use pco::metadata::{ChunkMeta, DynBins, DynLatent, LatentVarKey};
 use pco::standalone::{DecompressorItem, FileDecompressor};

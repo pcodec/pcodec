@@ -4,7 +4,7 @@ use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
-use crate::data_types::{Latent, LatentPriv, Number, NumberPriv};
+use crate::data_types::{LatentPriv, Number, NumberPriv};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
