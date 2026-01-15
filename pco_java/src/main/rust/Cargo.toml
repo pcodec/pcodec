@@ -9,4 +9,4 @@ crate-type = ["cdylib"]
 [dependencies]
 half = { workspace = true }
 jni = { workspace = true }
-pco = { version = "1.0.0", path = "../../../../pco" }
+pco = { workspace = true }

@@ -10,4 +10,4 @@ crate-type = ["dylib"]
 [dependencies]
 half = { workspace = true, features = ["std"] }
 libc = { workspace = true }
-pco = { version = "1.0.0", path = "../pco" }
+pco = { workspace = true }

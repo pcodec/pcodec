@@ -1,6 +1,6 @@
 [package]
 name = "pco"
-version = "1.0.0"
+version = "1.0.0-rc"
 edition = "2021"
 build = "build.rs"
 
@@ -14,8 +14,8 @@ repository = "https://github.com/pcodec/pcodec"
 rust-version = "1.87.0"
 
 [dependencies]
-better_io = { version = "0.2.0", path = "../better_io" }
-dtype_dispatch = { version = "0.1.1", path = "../dtype_dispatch" }
+better_io = { workspace = true }
+dtype_dispatch = { workspace = true }
 half = { workspace = true }
 rand_xoshiro = { workspace = true }
 

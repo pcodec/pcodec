@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 arrow = { workspace = true, features = ["csv"] }
-better_io = { version = "0.2.0", path = "../better_io" }
+better_io = { workspace = true }
 blosc2-src = { workspace = true, features = ["zstd"], optional = true }
 brotli = { workspace = true, optional = true }
 bytes = { workspace = true }
@@ -33,8 +33,8 @@ parquet = { workspace = true, features = [
   "snap",
   "zstd",
 ] }
-pco = { version = "1.0.0", path = "../pco" }
-q_compress = { version = "0.11.7", path = "../quantile-compression/q_compress", optional = true }
+pco = { workspace = true }
+q_compress = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 rust-openzl = {workspace = true, optional = true }
 snap = { workspace = true }
