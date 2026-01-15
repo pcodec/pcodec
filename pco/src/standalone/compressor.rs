@@ -164,7 +164,7 @@ impl ChunkCompressor {
   /// you can `.reserve(chunk_compressor.chunk_size_hint())` ahead of time.
   pub fn chunk_size_hint(&self) -> usize {
     1 + BITS_TO_ENCODE_N_ENTRIES.div_ceil(8) as usize
-      + self.inner.chunk_meta_size_hint()
+      + self.inner.meta_size_hint()
       + self.inner.page_size_hint(0)
   }
 
@@ -181,7 +181,7 @@ impl ChunkCompressor {
 
     writer.flush()?;
     let dst = writer.into_inner();
-    let dst = self.inner.write_chunk_meta(dst)?;
+    let dst = self.inner.write_meta(dst)?;
     self.inner.write_page(0, dst)
   }
 }

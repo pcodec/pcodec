@@ -121,14 +121,15 @@ pub struct ChunkConfig {
   ///
   /// See [`DeltaEncoding`](crate::metadata::DeltaEncoding) to understand what
   /// delta encoding is.
-  /// If you would like to automatically choose this once and reuse it for all
-  /// chunks, you can create a
-  /// [`ChunkDecompressor`][crate::wrapped::ChunkDecompressor] and read the
-  /// delta encoding it chose.
   pub delta_spec: DeltaSpec,
   /// Specifies how the chunk should be split into pages (default: equal pages
   /// up to 2^18 numbers each).
   pub paging_spec: PagingSpec,
+  /// By default, Pco will fail when trying to compress u8 or i8 data.
+  /// This is to prevent user error: Pco is not meant to be used with arbitrary
+  /// token-based/symbolic data, e.g. UTF-8 text files.
+  /// Instead, this should be enabled when the data is inherently numerical,
+  /// e.g. an 8-bit color channel of an image.
   pub enable_8_bit: bool,
 }
 

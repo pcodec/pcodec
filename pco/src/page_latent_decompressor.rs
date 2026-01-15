@@ -12,7 +12,7 @@ use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::{bit_reader, delta};
 
 #[inline(never)]
-unsafe fn decompress_offsets<L: Latent, const READ_BYTES: usize>(
+unsafe fn read_offsets<L: Latent, const READ_BYTES: usize>(
   reader: &mut BitReader,
   offset_bits_csum: &[u32],
   offset_bits: &[u32],
@@ -50,7 +50,7 @@ macro_rules! force_export {
   ($name: ident, $l: ty, $rb: literal) => {
     #[used]
     static $name: unsafe fn(&mut BitReader, &[u32], &[u32], &mut [$l], usize) =
-      decompress_offsets::<$l, $rb>;
+      read_offsets::<$l, $rb>;
   };
 }
 force_export!(_FORCE_EXPORT_U8_4, u8, 4);
@@ -85,7 +85,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   // This implementation handles only a full batch, but is faster.
   #[inline(never)]
-  unsafe fn decompress_full_ans_symbols(
+  unsafe fn read_full_ans_symbols(
     &mut self,
     reader: &mut BitReader,
     cld: &mut ChunkLatentDecompressor<L>,
@@ -140,7 +140,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
   // This implementation handles arbitrary batch size and looks simpler, but is
   // slower, so we only use it at the end of the page.
   #[inline(never)]
-  unsafe fn decompress_ans_symbols(
+  unsafe fn read_ans_symbols(
     &mut self,
     reader: &mut BitReader,
     batch_n: usize,
@@ -177,7 +177,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
-  pub unsafe fn decompress_batch_pre_delta(
+  pub unsafe fn read_batch_pre_delta(
     &mut self,
     reader: &mut BitReader,
     batch_n: usize,
@@ -190,9 +190,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
     assert!(batch_n <= FULL_BATCH_N);
     if cld.n_bins > 1 {
       if batch_n == FULL_BATCH_N {
-        self.decompress_full_ans_symbols(reader, cld);
+        self.read_full_ans_symbols(reader, cld);
       } else {
-        self.decompress_ans_symbols(reader, batch_n, cld);
+        self.read_ans_symbols(reader, batch_n, cld);
       }
     } else {
       cld.scratch.latents[..batch_n].fill(cld.state_lowers[0]);
@@ -206,9 +206,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
     // latent types are handled.
     // Note: Providing a 2 byte read appears to degrade performance for 16-bit
     // latents.
-    macro_rules! specialized_decompress_offsets {
+    macro_rules! specialized_read_offsets {
       ($rb: literal) => {
-        decompress_offsets::<L, $rb>(
+        read_offsets::<L, $rb>(
           reader,
           &cld.scratch.offset_bits_csum.0,
           &cld.scratch.offset_bits.0,
@@ -219,12 +219,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
     match (cld.bytes_per_offset, L::BITS) {
       (0, _) => (),
-      (1..=4, 8) => specialized_decompress_offsets!(4),
-      (1..=4, 16) => specialized_decompress_offsets!(4),
-      (1..=4, 32) => specialized_decompress_offsets!(4),
-      (5..=8, 32) => specialized_decompress_offsets!(8),
-      (1..=8, 64) => specialized_decompress_offsets!(8),
-      (9..=15, 64) => specialized_decompress_offsets!(15),
+      (1..=4, 8) => specialized_read_offsets!(4),
+      (1..=4, 16) => specialized_read_offsets!(4),
+      (1..=4, 32) => specialized_read_offsets!(4),
+      (5..=8, 32) => specialized_read_offsets!(8),
+      (1..=8, 64) => specialized_read_offsets!(8),
+      (9..=15, 64) => specialized_read_offsets!(15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
         cld.bytes_per_offset,
@@ -233,7 +233,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
   }
 
-  pub unsafe fn decompress_batch(
+  pub unsafe fn read_batch(
     &mut self,
     reader: &mut BitReader,
     delta_latents: Option<DynLatentSlice>,
@@ -243,7 +243,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let n_remaining_pre_delta =
       n_remaining_in_page.saturating_sub(cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
-    self.decompress_batch_pre_delta(reader, pre_delta_len, cld);
+    self.read_batch_pre_delta(reader, pre_delta_len, cld);
     let dst = &mut cld.scratch.latents[..n_remaining_in_page.min(FULL_BATCH_N)];
 
     delta::decode_in_place(

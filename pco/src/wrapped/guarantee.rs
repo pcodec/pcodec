@@ -64,7 +64,7 @@ mod tests {
     let mut dst = Vec::new();
     let fc = FileCompressor::default();
     let mut cc = fc.chunk_compressor(nums, config)?;
-    cc.write_chunk_meta(&mut dst)?;
+    cc.write_meta(&mut dst)?;
     for i in 0..n_pages {
       cc.write_page(i, &mut dst)?;
     }

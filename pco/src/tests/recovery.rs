@@ -4,7 +4,7 @@ use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::constants::Bitlen;
-use crate::data_types::{LatentType, Number};
+use crate::data_types::{number_priv::NumberPriv, LatentType, Number};
 use crate::errors::PcoResult;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, DynLatents, Mode};
 use crate::standalone::{simple_compress, simple_decompress, FileCompressor};

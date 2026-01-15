@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use numpy::{Element, PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyModule};
@@ -63,8 +61,7 @@ impl PyFc {
   /// This does the bulk of the work of compression.
   ///
   /// :param nums: numpy array to compress. This must be 1D, contiguous, and
-  ///   only the following data types are supported: float16, float32, float64,
-  ///   int16, int32, int64, uint16, uint32, uint64.
+  ///   one of Pco's supported data types, e.g. float16, uint64.
   /// :param config: a ChunkConfig object containing compression level and
   ///   other settings.
   ///
@@ -77,12 +74,11 @@ impl PyFc {
     nums: &Bound<PyUntypedArray>,
     config: &PyChunkConfig,
   ) -> PyResult<PyCc> {
-    let config = config.try_into()?;
     let number_type = utils::number_type_from_numpy(py, &nums.dtype())?;
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(nums)?, &config)?;
+        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(nums)?, &config.into())?;
         Ok(PyCc(cc))
       }
     )
@@ -96,7 +92,7 @@ impl PyCc {
   /// :raises: TypeError, RuntimeError
   fn write_chunk_meta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
     let mut res = Vec::new();
-    self.0.write_chunk_meta(&mut res).map_err(pco_err_to_py)?;
+    self.0.write_meta(&mut res).map_err(pco_err_to_py)?;
     Ok(PyBytes::new(py, &res))
   }
 

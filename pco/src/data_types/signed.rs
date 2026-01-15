@@ -1,33 +1,37 @@
 use crate::constants::Bitlen;
-use crate::data_types::{unsigneds, ModeAndLatents, Number, Signed};
+use crate::data_types::{unsigned, ModeAndLatents, Number, NumberPriv};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::{describers, ChunkConfig};
+use std::ops::*;
+
+pub trait Signed: AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> {
+  const ZERO: Self;
+  const MAX: Self;
+  const BITS: Bitlen;
+
+  fn from_i64(x: i64) -> Self;
+  fn to_f64(self) -> f64;
+}
 
 macro_rules! impl_signed {
   ($t: ty, $latent: ty, $header_byte: expr) => {
-    impl Number for $t {
+    impl NumberPriv for $t {
       const NUMBER_TYPE_BYTE: u8 = $header_byte;
 
       type L = $latent;
 
-      fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber> {
-        describers::match_classic_mode::<Self>(meta, "")
-          .or_else(|| describers::match_int_modes::<Self::L>(meta, true))
-          .expect("invalid mode for signed type")
-      }
-
       fn mode_is_valid(mode: &Mode) -> bool {
-        unsigneds::mode_is_valid::<Self::L>(mode)
+        unsigned::mode_is_valid::<Self::L>(mode)
       }
       fn choose_mode_and_split_latents(
         nums: &[Self],
         config: &ChunkConfig,
       ) -> PcoResult<ModeAndLatents> {
-        unsigneds::choose_mode_and_split_latents(&nums, config)
+        unsigned::choose_mode_and_split_latents(&nums, config)
       }
 
       #[inline]
@@ -44,7 +48,15 @@ macro_rules! impl_signed {
         secondary: Option<DynLatentSlice>,
         dst: &mut [Self],
       ) -> PcoResult<()> {
-        unsigneds::join_latents(mode, primary, secondary, dst)
+        unsigned::join_latents(mode, primary, secondary, dst)
+      }
+    }
+
+    impl Number for $t {
+      fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber> {
+        describers::match_classic_mode::<Self>(meta, "")
+          .or_else(|| describers::match_int_modes::<Self::L>(meta, true))
+          .expect("invalid mode for signed type")
       }
     }
 
@@ -70,7 +82,7 @@ impl_signed!(i8, u8, 11);
 
 #[cfg(test)]
 mod tests {
-  use crate::data_types::{Latent, Number};
+  use crate::data_types::{LatentPriv, NumberPriv};
 
   #[test]
   fn test_ordering() {

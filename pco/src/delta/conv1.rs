@@ -1,5 +1,6 @@
 use crate::constants::{Bitlen, MAX_CONV1_DELTA_QUANTIZATION};
-use crate::data_types::{Latent, Signed};
+use crate::data_types::signed::Signed;
+use crate::data_types::Latent;
 use crate::metadata::DeltaConv1Config;
 use crate::{delta, sort_utils};
 

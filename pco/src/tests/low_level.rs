@@ -23,7 +23,7 @@ fn decompress_by_batch<R: BetterBufRead>(
   loop {
     let end = min(start + FULL_BATCH_N, page_n);
     let batch_size = end - start;
-    let progress = pd.decompress(&mut nums[start..end])?;
+    let progress = pd.read(&mut nums[start..end])?;
     assert_eq!(progress.n_processed, batch_size);
     start = end;
     if end == page_n {
@@ -42,7 +42,7 @@ fn test_wrapped_compress<W: Write>(chunks: &[Chunk], dst: W) -> PcoResult<W> {
 
   for chunk in chunks {
     let mut cc = fc.chunk_compressor(&chunk.nums, &chunk.config)?;
-    dst = cc.write_chunk_meta(dst)?;
+    dst = cc.write_meta(dst)?;
     for page_idx in 0..cc.n_per_page().len() {
       dst = cc.write_page(page_idx, dst)?;
     }

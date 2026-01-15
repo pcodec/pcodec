@@ -332,7 +332,7 @@ fn calculate_compressed_sample_size(
     delta_encoding,
     unoptimized_bins_log,
   )?;
-  let size = sample_cc.chunk_meta_size_hint() + sample_cc.page_size_hint_inner(0, 1.0);
+  let size = sample_cc.meta_size_hint() + sample_cc.page_size_hint_inner(0, 1.0);
   Ok(size as f32)
 }
 
@@ -570,14 +570,14 @@ impl ChunkCompressor {
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
   /// you can `.reserve()` ahead of time.
-  pub fn chunk_meta_size_hint(&self) -> usize {
+  pub fn meta_size_hint(&self) -> usize {
     self.meta.max_size()
   }
 
   /// Writes the chunk metadata to the destination.
   ///
   /// Will return an error if the provided `Write` errors.
-  pub fn write_chunk_meta<W: Write>(&self, dst: W) -> PcoResult<W> {
+  pub fn write_meta<W: Write>(&self, dst: W) -> PcoResult<W> {
     let mut writer = BitWriter::new(dst, self.meta.max_size() + OVERSHOOT_PADDING);
     unsafe { self.meta.write_to(&mut writer)? };
     Ok(writer.into_inner())

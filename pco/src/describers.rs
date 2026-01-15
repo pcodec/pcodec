@@ -1,5 +1,6 @@
 use crate::constants::{Bitlen, DeltaLookback};
-use crate::data_types::{Float, Latent, Number};
+use crate::data_types::float::Float;
+use crate::data_types::{latent_priv::LatentPriv, Latent, Number};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, LatentVarKey, Mode};

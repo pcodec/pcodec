@@ -8,9 +8,9 @@ high compression ratio and moderately fast speed.
 # Quick Start
 
 ```rust
-use pco::standalone::{simpler_compress, simple_decompress};
-use pco::DEFAULT_COMPRESSION_LEVEL;
+use pco::ChunkConfig;
 use pco::errors::PcoResult;
+use pco::standalone::{simple_compress, simple_decompress};
 
 fn main() -> PcoResult<()> {
   // your data
@@ -20,7 +20,7 @@ fn main() -> PcoResult<()> {
   }
 
   // compress
-  let compressed: Vec<u8> = simpler_compress(&my_nums, DEFAULT_COMPRESSION_LEVEL)?;
+  let compressed: Vec<u8> = simple_compress(&my_nums, &ChunkConfig::default())?;
   println!("compressed down to {} bytes", compressed.len());
 
   // decompress

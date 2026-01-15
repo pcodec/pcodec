@@ -33,7 +33,7 @@ def test_compress(dtype):
     # check that undershooting is fine
     _, n_bytes_read = FileDecompressor.new(header + b"foo")
     assert n_bytes_read == len(header)
-    cd, n_bytes_read = fd.read_chunk_meta(chunk_meta, pco_number_type)
+    cd, n_bytes_read = fd.chunk_decompressor(chunk_meta, pco_number_type)
     assert n_bytes_read == len(chunk_meta)
 
     # page 1, which has elements 6-10
