@@ -21,7 +21,7 @@ def test_compress(dtype):
         ChunkConfig(paging_spec=PagingSpec.exact_page_sizes(page_sizes)),
     )
     assert cc.n_per_page() == page_sizes
-    chunk_meta = cc.write_chunk_meta()
+    chunk_meta = cc.write_meta()
     page0 = cc.write_page(0)
     page1 = cc.write_page(1)
     with pytest.raises(RuntimeError, match="page idx exceeds num pages"):
