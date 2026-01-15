@@ -188,7 +188,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
     }
 
     let n: usize = chunk_ns.iter().sum();
-    let uncompressed_size = <T as Number>::L::BITS as usize / 8 * n;
+    let uncompressed_size = size_of::<T>() * n;
     let compressed_size = header_size + meta_size + page_size + footer_size;
     let unknown_trailing_bytes = src.len();
 

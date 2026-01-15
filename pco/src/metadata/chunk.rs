@@ -5,7 +5,8 @@ use better_io::BetterBufRead;
 use crate::bit_reader::BitReaderBuilder;
 use crate::bit_writer::BitWriter;
 use crate::constants::{DeltaLookback, MAX_CONV1_DELTA_QUANTIZATION, OVERSHOOT_PADDING};
-use crate::data_types::{Latent, LatentType};
+use crate::data_types::latent_priv::LatentPriv;
+use crate::data_types::LatentType;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
@@ -66,7 +67,7 @@ impl ChunkMeta {
         let (l_bits, conv_bits) = match_latent_enum!(
           &per_latent_var.primary.bins,
           DynBins<L>(_bins) => {
-            (L::BITS, <L as Latent>::Conv::BITS)
+            (L::BITS, <L as LatentPriv>::Conv::BITS)
           }
         );
         let max_quantization = MAX_CONV1_DELTA_QUANTIZATION.min(conv_bits - 1);
@@ -190,7 +191,6 @@ impl ChunkMeta {
 mod tests {
   use super::*;
   use crate::constants::ANS_INTERLEAVING;
-  use crate::data_types::Latent;
   use crate::macros::match_latent_enum;
   use crate::metadata::dyn_bins::DynBins;
   use crate::metadata::dyn_latents::DynLatents;

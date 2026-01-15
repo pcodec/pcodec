@@ -5,7 +5,7 @@ use std::mem;
 
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::SplitLatents;
-use crate::data_types::{Latent, Number};
+use crate::data_types::{latent_priv::LatentPriv, number_priv::NumberPriv, Latent, Number};
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatent, DynLatents};

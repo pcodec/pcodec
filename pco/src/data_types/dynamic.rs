@@ -1,4 +1,4 @@
-use crate::data_types::{Latent, Number};
+use crate::data_types::{Latent, Number, NumberPriv};
 use crate::macros::{define_latent_enum, define_number_enum};
 
 define_number_enum!(
