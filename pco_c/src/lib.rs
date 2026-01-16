@@ -6,7 +6,7 @@ use libc::{c_uchar, c_uint, c_void, size_t};
 
 use crate::PcoError::PcoInvalidType;
 use pco::data_types::{Number, NumberType};
-use pco::match_number_enum;
+use pco::{match_number_enum, ChunkConfig};
 
 #[repr(C)]
 pub enum PcoError {
@@ -59,7 +59,10 @@ fn _simpler_compress<T: Number>(
   ffi_vec_ptr: *mut PcoFfiVec,
 ) -> PcoError {
   let slice = unsafe { std::slice::from_raw_parts(nums as *const T, len) };
-  match pco::standalone::simpler_compress(slice, level as usize) {
+  match pco::standalone::simple_compress(
+    slice,
+    &ChunkConfig::default().with_compression_level(level as usize),
+  ) {
     Err(_) => PcoError::PcoCompressionError,
     Ok(v) => {
       unsafe { (*ffi_vec_ptr).init_from_bytes(v) };

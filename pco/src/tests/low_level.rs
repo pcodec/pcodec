@@ -23,7 +23,7 @@ fn decompress_by_batch<R: BetterBufRead>(
   loop {
     let end = min(start + FULL_BATCH_N, page_n);
     let batch_size = end - start;
-    let progress = pd.decompress(&mut nums[start..end])?;
+    let progress = pd.read(&mut nums[start..end])?;
     assert_eq!(progress.n_processed, batch_size);
     start = end;
     if end == page_n {
@@ -41,11 +41,10 @@ fn test_wrapped_compress<W: Write>(chunks: &[Chunk], dst: W) -> PcoResult<W> {
   let mut dst = fc.write_header(dst)?;
 
   for chunk in chunks {
-    let cc = fc.chunk_compressor(&chunk.nums, &chunk.config)?;
-    dst = cc.write_chunk_meta(dst)?;
-    let mut scratch = cc.build_scratch();
+    let mut cc = fc.chunk_compressor(&chunk.nums, &chunk.config)?;
+    dst = cc.write_meta(dst)?;
     for page_idx in 0..cc.n_per_page().len() {
-      dst = cc.write_page_with_scratch(page_idx, &mut scratch, dst)?;
+      dst = cc.write_page(page_idx, dst)?;
     }
   }
 
@@ -58,7 +57,7 @@ fn test_wrapped_decompress<R: BetterBufRead>(chunks: &[Chunk], src: R) -> PcoRes
   // antagonistically keep setting the buf read capacity to 0
   for chunk in chunks {
     src.resize_capacity(0);
-    let (cd, new_src) = fd.chunk_decompressor(src)?;
+    let (mut cd, new_src) = fd.chunk_decompressor(src)?;
     src = new_src;
 
     let mut page_start = 0;

@@ -916,7 +916,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "libc",
- "pco 1.0.0",
+ "pco 1.0.0-rc",
 ]
 
 [[package]]
@@ -1017,12 +1017,12 @@ dependencies = [
 [[package]]
 name = "dtype_dispatch"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3a5ccdfd6c5e7e2fea9c5cf256f2a08216047fab19c621c3da64e9ae4a1462d"
 
 [[package]]
 name = "dtype_dispatch"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3a5ccdfd6c5e7e2fea9c5cf256f2a08216047fab19c621c3da64e9ae4a1462d"
+version = "0.2.0"
 
 [[package]]
 name = "dyn-hash"
@@ -2262,17 +2262,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42382de9fb564e2d10cb4d5ca97cc06d928f0f9667bbef456b57e60827b6548b"
 dependencies = [
  "better_io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "dtype_dispatch 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dtype_dispatch 0.1.1",
  "half",
  "rand_xoshiro",
 ]
 
 [[package]]
 name = "pco"
-version = "1.0.0"
+version = "1.0.0-rc"
 dependencies = [
  "better_io 0.2.0",
- "dtype_dispatch 0.1.1",
+ "dtype_dispatch 0.2.0",
  "half",
  "rand 0.8.5",
  "rand_xoshiro",
@@ -2294,7 +2294,7 @@ dependencies = [
  "indicatif",
  "once_cell",
  "parquet",
- "pco 1.0.0",
+ "pco 1.0.0-rc",
  "q_compress",
  "rayon",
  "rust-openzl",
@@ -2315,7 +2315,7 @@ version = "0.1.0"
 dependencies = [
  "half",
  "jni",
- "pco 1.0.0",
+ "pco 1.0.0-rc",
 ]
 
 [[package]]
@@ -2324,7 +2324,7 @@ version = "0.3.6"
 dependencies = [
  "half",
  "numpy",
- "pco 1.0.0",
+ "pco 1.0.0-rc",
  "pyo3",
 ]
 

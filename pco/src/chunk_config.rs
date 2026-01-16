@@ -1,4 +1,5 @@
 use crate::constants::*;
+use crate::data_types::LatentType;
 use crate::errors::{PcoError, PcoResult};
 use crate::DEFAULT_COMPRESSION_LEVEL;
 
@@ -120,14 +121,16 @@ pub struct ChunkConfig {
   ///
   /// See [`DeltaEncoding`](crate::metadata::DeltaEncoding) to understand what
   /// delta encoding is.
-  /// If you would like to automatically choose this once and reuse it for all
-  /// chunks, you can create a
-  /// [`ChunkDecompressor`][crate::wrapped::ChunkDecompressor] and read the
-  /// delta encoding it chose.
   pub delta_spec: DeltaSpec,
   /// Specifies how the chunk should be split into pages (default: equal pages
   /// up to 2^18 numbers each).
   pub paging_spec: PagingSpec,
+  /// By default, Pco will fail when trying to compress u8 or i8 data.
+  /// This is to prevent user error: Pco is not meant to be used with arbitrary
+  /// token-based/symbolic data, e.g. UTF-8 text files.
+  /// Instead, this should be enabled when the data is inherently numerical,
+  /// e.g. an 8-bit color channel of an image.
+  pub enable_8_bit: bool,
 }
 
 impl Default for ChunkConfig {
@@ -137,6 +140,7 @@ impl Default for ChunkConfig {
       mode_spec: ModeSpec::default(),
       delta_spec: DeltaSpec::default(),
       paging_spec: PagingSpec::EqualPagesUpTo(DEFAULT_MAX_PAGE_N),
+      enable_8_bit: false,
     }
   }
 }
@@ -166,7 +170,13 @@ impl ChunkConfig {
     self
   }
 
-  pub(crate) fn validate(&self) -> PcoResult<()> {
+  /// Sets [`enable_8_bit`][ChunkConfig::enable_8_bit].
+  pub fn with_enable_8_bit(mut self, enable: bool) -> Self {
+    self.enable_8_bit = enable;
+    self
+  }
+
+  pub(crate) fn validate(&self, latent_type: LatentType) -> PcoResult<()> {
     let compression_level = self.compression_level;
     if compression_level > MAX_COMPRESSION_LEVEL {
       return Err(PcoError::invalid_argument(format!(
@@ -193,6 +203,13 @@ impl ChunkConfig {
           )));
         }
       }
+    }
+
+    if matches!(latent_type, LatentType::U8) && !self.enable_8_bit {
+      return Err(PcoError::invalid_argument(
+        "compressing 8-bit types with Pco is often a mistake; \
+        enable them on the ChunkConfig if you know what you're doing",
+      ));
     }
 
     Ok(())

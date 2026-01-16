@@ -1,6 +1,6 @@
 use super::ModeAndLatents;
 use crate::constants::Bitlen;
-use crate::data_types::{Latent, Number};
+use crate::data_types::{Latent, LatentPriv, Number, NumberPriv};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
@@ -63,7 +63,7 @@ pub fn mode_is_valid<L: Latent>(mode: &Mode) -> bool {
 
 macro_rules! impl_latent {
   ($t: ty, $conv: ty) => {
-    impl Latent for $t {
+    impl LatentPriv for $t {
       const ZERO: Self = 0;
       const ONE: Self = 1;
       const MID: Self = 1 << (Self::BITS - 1);
@@ -115,6 +115,7 @@ macro_rules! impl_latent {
   };
 }
 
+impl_latent!(u8, i16);
 impl_latent!(u16, i32);
 impl_latent!(u32, i64);
 // 64-bit convolutions can't safely be done in any efficient type without risk
@@ -124,16 +125,10 @@ impl_latent!(u64, i64);
 
 macro_rules! impl_unsigned_number {
   ($t: ty, $header_byte: expr) => {
-    impl Number for $t {
+    impl NumberPriv for $t {
       const NUMBER_TYPE_BYTE: u8 = $header_byte;
 
       type L = Self;
-
-      fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber> {
-        describers::match_classic_mode::<Self>(meta, "")
-          .or_else(|| describers::match_int_modes::<Self>(meta, false))
-          .expect("invalid mode for unsigned type")
-      }
 
       fn mode_is_valid(mode: &Mode) -> bool {
         mode_is_valid::<Self::L>(mode)
@@ -162,12 +157,21 @@ macro_rules! impl_unsigned_number {
         join_latents(mode, primary, secondary, dst)
       }
     }
+
+    impl Number for $t {
+      fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber> {
+        describers::match_classic_mode::<Self>(meta, "")
+          .or_else(|| describers::match_int_modes::<Self>(meta, false))
+          .expect("invalid mode for unsigned type")
+      }
+    }
   };
 }
 
 impl_unsigned_number!(u32, 1);
 impl_unsigned_number!(u64, 2);
 impl_unsigned_number!(u16, 7);
+impl_unsigned_number!(u8, 10);
 
 #[cfg(test)]
 mod tests {

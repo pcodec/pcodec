@@ -7,7 +7,7 @@ use tabled::settings::object::Columns;
 use tabled::settings::{Alignment, Modify, Style};
 use tabled::{Table, Tabled};
 
-use pco::data_types::{Latent, LatentType, Number};
+use pco::data_types::{LatentType, Number};
 use pco::match_latent_enum;
 use pco::metadata::{ChunkMeta, DynBins, DynLatent, LatentVarKey};
 use pco::standalone::{DecompressorItem, FileDecompressor};
@@ -179,7 +179,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
       match fd.chunk_decompressor::<T, _>(src)? {
         DecompressorItem::Chunk(mut cd) => {
           void.resize(cd.n(), T::default());
-          let _ = cd.decompress(&mut void)?;
+          let _ = cd.read(&mut void)?;
           src = cd.into_src();
           page_size += measure_bytes_read(src, prev_src_len);
         }
@@ -188,7 +188,7 @@ impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
     }
 
     let n: usize = chunk_ns.iter().sum();
-    let uncompressed_size = <T as Number>::L::BITS as usize / 8 * n;
+    let uncompressed_size = size_of::<T>() * n;
     let compressed_size = header_size + meta_size + page_size + footer_size;
     let unknown_trailing_bytes = src.len();
 

@@ -14,21 +14,16 @@ use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
+use crate::scratch_array::ScratchArray;
 use crate::{ans, bit_reader, bit_writer, read_write_uint, FULL_BATCH_N};
-use std::cmp;
 use std::io::Write;
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
 pub struct ChunkLatentCompressorScratch<L: Latent> {
-  lowers: [L; FULL_BATCH_N],
-  symbols: [Symbol; FULL_BATCH_N],
+  lowers: ScratchArray<L>,
+  symbols: ScratchArray<Symbol>,
 }
-
-define_latent_enum!(
-  #[derive(Clone, Debug)]
-  pub DynChunkLatentCompressorScratch(ChunkLatentCompressorScratch)
-);
 
 unsafe fn uninit_vec<T>(n: usize) -> Vec<T> {
   let mut res = Vec::with_capacity(n);
@@ -94,11 +89,11 @@ pub struct ChunkLatentCompressor<L: Latent> {
   needs_ans: bool,
   max_u64s_per_offset: usize,
   latents: Vec<L>,
-  default_lower: L,
+  scratch: ChunkLatentCompressorScratch<L>,
 }
 
 impl<L: Latent> ChunkLatentCompressor<L> {
-  pub fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Self> {
+  pub fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Box<Self>> {
     let needs_ans = bins.len() != 1;
 
     let table = CompressionTable::from(trained.infos);
@@ -110,7 +105,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     let max_u64s_per_offset = read_write_uint::calc_max_u64s_for_writing(max_bits_per_offset);
     let default_lower = table.only_bin().map(|info| info.lower).unwrap_or(L::ZERO);
 
-    Ok(ChunkLatentCompressor {
+    Ok(Box::new(ChunkLatentCompressor {
       table,
       encoder,
       avg_bits_per_latent: bins::avg_bits_per_latent(bins, trained.ans_size_log),
@@ -118,24 +113,15 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       needs_ans,
       max_u64s_per_offset,
       latents,
-      default_lower,
-    })
-  }
-
-  pub fn build_scratch(&self) -> ChunkLatentCompressorScratch<L> {
-    ChunkLatentCompressorScratch {
-      lowers: [self.default_lower; FULL_BATCH_N],
-      symbols: [0; FULL_BATCH_N],
-    }
+      scratch: ChunkLatentCompressorScratch {
+        lowers: ScratchArray([default_lower; FULL_BATCH_N]),
+        symbols: ScratchArray([0; FULL_BATCH_N]),
+      },
+    }))
   }
 
   #[inline(never)]
-  fn dissect_bins(
-    &self,
-    search_idxs: &[usize],
-    scratch: &mut ChunkLatentCompressorScratch<L>,
-    dst_offset_bits: &mut [Bitlen],
-  ) {
+  fn dissect_bins(&mut self, search_idxs: &[usize], dst_offset_bits: &mut [Bitlen]) {
     if self.table.is_trivial() {
       // trivial case: there's at most one bin. We've prepopulated the scratch
       // buffers with the correct values in this case.
@@ -150,22 +136,17 @@ impl<L: Latent> ChunkLatentCompressor<L> {
 
     for (i, &search_idx) in search_idxs.iter().enumerate() {
       let info = &self.table.infos[search_idx];
-      scratch.lowers[i] = info.lower;
-      scratch.symbols[i] = info.symbol;
+      self.scratch.lowers[i] = info.lower;
+      self.scratch.symbols[i] = info.symbol;
       dst_offset_bits[i] = info.offset_bits;
     }
   }
 
   #[inline(never)]
-  fn set_offsets(
-    &self,
-    latents: &[L],
-    scratch: &mut ChunkLatentCompressorScratch<L>,
-    offsets: &mut [L],
-  ) {
+  fn set_offsets(&self, latents: &[L], offsets: &mut [L]) {
     for (offset, (&latent, &lower)) in offsets
       .iter_mut()
-      .zip(latents.iter().zip(scratch.lowers.iter()))
+      .zip(latents.iter().zip(self.scratch.lowers.iter()))
     {
       *offset = latent - lower;
     }
@@ -174,7 +155,6 @@ impl<L: Latent> ChunkLatentCompressor<L> {
   #[inline(never)]
   fn encode_ans_in_reverse(
     &self,
-    scratch: &mut ChunkLatentCompressorScratch<L>,
     ans_vals: &mut [AnsState],
     ans_bits: &mut [Bitlen],
     ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
@@ -192,7 +172,9 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     // first get the jagged part out of the way
     for j in (0..final_j).rev() {
       let i = final_base_i + j;
-      let (new_state, bitlen) = self.encoder.encode(ans_final_states[j], scratch.symbols[i]);
+      let (new_state, bitlen) = self
+        .encoder
+        .encode(ans_final_states[j], self.scratch.symbols[i]);
       ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
       ans_bits[i] = bitlen;
       ans_final_states[j] = new_state;
@@ -202,7 +184,9 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     for base_i in (0..final_base_i).step_by(ANS_INTERLEAVING).rev() {
       for j in (0..ANS_INTERLEAVING).rev() {
         let i = base_i + j;
-        let (new_state, bitlen) = self.encoder.encode(ans_final_states[j], scratch.symbols[i]);
+        let (new_state, bitlen) = self
+          .encoder
+          .encode(ans_final_states[j], self.scratch.symbols[i]);
         ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
         ans_bits[i] = bitlen;
         ans_final_states[j] = new_state;
@@ -211,10 +195,9 @@ impl<L: Latent> ChunkLatentCompressor<L> {
   }
 
   fn dissect_batch_latents(
-    &self,
-    latents: &[L],
-    base_i: usize,
-    scratch: &mut ChunkLatentCompressorScratch<L>,
+    &mut self,
+    page_start: usize,
+    relative_batch_range: Range<usize>,
     dst: &mut PageDissectedVar,
   ) {
     let PageDissectedVar {
@@ -225,23 +208,27 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       ans_final_states,
     } = dst;
 
-    let search_idxs = self.table.binary_search(latents);
-
-    let end_i = cmp::min(base_i + FULL_BATCH_N, ans_vals.len());
+    let absolute_batch_range =
+      page_start + relative_batch_range.start..page_start + relative_batch_range.end;
+    let batch_n = relative_batch_range.len();
+    let search_idxs = self
+      .table
+      .binary_search(&self.latents[absolute_batch_range.clone()]);
 
     self.dissect_bins(
-      &search_idxs[..latents.len()],
-      scratch,
-      &mut offset_bits[base_i..end_i],
+      &search_idxs[..batch_n],
+      &mut offset_bits[relative_batch_range.clone()],
     );
 
     let offsets = offsets.downcast_mut::<L>().unwrap();
-    self.set_offsets(latents, scratch, &mut offsets[base_i..end_i]);
+    self.set_offsets(
+      &self.latents[absolute_batch_range],
+      &mut offsets[relative_batch_range.clone()],
+    );
 
     self.encode_ans_in_reverse(
-      scratch,
-      &mut ans_vals[base_i..end_i],
-      &mut ans_bits[base_i..end_i],
+      &mut ans_vals[relative_batch_range.clone()],
+      &mut ans_bits[relative_batch_range],
       ans_final_states,
     );
   }
@@ -257,26 +244,26 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     }
   }
 
-  pub fn dissect_page(
-    &self,
-    range: Range<usize>,
-    scratch: &mut ChunkLatentCompressorScratch<L>,
-  ) -> PageDissectedVar {
+  pub fn dissect_page(&mut self, page_range: Range<usize>) -> PageDissectedVar {
     if self.is_trivial {
       // safe because length of uninit elements is 0
       return unsafe { self.uninit_page_dissected_var(0) };
     }
 
-    let latents = &self.latents[range];
-    let mut page_dissected_var = unsafe { self.uninit_page_dissected_var(latents.len()) };
+    let page_n = page_range.len();
+    let mut page_dissected_var = unsafe { self.uninit_page_dissected_var(page_n) };
 
-    // we go through in reverse for ANS!
-    for (batch_idx, batch) in latents.chunks(FULL_BATCH_N).enumerate().rev() {
-      let base_i = batch_idx * FULL_BATCH_N;
+    // We go through in reverse for ANS!
+    // Here page_dissected_var is indexed from 0..page_n, whereas latents are
+    // indexed from 0..chunk_n, so we need both an absolute page start index and
+    // a relative range for the batch within the page.
+    let n_batches = page_n.div_ceil(FULL_BATCH_N);
+    for batch_idx in (0..n_batches).rev() {
+      let relative_batch_range =
+        batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(page_n);
       self.dissect_batch_latents(
-        batch,
-        base_i,
-        scratch,
+        page_range.start,
+        relative_batch_range,
         &mut page_dissected_var,
       )
     }
@@ -347,7 +334,10 @@ impl<L: Latent> ChunkLatentCompressor<L> {
   }
 }
 
+// we allocate these on the heap because they're enormous
+type Boxed<L> = Box<ChunkLatentCompressor<L>>;
+
 define_latent_enum!(
   #[derive(Clone, Debug)]
-  pub DynChunkLatentCompressor(ChunkLatentCompressor)
+  pub DynChunkLatentCompressor(Boxed)
 );

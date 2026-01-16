@@ -4,7 +4,7 @@ use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
-use crate::data_types::{Float, Latent, Number};
+use crate::data_types::{LatentPriv, Number, NumberPriv};
 use crate::describers::LatentDescriber;
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
@@ -13,6 +13,60 @@ use crate::metadata::{ChunkMeta, Mode};
 use crate::mode::float_mult::FloatMultConfig;
 use crate::mode::{classic, dict, float_mult, float_quant};
 use crate::{describers, sampling, ChunkConfig};
+use std::fmt::{Debug, Display};
+use std::ops::*;
+
+pub(crate) trait Float:
+  Add<Output = Self>
+  + AddAssign
+  + Copy
+  + Debug
+  + Display
+  + Mul<Output = Self>
+  + Neg<Output = Self>
+  + Number
+  + PartialOrd
+  + RemAssign
+  + Send
+  + Sync
+  + Sub<Output = Self>
+  + SubAssign
+  + Div<Output = Self>
+{
+  /// Number of bits that aren't used for exponent or sign.
+  /// E.g. for f32 this should be 23.
+  const PRECISION_BITS: Bitlen;
+  const ZERO: Self;
+  const MAX_FOR_SAMPLING: Self;
+
+  fn abs(self) -> Self;
+  fn inv(self) -> Self;
+  fn round(self) -> Self;
+  /// This only needs to cover a small range (from 2^-BITS to 2^BITS) and might
+  /// not be valid outside of it.
+  fn exp2(power: i32) -> Self;
+  fn from_f64(x: f64) -> Self;
+  fn to_f64(self) -> f64;
+  fn is_normal(self) -> bool;
+  fn is_sign_positive_(&self) -> bool;
+  /// Returns the float's exponent. For instance, for f32 this should be
+  /// between -127 and +126.
+  fn exponent(&self) -> i32;
+  fn trailing_zeros(&self) -> u32;
+  fn max(a: Self, b: Self) -> Self;
+  fn min(a: Self, b: Self) -> Self;
+
+  /// This should use something like [`f32::to_bits()`]
+  fn to_latent_bits(self) -> Self::L;
+  /// This should surjectively map the latent to the set of integers in its
+  /// floating point type. E.g. 3.0, Inf, and NaN are int floats, but 3.5 is
+  /// not.
+  fn int_float_from_latent(l: Self::L) -> Self;
+  /// This should be the inverse of `int_float_from_latent`.
+  fn int_float_to_latent(self) -> Self::L;
+  /// This should map from e.g. 7_u32 -> 7.0_f32
+  fn from_latent_numerical(l: Self::L) -> Self;
+}
 
 fn filter_sample<F: Float>(num: &F) -> Option<F> {
   // We can compress infinities, nans, and baby floats, but we can't learn
@@ -315,16 +369,10 @@ impl Float for f16 {
 
 macro_rules! impl_float_number {
   ($t: ty, $latent: ty, $sign_bit_mask: expr, $header_byte: expr) => {
-    impl Number for $t {
+    impl NumberPriv for $t {
       const NUMBER_TYPE_BYTE: u8 = $header_byte;
 
       type L = $latent;
-
-      fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber> {
-        describers::match_classic_mode::<Self>(meta, " ULPs")
-          .or_else(|| describers::match_float_modes::<Self>(meta))
-          .expect("invalid mode for float type")
-      }
 
       fn mode_is_valid(mode: &Mode) -> bool {
         match mode {
@@ -382,6 +430,14 @@ macro_rules! impl_float_number {
           Mode::FloatQuant(k) => float_quant::join_latents::<Self>(*k, primary, secondary, dst),
           Mode::IntMult(_) => unreachable!("impossible mode for floats"),
         }
+      }
+    }
+
+    impl Number for $t {
+      fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber> {
+        describers::match_classic_mode::<Self>(meta, " ULPs")
+          .or_else(|| describers::match_float_modes::<Self>(meta))
+          .expect("invalid mode for float type")
       }
     }
   };

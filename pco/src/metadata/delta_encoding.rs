@@ -1,7 +1,9 @@
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
 use crate::constants::*;
-use crate::data_types::{LatentType, Number, Signed};
+use crate::data_types::number_priv::NumberPriv;
+use crate::data_types::signed::Signed;
+use crate::data_types::LatentType;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::LatentVarKey;

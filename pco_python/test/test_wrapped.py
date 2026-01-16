@@ -21,7 +21,7 @@ def test_compress(dtype):
         ChunkConfig(paging_spec=PagingSpec.exact_page_sizes(page_sizes)),
     )
     assert cc.n_per_page() == page_sizes
-    chunk_meta = cc.write_chunk_meta()
+    chunk_meta = cc.write_meta()
     page0 = cc.write_page(0)
     page1 = cc.write_page(1)
     with pytest.raises(RuntimeError, match="page idx exceeds num pages"):
@@ -33,7 +33,7 @@ def test_compress(dtype):
     # check that undershooting is fine
     _, n_bytes_read = FileDecompressor.new(header + b"foo")
     assert n_bytes_read == len(header)
-    cd, n_bytes_read = fd.read_chunk_meta(chunk_meta, pco_number_type)
+    cd, n_bytes_read = fd.chunk_decompressor(chunk_meta, pco_number_type)
     assert n_bytes_read == len(chunk_meta)
 
     # page 1, which has elements 6-10

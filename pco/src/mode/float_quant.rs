@@ -1,7 +1,8 @@
 use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
+use crate::data_types::float::Float;
+use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::SplitLatents;
-use crate::data_types::{Float, Latent};
 use crate::dyn_latent_slice::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};

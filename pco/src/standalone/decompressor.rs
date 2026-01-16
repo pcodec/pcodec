@@ -42,13 +42,13 @@ unsafe fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberTy
 ///
 /// # fn main() -> PcoResult<()> {
 /// let compressed = vec![112, 99, 111, 33, 0, 0]; // the minimal .pco file, for the sake of example
-/// let mut nums = vec![0; FULL_BATCH_N];
+/// let mut dst = vec![0; FULL_BATCH_N];
 /// let (file_decompressor, mut src) = FileDecompressor::new(compressed.as_slice())?;
 /// while let DecompressorItem::Chunk(mut chunk_decompressor) = file_decompressor.chunk_decompressor::<i64, _>(src)? {
 ///   let mut finished_chunk = false;
 ///   while !finished_chunk {
-///     let progress = chunk_decompressor.decompress(&mut nums)?;
-///     // Do something with &nums[0..progress.n_processed]
+///     let progress = chunk_decompressor.read(&mut dst)?;
+///     // Do something with &dst[0..progress.n_processed]
 ///     finished_chunk = progress.finished;
 ///   }
 ///   src = chunk_decompressor.into_src();
@@ -271,8 +271,8 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   ///
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
-  pub fn decompress(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    let progress = self.page_state.decompress(&self.inner_cd.inner, dst)?;
+  pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+    let progress = self.page_state.read(&mut self.inner_cd.inner, dst)?;
 
     self.n_processed += progress.n_processed;
 
@@ -292,7 +292,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     unsafe {
       dst.set_len(initial_len + remaining);
     }
-    let progress = self.decompress(&mut dst[initial_len..])?;
+    let progress = self.read(&mut dst[initial_len..])?;
     assert!(progress.finished);
     Ok(())
   }

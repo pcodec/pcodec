@@ -63,8 +63,8 @@ mod tests {
     let n_pages = config.paging_spec.n_per_page(n)?.len();
     let mut dst = Vec::new();
     let fc = FileCompressor::default();
-    let cc = fc.chunk_compressor(nums, config)?;
-    cc.write_chunk_meta(&mut dst)?;
+    let mut cc = fc.chunk_compressor(nums, config)?;
+    cc.write_meta(&mut dst)?;
     for i in 0..n_pages {
       cc.write_page(i, &mut dst)?;
     }

@@ -15,21 +15,22 @@ jobs:
   test:
     name: "Test"
     runs-on: ubuntu-latest
+    # TODO: test each crate with minimum required rust and dependency versions?
     steps:
       - uses: actions/checkout@v4
       - name: Override Rust Version
         run: |
-          rustup override set $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select (.name == "pco") | .rust_version')
+          rustup override set 1.89
           rustup component add clippy rustfmt
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.8.1
       - name: Install cross
         run: cargo install cross --locked
       - name: Test
-        run: cargo test
+        run: cargo test --all-features
       - name: Tests on aarch64
-        run: cross test -p pco --target aarch64-unknown-linux-gnu
+        run: cross test -p pco --target aarch64-unknown-linux-gnu --all-features
       - name: Clippy
-        run: cargo clippy --no-deps
+        run: cargo clippy --no-deps --all-features
       - name: Ensure formatted
         run: cargo fmt --check

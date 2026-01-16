@@ -4,7 +4,7 @@ use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::constants::Bitlen;
-use crate::data_types::{LatentType, Number};
+use crate::data_types::{number_priv::NumberPriv, LatentType, Number};
 use crate::errors::PcoResult;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, DynLatents, Mode};
 use crate::standalone::{simple_compress, simple_decompress, FileCompressor};
@@ -14,7 +14,7 @@ fn compress_w_meta<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<(Ve
   let mut compressed = Vec::new();
   let fc = FileCompressor::default();
   fc.write_header(&mut compressed)?;
-  let cd = fc.chunk_compressor(nums, config)?;
+  let mut cd = fc.chunk_compressor(nums, config)?;
   let meta = cd.meta().clone();
   cd.write_chunk(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
@@ -51,6 +51,7 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
         compression_level,
         delta_spec: DeltaSpec::TryConsecutive(delta_encoding_order),
         mode_spec,
+        enable_8_bit: true,
         ..Default::default()
       };
       let compressed = simple_compress(nums, &config)?;
@@ -78,6 +79,7 @@ fn test_edge_cases() -> PcoResult<()> {
   assert_recovers(&Vec::<u32>::new(), 6, "empty u32 - 6")?;
   assert_recovers(&Vec::<u32>::new(), 0, "empty u32 - 0")?;
   assert_recovers(&Vec::<u16>::new(), 6, "empty u16 - 6")?;
+  assert_recovers(&Vec::<u8>::new(), 6, "empty u8 - 6")?;
   assert_recovers(
     &[
       f16::NEG_INFINITY,
@@ -119,6 +121,11 @@ fn test_sparse() -> PcoResult<()> {
 }
 
 #[test]
+fn test_u8_codec() -> PcoResult<()> {
+  assert_recovers(&[0_u8, u8::MAX, 2, 3, 4, 5], 1, "u8s")
+}
+
+#[test]
 fn test_u16_codec() -> PcoResult<()> {
   assert_recovers(&[0_u16, u16::MAX, 2, 3, 4, 5], 1, "u16s")
 }
@@ -131,6 +138,11 @@ fn test_u32_codec() -> PcoResult<()> {
 #[test]
 fn test_u64_codec() -> PcoResult<()> {
   assert_recovers(&[0_u64, u64::MAX, 3, 4, 5], 1, "u64s")
+}
+
+#[test]
+fn test_i8_codec() -> PcoResult<()> {
+  assert_recovers(&[0_i8, -1, i8::MAX, i8::MIN, 7], 1, "i8s")
 }
 
 #[test]

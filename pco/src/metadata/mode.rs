@@ -6,7 +6,9 @@ use crate::constants::{
   Bitlen, BITS_TO_ENCODE_DICT_LEN, BITS_TO_ENCODE_MODE_VARIANT, BITS_TO_ENCODE_QUANTIZE_K,
   MAX_SUPPORTED_PRECISION_BYTES, OVERSHOOT_PADDING,
 };
-use crate::data_types::{Float, Latent, LatentType};
+use crate::data_types::float::Float;
+use crate::data_types::latent_priv::LatentPriv;
+use crate::data_types::{Latent, LatentType};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::dyn_latent::DynLatent;
@@ -53,7 +55,7 @@ const FIXED_READ_SIZE: usize = BITS_TO_ENCODE_MODE_VARIANT.div_ceil(8) as usize
 /// processing steps (possible delta encoding and binning) to produce the final
 /// compressed bytes.
 ///
-/// We have delibrately written the formulas below in a slightly wrong way to
+/// We have deliberately written the formulas below in a slightly wrong way to
 /// convey the correct intuition without dealing with implementation
 /// complexities.
 /// Slightly more rigorous formulas are in format.md.

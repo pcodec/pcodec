@@ -38,6 +38,13 @@ impl CodecInternal for ChunkConfigOpt {
       ("delta", unparse_delta_spec(&self.delta)),
       ("mode", unparse_mode_spec(&self.mode)),
       ("chunk-n", self.chunk_n.to_string()),
+      (
+        "enable-8-bit",
+        match self.enable_8_bit() {
+          true => "t".to_string(),
+          false => "f".to_string(),
+        },
+      ),
     ]
   }
 

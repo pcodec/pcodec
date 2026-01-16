@@ -39,13 +39,13 @@ impl CodecInternal for QcoConfig {
   fn compress<T: PcoNumber>(&self, nums: &[T]) -> Vec<u8> {
     let qco_nums = T::nums_to_qco(nums);
     let delta_order = self.delta_encoding_order.unwrap_or_else(|| {
-      q_compress::auto_compressor_config(qco_nums, self.level).delta_encoding_order
+      q_compress::auto_compressor_config(&qco_nums, self.level).delta_encoding_order
     });
     let c_config = CompressorConfig::default()
       .with_compression_level(self.level)
       .with_use_gcds(self.use_gcds)
       .with_delta_encoding_order(delta_order);
-    q_compress::standalone::Compressor::<T::Qco>::from_config(c_config).simple_compress(qco_nums)
+    q_compress::standalone::Compressor::<T::Qco>::from_config(c_config).simple_compress(&qco_nums)
   }
 
   fn decompress<T: PcoNumber>(&self, bytes: &[u8]) -> Vec<T> {
