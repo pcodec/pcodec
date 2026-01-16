@@ -40,23 +40,6 @@ pub struct DeltaConv1Config {
   weights: Vec<i64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct DeltaConv2Config {
-  pub quantization: Bitlen,
-  // 2D height.
-  pub h: usize,
-  // 2D width.
-  pub w: usize,
-  // Kernel size in height dimension.
-  pub kh: usize,
-  // Kernel size in width dimension.
-  pub kw: usize,
-  // Avoiding exposing parameters for the same reason as Conv1
-  bias: i64,
-  weights: Vec<i64>,
-}
-
 impl DeltaConv1Config {
   pub(crate) fn new(quantization: Bitlen, bias: i64, weights: Vec<i64>) -> Self {
     Self {
@@ -77,11 +60,27 @@ impl DeltaConv1Config {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+pub struct DeltaConv2Config {
+  pub quantization: Bitlen,
+  // 2D width.
+  pub w: usize,
+  // Kernel size in height dimension.
+  pub kh: usize,
+  // Kernel size in width dimension.
+  pub kw: usize,
+  // Avoiding exposing parameters for the same reason as Conv1
+  bias: i64,
+  weights: Vec<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LatentVarDeltaEncoding {
   NoOp,
   Consecutive(usize),
   Lookback(DeltaLookbackConfig),
   Conv1(DeltaConv1Config),
+  Conv2(DeltaConv2Config),
 }
 
 impl LatentVarDeltaEncoding {
@@ -91,6 +90,7 @@ impl LatentVarDeltaEncoding {
       Self::Consecutive(order) => *order,
       Self::Lookback(config) => 1 << config.state_n_log,
       Self::Conv1(config) => config.weights.len(),
+      Self::Conv2(config) => config.kw - 1,
     }
   }
 }
@@ -233,6 +233,7 @@ impl DeltaEncoding {
       Self::Consecutive { .. } => 1,
       Self::Lookback { .. } => 2,
       Self::Conv1(_) => 3,
+      Self::Conv2(_) => 4,
     };
     writer.write_bitlen(
       variant,
@@ -281,7 +282,7 @@ impl DeltaEncoding {
 
   pub(crate) fn latent_type(&self) -> Option<LatentType> {
     match self {
-      Self::NoOp | Self::Consecutive { .. } | Self::Conv1(_) => Option::None,
+      Self::NoOp | Self::Consecutive { .. } | Self::Conv1(_) | Self::Conv2(_) => Option::None,
       Self::Lookback { .. } => Some(LatentType::U32),
     }
   }
@@ -328,6 +329,8 @@ impl DeltaEncoding {
       ) => LatentVarDeltaEncoding::NoOp,
       (Self::Conv1(config), LatentVarKey::Primary) => LatentVarDeltaEncoding::Conv1(config.clone()),
       (Self::Conv1(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
+      (Self::Conv2(config), LatentVarKey::Primary) => LatentVarDeltaEncoding::Conv2(config.clone()),
+      (Self::Conv2(_), LatentVarKey::Secondary) => LatentVarDeltaEncoding::NoOp,
     }
   }
 }
