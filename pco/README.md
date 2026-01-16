@@ -32,7 +32,7 @@ fn main() -> PcoResult<()> {
 
 # Compilation Notes
 
-**For best performance on x86_64, compile with `bmi1`, `bmi2`, and `avx2`.
+**For best performance on x86_64, compile with `bmi1`, `bmi2`, and `avx2`**.
 This improves compression speed slightly and decompression speed substantially!
 Almost all hardware nowadays supports these instruction sets.
 To make sure you're using these, you can:
