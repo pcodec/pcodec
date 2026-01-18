@@ -49,25 +49,23 @@ impl CodecInternal for PaginatedPcoConfig {
     for chunk_n in chunk_ns {
       let end = start + chunk_n;
 
-      let cc = fc
+      let mut cc = fc
         .chunk_compressor::<T>(&nums[start..end], &config)
         .unwrap();
 
       let n_per_page = cc.n_per_page();
       let n_pages = n_per_page.len();
       let additional_size_est = 4
-        + cc.chunk_meta_size_hint()
+        + cc.meta_size_hint()
         + (0..n_pages)
           .map(|page_i| 4 + cc.page_size_hint(page_i))
           .sum::<usize>();
       dst.reserve(additional_size_est);
       dst.extend((n_pages as u32).to_le_bytes());
-      cc.write_chunk_meta(&mut dst).unwrap();
-      let mut scratch = cc.build_scratch();
+      cc.write_meta(&mut dst).unwrap();
       for (page_i, page_n) in n_per_page.into_iter().enumerate() {
         dst.extend((page_n as u32).to_le_bytes());
-        cc.write_page_with_scratch(page_i, &mut scratch, &mut dst)
-          .unwrap();
+        cc.write_page(page_i, &mut dst).unwrap();
       }
 
       start = end;
@@ -95,14 +93,14 @@ impl CodecInternal for PaginatedPcoConfig {
     for _ in 0..n_chunks {
       let n_pages = u32::from_le_bytes(src[0..4].try_into().unwrap()) as usize;
       src = &src[4..];
-      let (cd, rest) = fd.chunk_decompressor(src).unwrap();
+      let (mut cd, rest) = fd.chunk_decompressor(src).unwrap();
       src = rest;
 
       for _ in 0..n_pages {
         let page_n = u32::from_le_bytes(src[0..4].try_into().unwrap()) as usize;
         src = &src[4..];
         let mut pd = cd.page_decompressor(src, page_n).unwrap();
-        pd.decompress(&mut dst[i..]).unwrap();
+        pd.read(&mut dst[i..]).unwrap();
         i += page_n;
         src = pd.into_src();
       }

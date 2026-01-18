@@ -39,7 +39,7 @@ pub trait Parquetable: Sized {
 pub trait QCompressable: Sized {
   type Qco: q_compress::data_types::NumberLike;
 
-  fn nums_to_qco(nums: &[Self]) -> &[Self::Qco];
+  fn nums_to_qco(nums: &[Self]) -> Vec<Self::Qco>;
   fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self>;
 }
 
@@ -59,7 +59,7 @@ pub trait Arrowable: Sized {
   fn arrow_native_to_bytes(x: <Self::Arrow as ArrowPrimitiveType>::Native) -> Vec<u8>;
 }
 
-#[cfg(all(feature = "full_bench"))]
+#[cfg(feature = "full_bench")]
 pub trait PcoNumber:
   Number + Arrowable + Parquetable + QCompressable + TurboPforable + vortex::dtype::NativePType
 {
@@ -103,8 +103,8 @@ macro_rules! trivial {
     impl QCompressable for $t {
       type Qco = $t;
 
-      fn nums_to_qco(nums: &[Self]) -> &[Self::Qco] {
-        nums
+      fn nums_to_qco(nums: &[Self]) -> Vec<Self::Qco> {
+        nums.to_vec()
       }
       fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self> {
         vec
@@ -183,6 +183,19 @@ impl Parquetable for f16 {
   }
 }
 
+impl Parquetable for i8 {
+  const PARQUET_DTYPE_STR: &'static str = "INT32";
+  const TRANSMUTABLE: bool = false;
+  type Parquet = parquet::data_type::Int32Type;
+
+  fn copy_nums_to_parquet(nums: &[Self]) -> Vec<i32> {
+    nums.iter().map(|&x| x as i32).collect()
+  }
+  fn parquet_to_nums(vec: Vec<i32>) -> Vec<Self> {
+    vec.into_iter().map(|x| x as i8).collect()
+  }
+}
+
 impl Parquetable for i16 {
   const PARQUET_DTYPE_STR: &'static str = "INT32";
   const TRANSMUTABLE: bool = false;
@@ -193,6 +206,19 @@ impl Parquetable for i16 {
   }
   fn parquet_to_nums(vec: Vec<i32>) -> Vec<Self> {
     vec.into_iter().map(|x| x as i16).collect()
+  }
+}
+
+impl Parquetable for u8 {
+  const PARQUET_DTYPE_STR: &'static str = "INT32";
+  const TRANSMUTABLE: bool = false;
+  type Parquet = parquet::data_type::Int32Type;
+
+  fn copy_nums_to_parquet(nums: &[Self]) -> Vec<i32> {
+    nums.iter().map(|&x| x as i32).collect()
+  }
+  fn parquet_to_nums(vec: Vec<i32>) -> Vec<Self> {
+    vec.into_iter().map(|x| x as u8).collect()
   }
 }
 
@@ -241,14 +267,74 @@ impl Parquetable for u64 {
 }
 
 #[cfg(feature = "full_bench")]
+impl QCompressable for u8 {
+  type Qco = u16;
+
+  fn nums_to_qco(nums: &[Self]) -> Vec<Self::Qco> {
+    nums.iter().map(|&v| v as u16).collect()
+  }
+  fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self> {
+    vec.into_iter().map(|v| v as u8).collect()
+  }
+}
+
+#[cfg(feature = "full_bench")]
+impl QCompressable for i8 {
+  type Qco = i16;
+
+  fn nums_to_qco(nums: &[Self]) -> Vec<Self::Qco> {
+    nums.iter().map(|&v| v as i16).collect()
+  }
+  fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self> {
+    vec.into_iter().map(|v| v as i8).collect()
+  }
+}
+
+#[cfg(feature = "full_bench")]
 impl QCompressable for f16 {
   type Qco = u16;
 
-  fn nums_to_qco(nums: &[Self]) -> &[Self::Qco] {
-    unsafe { mem::transmute(nums) }
+  fn nums_to_qco(nums: &[Self]) -> Vec<Self::Qco> {
+    nums.iter().map(|&v| v.to_bits()).collect()
   }
   fn qco_to_nums(vec: Vec<Self::Qco>) -> Vec<Self> {
     unsafe { mem::transmute(vec) }
+  }
+}
+
+impl Arrowable for u8 {
+  const ARROW_DTYPE: DataType = arrow_dtypes::UInt8Type::DATA_TYPE;
+
+  type Arrow = arrow_dtypes::UInt8Type;
+
+  fn to_arrow_native(self) -> <Self::Arrow as ArrowPrimitiveType>::Native {
+    self
+  }
+
+  fn make_num_vec(nums: Vec<Self>) -> NumVec {
+    NumVec::U8(nums)
+  }
+
+  fn arrow_native_to_bytes(x: <Self::Arrow as ArrowPrimitiveType>::Native) -> Vec<u8> {
+    x.to_le_bytes().to_vec()
+  }
+}
+
+impl Arrowable for i8 {
+  const ARROW_DTYPE: DataType = arrow_dtypes::Int8Type::DATA_TYPE;
+
+  type Arrow = arrow_dtypes::Int8Type;
+
+  fn to_arrow_native(self) -> <Self::Arrow as ArrowPrimitiveType>::Native {
+    self
+  }
+
+  fn make_num_vec(nums: Vec<Self>) -> NumVec {
+    NumVec::I8(nums)
+  }
+
+  fn arrow_native_to_bytes(x: <Self::Arrow as ArrowPrimitiveType>::Native) -> Vec<u8> {
+    x.to_le_bytes().to_vec()
   }
 }
 
@@ -270,6 +356,8 @@ impl Arrowable for f16 {
   }
 }
 
+impl PcoNumber for u8 {}
+impl PcoNumber for i8 {}
 impl PcoNumber for f16 {}
 
 trivial!(f32, F32, arrow_dtypes::Float32Type);
@@ -281,6 +369,8 @@ trivial!(u16, U16, arrow_dtypes::UInt16Type);
 trivial!(u32, U32, arrow_dtypes::UInt32Type);
 trivial!(u64, U64, arrow_dtypes::UInt64Type);
 
+extra_arrow!(u8, arrow_dtypes::UInt8Type);
+extra_arrow!(i8, arrow_dtypes::Int8Type);
 extra_arrow!(f16, arrow_dtypes::Float16Type);
 extra_arrow!(i64, arrow_dtypes::TimestampSecondType);
 extra_arrow!(i64, arrow_dtypes::TimestampMillisecondType);
@@ -294,9 +384,11 @@ pub fn from_arrow(arrow_dtype: &ArrowDataType) -> Result<NumberType> {
     ArrowDataType::Float16 => NumberType::F16,
     ArrowDataType::Float32 => NumberType::F32,
     ArrowDataType::Float64 => NumberType::F64,
+    ArrowDataType::Int8 => NumberType::I8,
     ArrowDataType::Int16 => NumberType::I16,
     ArrowDataType::Int32 => NumberType::I32,
     ArrowDataType::Int64 => NumberType::I64,
+    ArrowDataType::UInt8 => NumberType::U8,
     ArrowDataType::UInt16 => NumberType::U16,
     ArrowDataType::UInt32 => NumberType::U32,
     ArrowDataType::UInt64 => NumberType::U64,
@@ -318,9 +410,11 @@ pub fn to_arrow(dtype: NumberType) -> ArrowDataType {
     NumberType::F16 => ArrowDataType::Float16,
     NumberType::F32 => ArrowDataType::Float32,
     NumberType::F64 => ArrowDataType::Float64,
+    NumberType::I8 => ArrowDataType::Int8,
     NumberType::I16 => ArrowDataType::Int16,
     NumberType::I32 => ArrowDataType::Int32,
     NumberType::I64 => ArrowDataType::Int64,
+    NumberType::U8 => ArrowDataType::UInt8,
     NumberType::U16 => ArrowDataType::UInt16,
     NumberType::U32 => ArrowDataType::UInt32,
     NumberType::U64 => ArrowDataType::UInt64,

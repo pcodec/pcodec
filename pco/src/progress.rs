@@ -6,7 +6,7 @@ pub struct Progress {
   /// Whether the decompressor finished all compressed data relevant to
   /// the unit.
   /// For instance,
-  /// [`PageDecompressor::decompress`][crate::wrapped::PageDecompressor::decompress]
+  /// [`PageDecompressor::read`][crate::wrapped::PageDecompressor::read]
   /// will return whether all data in the page was finished.
   pub finished: bool,
 }

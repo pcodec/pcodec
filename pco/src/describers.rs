@@ -1,13 +1,29 @@
 use crate::constants::{Bitlen, DeltaLookback};
-use crate::data_types::{Float, Latent, Number};
+use crate::data_types::float::Float;
+use crate::data_types::{latent_priv::LatentPriv, Latent, Number};
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, LatentVarKey, Mode};
 use std::marker::PhantomData;
 
+mod private {
+  use crate::{
+    data_types::{float::Float, Latent, Number},
+    describers::{ClassicDescriber, FloatMultDescriber, FloatQuantDescriber, IntDescriber},
+  };
+
+  pub trait Sealed {}
+
+  impl<T: Number> Sealed for ClassicDescriber<T> {}
+  impl<L: Latent> Sealed for IntDescriber<L> {}
+  impl<F: Float> Sealed for FloatMultDescriber<F> {}
+  impl<F: Float> Sealed for FloatQuantDescriber<F> {}
+}
+
 /// Interprets the meaning of latent variables and values from [`ChunkMeta`].
 ///
 /// Obtainable via [`crate::data_types::Number::get_latent_describers`].
-pub trait DescribeLatent {
+pub trait DescribeLatent: private::Sealed {
   /// Returns a description for this latent variable.
   fn latent_var(&self) -> String;
   /// Returns a description for this latent variable's units, when formatted
@@ -22,10 +38,12 @@ pub trait DescribeLatent {
 
 pub type LatentDescriber = Box<dyn DescribeLatent>;
 
-fn delta_latent_describer(delta_encoding: DeltaEncoding) -> Option<LatentDescriber> {
+// describer for the delta latent var (not a describer for a latent var that has
+// delta encoding applied to it)
+fn delta_latent_describer(delta_encoding: &DeltaEncoding) -> Option<LatentDescriber> {
   match delta_encoding {
-    DeltaEncoding::None | DeltaEncoding::Consecutive(_) => None,
-    DeltaEncoding::Lookback(_) => {
+    DeltaEncoding::NoOp | DeltaEncoding::Consecutive { .. } | DeltaEncoding::Conv1(_) => None,
+    DeltaEncoding::Lookback { .. } => {
       let describer = IntDescriber {
         description: "lookback".to_string(),
         units: "".to_string(),
@@ -41,8 +59,8 @@ pub(crate) fn match_classic_mode<T: Number>(
   meta: &ChunkMeta,
   delta_units: &'static str,
 ) -> Option<PerLatentVar<LatentDescriber>> {
-  let primary: LatentDescriber = match (meta.mode, meta.delta_encoding) {
-    (Mode::Classic, DeltaEncoding::None) => Box::new(ClassicDescriber::<T>::default()),
+  let primary: LatentDescriber = match (&meta.mode, &meta.delta_encoding) {
+    (Mode::Classic, DeltaEncoding::NoOp) => Box::new(ClassicDescriber::<T>::default()),
     (Mode::Classic, _) => {
       centered_delta_describer::<T::L>("delta".to_string(), delta_units.to_string())
     }
@@ -50,7 +68,7 @@ pub(crate) fn match_classic_mode<T: Number>(
   };
 
   Some(PerLatentVar {
-    delta: delta_latent_describer(meta.delta_encoding),
+    delta: delta_latent_describer(&meta.delta_encoding),
     primary,
     secondary: None,
   })
@@ -66,7 +84,7 @@ pub(crate) fn match_int_modes<L: Latent>(
       let dtype_center = if is_signed { L::MID } else { L::ZERO };
       let mult_center = dtype_center / base;
       let adj_center = dtype_center % base;
-      let primary = if matches!(meta.delta_encoding, DeltaEncoding::None) {
+      let primary = if matches!(meta.delta_encoding, DeltaEncoding::NoOp) {
         Box::new(IntDescriber {
           description: format!("multiplier [x{}]", base),
           units: "x".to_string(),
@@ -80,10 +98,10 @@ pub(crate) fn match_int_modes<L: Latent>(
         )
       };
 
-      let secondary: LatentDescriber = if meta
-        .delta_encoding
-        .applies_to_latent_var(LatentVarKey::Secondary)
-      {
+      let secondary: LatentDescriber = if !matches!(
+        meta.delta_encoding.for_latent_var(LatentVarKey::Secondary),
+        LatentVarDeltaEncoding::NoOp
+      ) {
         centered_delta_describer::<L>(
           "adjustment delta".to_string(),
           "".to_string(),
@@ -98,9 +116,27 @@ pub(crate) fn match_int_modes<L: Latent>(
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: Some(secondary),
+      })
+    }
+    Mode::Dict(_) => {
+      let primary = if matches!(meta.delta_encoding, DeltaEncoding::NoOp) {
+        Box::new(IntDescriber {
+          description: "index".to_string(),
+          units: "".to_string(),
+          center: 0_u32,
+          is_signed: false,
+        })
+      } else {
+        centered_delta_describer::<u32>("index delta".to_string(), "".to_string())
+      };
+
+      Some(PerLatentVar {
+        delta: delta_latent_describer(&meta.delta_encoding),
+        primary,
+        secondary: None,
       })
     }
     _ => None,
@@ -114,7 +150,7 @@ pub(crate) fn match_float_modes<F: Float>(
     Mode::FloatMult(dyn_latent) => {
       let base_latent = *dyn_latent.downcast_ref::<F::L>().unwrap();
       let base_string = F::from_latent_ordered(base_latent).to_string();
-      let primary: LatentDescriber = if matches!(meta.delta_encoding, DeltaEncoding::None) {
+      let primary: LatentDescriber = if matches!(meta.delta_encoding, DeltaEncoding::NoOp) {
         Box::new(FloatMultDescriber {
           base_string,
           phantom: PhantomData::<F>,
@@ -128,10 +164,10 @@ pub(crate) fn match_float_modes<F: Float>(
         })
       };
 
-      let secondary: LatentDescriber = if meta
-        .delta_encoding
-        .applies_to_latent_var(LatentVarKey::Secondary)
-      {
+      let secondary: LatentDescriber = if !matches!(
+        meta.delta_encoding.for_latent_var(LatentVarKey::Secondary),
+        LatentVarDeltaEncoding::NoOp
+      ) {
         centered_delta_describer::<F::L>(
           "adjustment delta".to_string(),
           "".to_string(),
@@ -146,13 +182,13 @@ pub(crate) fn match_float_modes<F: Float>(
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: Some(secondary),
       })
     }
     Mode::FloatQuant(k) => {
-      let primary = if matches!(meta.delta_encoding, DeltaEncoding::None) {
+      let primary = if matches!(meta.delta_encoding, DeltaEncoding::NoOp) {
         Box::new(FloatQuantDescriber {
           k,
           phantom: PhantomData::<F>,
@@ -164,10 +200,10 @@ pub(crate) fn match_float_modes<F: Float>(
         )
       };
 
-      let secondary: LatentDescriber = if meta
-        .delta_encoding
-        .applies_to_latent_var(LatentVarKey::Secondary)
-      {
+      let secondary: LatentDescriber = if !matches!(
+        meta.delta_encoding.for_latent_var(LatentVarKey::Secondary),
+        LatentVarDeltaEncoding::NoOp
+      ) {
         centered_delta_describer::<F::L>(
           "magnitude adjustment delta".to_string(),
           "".to_string(),
@@ -182,7 +218,7 @@ pub(crate) fn match_float_modes<F: Float>(
       };
 
       Some(PerLatentVar {
-        delta: delta_latent_describer(meta.delta_encoding),
+        delta: delta_latent_describer(&meta.delta_encoding),
         primary,
         secondary: Some(secondary),
       })

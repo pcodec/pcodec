@@ -7,6 +7,6 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-half = { version = "2.0.0" }
-jni = "0.21.1"
-pco = { version = "0.4.0", path = "../../../../pco" }
+half = { workspace = true }
+jni = { workspace = true }
+pco = { workspace = true }

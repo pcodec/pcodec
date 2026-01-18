@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, Shl, Shr, Sub};
 
 use crate::constants::Bitlen;
-use crate::data_types::Latent;
+use crate::data_types::{latent_priv::LatentPriv, Latent};
 
 // this applies to reading and also works for byte-aligned precisions
 pub const fn calc_max_bytes(precision: Bitlen) -> usize {
@@ -72,21 +72,21 @@ impl ReadWriteUint for usize {
 }
 
 impl<L: Latent> ReadWriteUint for L {
-  const ONE: Self = <Self as Latent>::ONE;
-  const BITS: Bitlen = <Self as Latent>::BITS;
+  const ONE: Self = <Self as LatentPriv>::ONE;
+  const BITS: Bitlen = <Self as LatentPriv>::BITS;
 
   #[inline]
   fn from_u32(x: u32) -> Self {
-    <Self as Latent>::from_u32(x)
+    <Self as LatentPriv>::from_u32(x)
   }
 
   #[inline]
   fn from_u64(x: u64) -> Self {
-    <Self as Latent>::from_u64(x)
+    <Self as LatentPriv>::from_u64(x)
   }
 
   #[inline]
   fn to_u64(self) -> u64 {
-    <Self as Latent>::to_u64(self)
+    <Self as LatentPriv>::to_u64(self)
   }
 }

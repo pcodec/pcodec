@@ -39,6 +39,19 @@ From a venv with `maturin` installed, and from `pco_python/`, run
 `maturin develop` to recompile and install the python package into your venv.
 Then you can run `pytest --doctest-glob='*.md'`.
 
+To build the Sphinx documentation locally, make sure sphinx and toml are
+installed, and run:
+
+```bash
+rm -rf docs/_build && \
+  maturin develop && \
+  sphinx-apidoc -o docs/ . && \
+  pushd docs && \
+  make html && \
+  open _build/html/index.html && \
+  popd
+```
+
 ## Java
 
 With Maven installed, and from `pco_java/`, run `mvn test -P rust` if you want

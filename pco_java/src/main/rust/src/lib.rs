@@ -7,7 +7,7 @@ mod num_array;
 mod result;
 mod traits;
 
-use crate::result::{Exception, ExceptionKind, Result};
+use crate::result::{ExceptionKind, Result};
 use crate::traits::JavaConversions;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JValueGen};
 use jni::sys::*;
@@ -101,9 +101,8 @@ fn simple_decompress_inner(env: &mut JNIEnv, src: jbyteArray) -> Result<jobject>
   let (file_decompressor, rest) = FileDecompressor::new(src.as_slice())?;
   let maybe_number_type = file_decompressor.peek_number_type_or_termination(rest)?;
 
-  use pco::standalone::NumberTypeOrTermination::*;
   match maybe_number_type {
-    Known(number_type) => {
+    Some(number_type) => {
       match_number_enum!(
           number_type,
           NumberType<T> => {
@@ -111,14 +110,7 @@ fn simple_decompress_inner(env: &mut JNIEnv, src: jbyteArray) -> Result<jobject>
           }
       )
     }
-    Termination => java_none(env),
-    Unknown(other) => Err(Exception {
-      kind: ExceptionKind::Runtime,
-      msg: format!(
-        "unrecognized pco number type byte {:?}",
-        other,
-      ),
-    }),
+    None => java_none(env),
   }
 }
 

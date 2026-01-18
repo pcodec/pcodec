@@ -11,7 +11,7 @@ use arrow::datatypes::{ArrowPrimitiveType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
 use better_io::BetterBufReader;
-use pco::standalone::{FileDecompressor, MaybeChunkDecompressor};
+use pco::standalone::{DecompressorItem, FileDecompressor};
 use pco::FULL_BATCH_N;
 
 use crate::core_handlers::CoreHandlerImpl;
@@ -38,13 +38,13 @@ impl<T: PcoNumber> DecompressHandler for CoreHandlerImpl<T> {
         break;
       }
 
-      if let MaybeChunkDecompressor::Some(mut cd) = fd.chunk_decompressor::<T, _>(src)? {
+      if let DecompressorItem::Chunk(mut cd) = fd.chunk_decompressor::<T, _>(src)? {
         let n = cd.n();
         let batch_size = min(n, remaining_limit);
         // how many pco should decompress
         let pco_size = (1 + batch_size / FULL_BATCH_N) * FULL_BATCH_N;
         nums.resize(pco_size, T::default());
-        let _ = cd.decompress(&mut nums)?;
+        let _ = cd.read(&mut nums)?;
         src = cd.into_src();
         let arrow_nums = nums
           .iter()

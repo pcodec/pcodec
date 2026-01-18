@@ -9,14 +9,14 @@ fn assert_panic_safe<T: Number>(nums: Vec<T>) -> PcoResult<ChunkMeta> {
   let fc = FileCompressor::default();
   let config = ChunkConfig {
     mode_spec: ModeSpec::Classic,
-    delta_spec: DeltaSpec::None,
+    delta_spec: DeltaSpec::NoOp,
     ..Default::default()
   };
-  let cc = fc.chunk_compressor(&nums, &config)?;
+  let mut cc = fc.chunk_compressor(&nums, &config)?;
   let meta = cc.meta().clone();
   let mut compressed = Vec::new();
   fc.write_header(&mut compressed)?;
-  cc.write_chunk(&mut compressed)?;
+  cc.write(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
 
   for i in 0..compressed.len() - 1 {

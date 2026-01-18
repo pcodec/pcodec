@@ -1,11 +1,11 @@
 use crate::data_types::Latent;
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, DynBins, Mode};
+use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, DynBins, FormatVersion, Mode};
 
 /// Returns the maximum possible byte size of a wrapped header.
 pub fn header_size() -> usize {
-  1
+  FormatVersion::MAX_ENCODED_SIZE
 }
 
 pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
@@ -15,25 +15,25 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
       weight: 1,
       lower: L::ZERO,
       offset_bits: L::BITS,
-    }])
-    .unwrap(),
+    }]),
   };
 
-  ChunkMeta {
-    mode: Mode::Classic,
-    delta_encoding: DeltaEncoding::None,
-    per_latent_var: PerLatentVar {
+  ChunkMeta::new(
+    Mode::Classic,
+    DeltaEncoding::NoOp,
+    PerLatentVar {
       delta: None,
       primary,
       secondary: None,
     },
-  }
+  )
+  .unwrap()
 }
 
 /// Returns the maximum possible byte size of a wrapped chunk for a given
 /// latent type (e.g. u32 or u64) and count of numbers.
 pub fn chunk_size<L: Latent>(n: usize) -> usize {
-  baseline_chunk_meta::<L>().max_size() + n * L::BITS.div_ceil(8) as usize
+  baseline_chunk_meta::<L>().max_size() + (n * L::BITS as usize).div_ceil(8)
 }
 
 #[cfg(test)]
@@ -63,8 +63,8 @@ mod tests {
     let n_pages = config.paging_spec.n_per_page(n)?.len();
     let mut dst = Vec::new();
     let fc = FileCompressor::default();
-    let cc = fc.chunk_compressor(nums, config)?;
-    cc.write_chunk_meta(&mut dst)?;
+    let mut cc = fc.chunk_compressor(nums, config)?;
+    cc.write_meta(&mut dst)?;
     for i in 0..n_pages {
       cc.write_page(i, &mut dst)?;
     }

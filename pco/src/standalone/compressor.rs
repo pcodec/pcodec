@@ -26,11 +26,10 @@ unsafe fn write_varint<W: Write>(n: u64, writer: &mut BitWriter<W>) {
 /// let file_compressor = FileCompressor::default();
 /// file_compressor.write_header(&mut compressed)?;
 /// for chunk in [vec![1, 2, 3], vec![4, 5]] {
-///   let mut chunk_compressor = file_compressor.chunk_compressor::<i64>(
+///   file_compressor.chunk_compressor::<i64>(
 ///     &chunk,
 ///     &ChunkConfig::default(),
-///   )?;
-///   chunk_compressor.write_chunk(&mut compressed)?;
+///   )?.write(&mut compressed)?;
 /// }
 /// file_compressor.write_footer(&mut compressed)?;
 /// // now `compressed` is a complete .pco file with 2 chunks
@@ -85,27 +84,16 @@ impl FileCompressor {
     let mut writer = BitWriter::new(dst, STANDALONE_HEADER_PADDING);
     writer.write_aligned_bytes(&MAGIC_HEADER)?;
     unsafe {
-      match self.uniform_type {
-        Some(number_type) => {
-          // Use new standalone v3 to encode this.
-          // This code path is only possible via `with_uniform_type`, which is
-          // new functionality.
-          writer.write_usize(
-            CURRENT_STANDALONE_VERSION,
-            BITS_TO_ENCODE_STANDALONE_VERSION,
-          );
-          writer.write_aligned_bytes(&[number_type as u8])?;
-        }
-        None => {
-          // no new functionality required, stick to v2 to avoid breaking
-          // people's code
-          // TODO in 1.0 get rid of this case and write a number type byte of 0
-          writer.write_usize(
-            PRE_UNIFORM_TYPE_STANDALONE_VERSION,
-            BITS_TO_ENCODE_STANDALONE_VERSION,
-          );
-        }
-      }
+      writer.write_usize(
+        CURRENT_STANDALONE_VERSION,
+        BITS_TO_ENCODE_STANDALONE_VERSION,
+      );
+      let uniform_number_type_byte = match self.uniform_type {
+        Some(number_type) => number_type as u8,
+        None => 0,
+      };
+      writer.write_aligned_bytes(&[uniform_number_type_byte])?;
+
       write_varint(self.n_hint as u64, &mut writer);
     }
     writer.finish_byte();
@@ -121,9 +109,11 @@ impl FileCompressor {
   ///
   /// Although this doesn't write anything yet, it does the bulk of
   /// compute necessary for the compression.
+  /// The config's paging spec does not affect this; it will always produce a
+  /// single chunk.
   pub fn chunk_compressor<T: Number>(
     &self,
-    nums: &[T],
+    src: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
     let number_type = NumberType::from_descriminant(T::NUMBER_TYPE_BYTE).unwrap();
@@ -137,10 +127,10 @@ impl FileCompressor {
     }
 
     let mut config = config.clone();
-    config.paging_spec = PagingSpec::Exact(vec![nums.len()]);
+    config.paging_spec = PagingSpec::Exact(vec![src.len()]);
 
     Ok(ChunkCompressor {
-      inner: self.inner.chunk_compressor(nums, &config)?,
+      inner: self.inner.chunk_compressor(src, &config)?,
       number_type,
     })
   }
@@ -172,17 +162,17 @@ impl ChunkCompressor {
   /// Returns an estimate of the overall size of the chunk.
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
-  /// you can `.reserve(chunk_compressor.chunk_size_hint())` ahead of time.
-  pub fn chunk_size_hint(&self) -> usize {
+  /// you can `.reserve(chunk_compressor.size_hint())` ahead of time.
+  pub fn size_hint(&self) -> usize {
     1 + BITS_TO_ENCODE_N_ENTRIES.div_ceil(8) as usize
-      + self.inner.chunk_meta_size_hint()
+      + self.inner.meta_size_hint()
       + self.inner.page_size_hint(0)
   }
 
   /// Writes an entire chunk to the destination.
   ///
   /// Will return an error if the provided `Write` errors.
-  pub fn write_chunk<W: Write>(&self, dst: W) -> PcoResult<W> {
+  pub fn write<W: Write>(&mut self, dst: W) -> PcoResult<W> {
     let mut writer = BitWriter::new(dst, STANDALONE_CHUNK_PREAMBLE_PADDING);
     writer.write_aligned_bytes(&[self.number_type as u8])?;
     let n = self.inner.n_per_page()[0];
@@ -192,7 +182,7 @@ impl ChunkCompressor {
 
     writer.flush()?;
     let dst = writer.into_inner();
-    let dst = self.inner.write_chunk_meta(dst)?;
+    let dst = self.inner.write_meta(dst)?;
     self.inner.write_page(0, dst)
   }
 }

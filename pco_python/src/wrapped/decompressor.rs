@@ -21,8 +21,7 @@ pco::define_number_enum!(
   DynCd(ChunkDecompressor)
 );
 
-/// Holds metadata about a chunk and supports decompressing one batch at a
-/// time.
+/// Holds metadata about a chunk and supports decompressing one page at a time.
 #[pyclass(name = "ChunkDecompressor")]
 struct PyCd(DynCd);
 
@@ -49,13 +48,13 @@ impl PyFd {
   /// Creates a ChunkDecompressor by reading encoded chunk metadata.
   ///
   /// :param src: a bytes object containing the encoded chunk metadata
-  /// :param dtype: a data type supported by pcodec; e.g. 'f32' or 'i64'
+  /// :param dtype: a data type supported by pcodec; e.g. 'f32', 'i64'
   ///
   /// :returns: a tuple containing a ChunkDecompressor and the number of bytes
   ///   read
   ///
   /// :raises: TypeError, RuntimeError
-  fn read_chunk_meta(&self, src: &Bound<PyBytes>, dtype: &str) -> PyResult<(PyCd, usize)> {
+  fn chunk_decompressor(&self, src: &Bound<PyBytes>, dtype: &str) -> PyResult<(PyCd, usize)> {
     let src = src.as_bytes();
     let fd = &self.0;
     let dtype = core_dtype_from_str(dtype)?;
@@ -66,7 +65,7 @@ impl PyFd {
         let (generic_cd, rest) = fd
           .chunk_decompressor::<T, _>(src)
           .map_err(pco_err_to_py)?;
-        (DynCd::new(generic_cd).unwrap(), rest)
+        (DynCd::new(generic_cd), rest)
       }
     );
 
@@ -79,18 +78,16 @@ impl PyFd {
 #[pymethods]
 impl PyCd {
   // TODO find a way to reuse docstring content
-  /// Decompresses a page into the provided array. If dst is shorter than
-  /// page_n, writes as much as possible and leaves the rest
-  /// untouched. If dst is longer, fills dst and does nothing with the
-  /// remaining data.
+  /// Decompresses a page into the provided array. If dst is shorter than the
+  /// numbers in compressed, fills dst and ignores the numbers that didn't fit.
+  /// If dst is longer, fills as much of dst as possible.
   ///
-  /// :param page: the encoded page
-  /// :param page_n: the total count of numbers in the encoded page. It is
-  ///   expected that the wrapping format provides this information.
+  /// :param src: the compressed page
+  /// :param page_n: the total count of numbers in the page. It is expected that
+  ///   the wrapping format provides this information.
   /// :param dst: a numpy array to fill with the decompressed values. Must be
-  ///   contiguous, and its length must either be
-  ///   * >= page_n, or
-  ///   * a multiple of 256.
+  ///   contiguous, and its length must either be >= page_n, or a multiple of
+  ///   256.
   ///
   /// :returns: a tuple containing progress and the number of bytes read.
   ///   Progress is an object with a count of elements written and
@@ -98,7 +95,7 @@ impl PyCd {
   ///
   /// :raises: TypeError, RuntimeError
   fn read_page_into(
-    &self,
+    &mut self,
     py: Python,
     src: &Bound<PyBytes>,
     page_n: usize,
@@ -107,14 +104,14 @@ impl PyCd {
     let src = src.as_bytes();
 
     let (progress, rest) = match_number_enum!(
-      &self.0,
+      &mut self.0,
       DynCd<T>(cd) => {
         let arr = dst.cast::<PyArray1<T>>()?;
         let mut arr_rw = arr.readwrite();
         let dst = arr_rw.as_slice_mut()?;
         py.detach(|| {
           let mut pd = cd.page_decompressor(src, page_n)?;
-          let progress = pd.decompress(dst)?;
+          let progress = pd.read(dst)?;
           Ok((progress, pd.into_src()))
         }).map_err(pco_err_to_py)?
       }

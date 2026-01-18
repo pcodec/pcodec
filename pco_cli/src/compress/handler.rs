@@ -13,11 +13,11 @@ use crate::dtypes::ArrowNumber;
 use crate::{input, utils};
 
 pub trait CompressHandler {
-  fn compress(&self, opt: &CompressOpt, schema: &Schema) -> Result<()>;
+  fn compress(&self, opt: CompressOpt, schema: &Schema) -> Result<()>;
 }
 
 impl<P: ArrowNumber> CompressHandler for ArrowHandlerImpl<P> {
-  fn compress(&self, opt: &CompressOpt, schema: &Schema) -> Result<()> {
+  fn compress(&self, opt: CompressOpt, schema: &Schema) -> Result<()> {
     let mut open_options = OpenOptions::new();
     open_options.write(true);
     if opt.overwrite {
@@ -28,8 +28,8 @@ impl<P: ArrowNumber> CompressHandler for ArrowHandlerImpl<P> {
     }
     let file = open_options.open(&opt.path)?;
 
-    let config = ChunkConfig::from(&opt.chunk_config);
     let chunk_size = opt.chunk_config.chunk_n;
+    let config = ChunkConfig::from(opt.chunk_config);
     let fc = FileCompressor::default();
     fc.write_header(&file)?;
 
@@ -53,7 +53,7 @@ impl<P: ArrowNumber> CompressHandler for ArrowHandlerImpl<P> {
       for _ in 0..n_chunks {
         end = min(start + chunk_size, num_buffer.len());
         fc.chunk_compressor(&num_buffer[start..end], &config)?
-          .write_chunk(&file)?;
+          .write(&file)?;
         start = end;
       }
       num_buffer.drain(..end);

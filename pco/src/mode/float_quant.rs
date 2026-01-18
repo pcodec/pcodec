@@ -1,8 +1,10 @@
 use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
+use crate::data_types::float::Float;
+use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::SplitLatents;
-use crate::data_types::{Float, Latent};
-use crate::int_mult_utils;
+use crate::dyn_latent_slice::DynLatentSlice;
+use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 use std::cmp;
@@ -10,27 +12,31 @@ use std::cmp;
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
   k: Bitlen,
-  primary: &mut [F::L],
-  secondary: Option<&DynLatents>,
-) {
-  let secondary = secondary.unwrap().downcast_ref::<F::L>().unwrap();
+  primary: DynLatentSlice,
+  secondary: Option<DynLatentSlice>,
+  dst: &mut [F],
+) -> PcoResult<()> {
+  let primary = primary.downcast_unwrap::<F::L>();
+  let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;
   let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
-  for (y_and_dst, &m) in primary.iter_mut().zip(secondary.iter()) {
+  for ((&y, &m), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     debug_assert!(
       m >> k == F::L::ZERO,
       "Invalid input to FloatQuant: m must be a k-bit integer"
     );
-    let is_pos_as_float = *y_and_dst >= sign_cutoff;
+    let is_pos_as_float = y >= sign_cutoff;
     let lowest_k_bits = if is_pos_as_float {
       m
     } else {
       lowest_k_bits_max - m
     };
-    *y_and_dst = (*y_and_dst << k) + lowest_k_bits;
+    *dst = F::from_latent_ordered((y << k) + lowest_k_bits);
   }
+
+  Ok(())
 }
 
 pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatents {
@@ -62,8 +68,8 @@ pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatent
   }
 
   SplitLatents {
-    primary: DynLatents::new(primary).unwrap(),
-    secondary: Some(DynLatents::new(secondary).unwrap()),
+    primary: DynLatents::new(primary),
+    secondary: Some(DynLatents::new(secondary)),
   }
 }
 
@@ -112,7 +118,7 @@ fn estimate_best_k_and_bits_saved_from_hist(
     let freq = occurrences / sample_len;
     let n_categories = (1_u64 << k) - 1;
     let worst_case_bits_per_infrequent_primary =
-      int_mult_utils::worse_case_categorical_entropy(freq, n_categories as f64);
+      super::worst_case_categorical_entropy(freq, n_categories as f64);
     let bits_saved_per_infrequent_primary = k as f64 - worst_case_bits_per_infrequent_primary;
     if bits_saved_per_infrequent_primary > best_bits_saved {
       best_k = k as Bitlen;
@@ -147,8 +153,6 @@ pub(crate) fn estimate_best_k_and_bits_saved<F: Float>(sample: &[F]) -> (Bitlen,
 
 #[cfg(test)]
 mod test {
-  use crate::data_types::Number;
-
   use super::*;
 
   #[test]
@@ -239,16 +243,24 @@ mod test {
   #[test]
   fn test_join_split_round_trip() {
     let nums = vec![1.234, -9999.999, f64::NAN, -f64::INFINITY];
-    let uints = nums
-      .iter()
-      .map(|num| num.to_latent_ordered())
-      .collect::<Vec<_>>();
 
     let k: Bitlen = 5;
     let SplitLatents { primary, secondary } = split_latents(&nums, k);
     let mut primary = primary.downcast::<u64>().unwrap();
-    join_latents::<f64>(k, &mut primary, secondary.as_ref());
-    assert_eq!(uints, primary);
+    let mut secondary = secondary.unwrap().downcast::<u64>().unwrap();
+    let mut dst = vec![0.0; nums.len()];
+    join_latents::<f64>(
+      k,
+      DynLatentSlice::U64(&mut primary),
+      Some(DynLatentSlice::U64(&mut secondary)),
+      &mut dst,
+    )
+    .unwrap();
+
+    assert_eq!(dst.len(), nums.len());
+    for (a, b) in dst.iter().zip(&nums) {
+      assert_eq!(a.to_bits(), b.to_bits());
+    }
   }
 
   #[test]

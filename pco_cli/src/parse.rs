@@ -6,7 +6,7 @@ use pco::{DeltaSpec, ModeSpec};
 pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => DeltaSpec::Auto,
-    "none" => DeltaSpec::None,
+    "noop" => DeltaSpec::NoOp,
     "lookback" => DeltaSpec::TryLookback,
     other => {
       let mut parts = other.split('@');
@@ -15,6 +15,7 @@ pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
       let value = parts.next().ok_or_else(err)?;
       match name {
         "consecutive" => DeltaSpec::TryConsecutive(value.parse()?),
+        "conv1" => DeltaSpec::TryConv1(value.parse()?),
         _ => return Err(err()),
       }
     }
@@ -26,6 +27,7 @@ pub fn mode_spec(s: &str) -> anyhow::Result<ModeSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => ModeSpec::Auto,
     "classic" => ModeSpec::Classic,
+    "dict" => ModeSpec::TryDict,
     other => {
       let mut parts = other.split('@');
       let name = parts.next().unwrap();
@@ -47,9 +49,11 @@ pub fn arrow_dtype(s: &str) -> anyhow::Result<DataType> {
     ("f16", DataType::Float16),
     ("f32", DataType::Float32),
     ("f64", DataType::Float64),
+    ("i8", DataType::Int8),
     ("i16", DataType::Int16),
     ("i32", DataType::Int32),
     ("i64", DataType::Int64),
+    ("u8", DataType::UInt8),
     ("u16", DataType::UInt16),
     ("u32", DataType::UInt32),
     ("u64", DataType::UInt64),
@@ -86,4 +90,15 @@ pub fn arrow_dtype(s: &str) -> anyhow::Result<DataType> {
       .map(|(name, _)| name.to_string())
       .collect::<Vec<_>>()
   ))
+}
+
+pub fn boolean(s: &str) -> anyhow::Result<bool> {
+  match s.to_lowercase().as_str() {
+    "0" | "f" | "n" | "false" => Ok(false),
+    "1" | "t" | "y" | "true" => Ok(true),
+    _ => Err(anyhow!(
+      "unable to parse boolean: {}. try 't' or 'f'",
+      s
+    )),
+  }
 }

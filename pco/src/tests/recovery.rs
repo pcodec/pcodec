@@ -4,9 +4,9 @@ use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::constants::Bitlen;
-use crate::data_types::Number;
+use crate::data_types::{number_priv::NumberPriv, LatentType, Number};
 use crate::errors::PcoResult;
-use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, Mode};
+use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, DynLatents, Mode};
 use crate::standalone::{simple_compress, simple_decompress, FileCompressor};
 use crate::ModeSpec;
 
@@ -14,9 +14,9 @@ fn compress_w_meta<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<(Ve
   let mut compressed = Vec::new();
   let fc = FileCompressor::default();
   fc.write_header(&mut compressed)?;
-  let cd = fc.chunk_compressor(nums, config)?;
+  let mut cd = fc.chunk_compressor(nums, config)?;
   let meta = cd.meta().clone();
-  cd.write_chunk(&mut compressed)?;
+  cd.write(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
 
   Ok((compressed, meta))
@@ -51,6 +51,7 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
         compression_level,
         delta_spec: DeltaSpec::TryConsecutive(delta_encoding_order),
         mode_spec,
+        enable_8_bit: true,
         ..Default::default()
       };
       let compressed = simple_compress(nums, &config)?;
@@ -78,6 +79,7 @@ fn test_edge_cases() -> PcoResult<()> {
   assert_recovers(&Vec::<u32>::new(), 6, "empty u32 - 6")?;
   assert_recovers(&Vec::<u32>::new(), 0, "empty u32 - 0")?;
   assert_recovers(&Vec::<u16>::new(), 6, "empty u16 - 6")?;
+  assert_recovers(&Vec::<u8>::new(), 6, "empty u8 - 6")?;
   assert_recovers(
     &[
       f16::NEG_INFINITY,
@@ -119,6 +121,11 @@ fn test_sparse() -> PcoResult<()> {
 }
 
 #[test]
+fn test_u8_codec() -> PcoResult<()> {
+  assert_recovers(&[0_u8, u8::MAX, 2, 3, 4, 5], 1, "u8s")
+}
+
+#[test]
 fn test_u16_codec() -> PcoResult<()> {
   assert_recovers(&[0_u16, u16::MAX, 2, 3, 4, 5], 1, "u16s")
 }
@@ -131,6 +138,11 @@ fn test_u32_codec() -> PcoResult<()> {
 #[test]
 fn test_u64_codec() -> PcoResult<()> {
   assert_recovers(&[0_u64, u64::MAX, 3, 4, 5], 1, "u64s")
+}
+
+#[test]
+fn test_i8_codec() -> PcoResult<()> {
+  assert_recovers(&[0_i8, -1, i8::MAX, i8::MIN, 7], 1, "i8s")
 }
 
 #[test]
@@ -221,9 +233,9 @@ fn test_multi_chunk() -> PcoResult<()> {
   let mut compressed = Vec::new();
   fc.write_header(&mut compressed)?;
   fc.chunk_compressor(&[1_i64, 2, 3], &config)?
-    .write_chunk(&mut compressed)?;
+    .write(&mut compressed)?;
   fc.chunk_compressor(&[11_i64, 12, 13], &config)?
-    .write_chunk(&mut compressed)?;
+    .write(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
 
   let res = simple_decompress::<i64>(&compressed)?;
@@ -236,7 +248,7 @@ fn recover_with_alternating_nums(offset_bits: Bitlen, name: &str) -> PcoResult<(
   let (compressed, meta) = compress_w_meta(
     &nums,
     &ChunkConfig {
-      delta_spec: DeltaSpec::None,
+      delta_spec: DeltaSpec::NoOp,
       compression_level: 0,
       ..Default::default()
     },
@@ -276,7 +288,7 @@ fn test_with_int_mult() -> PcoResult<()> {
   let (compressed, meta) = compress_w_meta(
     &nums,
     &ChunkConfig {
-      delta_spec: DeltaSpec::None,
+      delta_spec: DeltaSpec::NoOp,
       ..Default::default()
     },
   )?;
@@ -370,9 +382,88 @@ fn test_lookback_delta_encoding() -> PcoResult<()> {
   )?;
   assert!(matches!(
     meta.delta_encoding,
-    DeltaEncoding::Lookback(_)
+    DeltaEncoding::Lookback { .. }
   ));
   let decompressed = simple_decompress(&compressed)?;
-  assert_nums_eq(&decompressed, &nums, "trivial_first_latent")?;
+  assert_nums_eq(
+    &decompressed,
+    &nums,
+    "lookback delta encoding",
+  )?;
+  Ok(())
+}
+
+#[test]
+fn test_dict() -> PcoResult<()> {
+  let mut nums = Vec::<i64>::new();
+  for i in 0..2000 {
+    for _ in 0..5 {
+      nums.push(i * i);
+    }
+  }
+  let (compressed, meta) = compress_w_meta(
+    &nums,
+    &ChunkConfig::default()
+      .with_mode_spec(ModeSpec::TryDict)
+      .with_delta_spec(DeltaSpec::NoOp),
+  )?;
+  let Mode::Dict(DynLatents::U64(dict)) = &meta.mode else {
+    panic!("expected to compress with a dictionary of u64s");
+  };
+  assert!(matches!(
+    meta.per_latent_var.primary.latent_type(),
+    LatentType::U32
+  ));
+  assert!(matches!(meta.per_latent_var.secondary, None));
+  assert_eq!(dict.len(), 2000); // this many unique values
+  let decompressed = simple_decompress(&compressed)?;
+  assert_nums_eq(&decompressed, &nums, "dict mode")?;
+  Ok(())
+}
+
+#[test]
+fn test_conv1_nominal() -> PcoResult<()> {
+  let mut x0 = 31;
+  let mut x1 = 77;
+  let mut x2 = -54;
+  let mut nums = vec![x0, x1, x2];
+  for _ in 0..2000 {
+    let x = x2 - x1 + (0.99 * x0 as f32) as i32 + 3;
+    nums.push(x);
+    x0 = x1;
+    x1 = x2;
+    x2 = x;
+  }
+  let (compressed, meta) = compress_w_meta(
+    &nums,
+    &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(3)),
+  )?;
+  let DeltaEncoding::Conv1(_) = &meta.delta_encoding else {
+    panic!("expected to compress with conv1 delta encoding");
+  };
+  let decompressed = simple_decompress(&compressed)?;
+  assert_nums_eq(&decompressed, &nums, "conv1")?;
+  Ok(())
+}
+
+#[test]
+fn test_conv1_degenerate() -> PcoResult<()> {
+  fn check<T: Number>(nums: Vec<T>, name: &str) -> PcoResult<()> {
+    let (compressed, _) = compress_w_meta(
+      &nums,
+      &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(3)),
+    )?;
+    let decompressed = simple_decompress::<T>(&compressed)?;
+    assert_nums_eq(&decompressed, &nums, name)
+  }
+
+  check::<u16>(vec![3], "short")?;
+  check::<u32>(vec![0; 100], "zeros")?;
+  let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
+  let mut nums = Vec::new();
+  for _ in 0..1000 {
+    nums.push(rng.gen_range(0..1000));
+  }
+  check::<u32>(nums, "no trend")?;
   Ok(())
 }

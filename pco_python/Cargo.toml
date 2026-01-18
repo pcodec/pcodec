@@ -1,6 +1,6 @@
 [package]
 name = "pco_python"
-version = "0.3.6"
+version = "1.0.0"
 edition = "2021"
 publish = false
 
@@ -12,7 +12,7 @@ name = "pcodec"
 crate-type = ["cdylib"]
 
 [dependencies]
-half = { version = "2.0.0", features = ["std"] }
-numpy = { version = "0.27.1", features = ["half"] }
-pco = { version = "0.4.0", path = "../pco" }
-pyo3 = { version = "0.27.2", features = ["extension-module"] }
+half = { workspace = true, features = ["std"] }
+numpy = { workspace = true, features = ["half"] }
+pco = { workspace = true }
+pyo3 = { workspace = true, features = ["extension-module"] }
