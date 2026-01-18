@@ -67,9 +67,9 @@ impl FileCompressor {
   /// compute necessary for the compression.
   pub fn chunk_compressor<T: Number>(
     &self,
-    nums: &[T],
+    src: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
-    chunk_compressor::new(nums, config)
+    chunk_compressor::new(src, config)
   }
 }

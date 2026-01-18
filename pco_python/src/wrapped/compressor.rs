@@ -56,11 +56,11 @@ impl PyFc {
   }
 
   /// Create a chunk compressor, computing the chunk metadata necessary to
-  /// compress the provided nums.
+  /// compress the provided src.
   ///
   /// This does the bulk of the work of compression.
   ///
-  /// :param nums: numpy array to compress. This must be 1D, contiguous, and
+  /// :param src: numpy array to compress. This must be 1D, contiguous, and
   ///   one of Pco's supported data types, e.g. float16, uint64.
   /// :param config: a ChunkConfig object containing compression level and
   ///   other settings.
@@ -71,14 +71,14 @@ impl PyFc {
   fn chunk_compressor(
     &self,
     py: Python,
-    nums: &Bound<PyUntypedArray>,
+    src: &Bound<PyUntypedArray>,
     config: &PyChunkConfig,
   ) -> PyResult<PyCc> {
-    let number_type = utils::number_type_from_numpy(py, &nums.dtype())?;
+    let number_type = utils::number_type_from_numpy(py, &src.dtype())?;
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(nums)?, &config.clone().into())?;
+        let cc = self.chunk_compressor_generic::<T>(py, utils::downcast_to_flat::<T>(src)?, &config.clone().into())?;
         Ok(PyCc(cc))
       }
     )

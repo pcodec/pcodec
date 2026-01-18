@@ -5,13 +5,14 @@ use arrow::array::{ArrayRef, AsArray};
 use arrow::datatypes::Schema;
 
 use pco::data_types::{Number, NumberType};
+use pco::errors::PcoResult;
 use pco::standalone::FileDecompressor;
 
 use crate::dtypes::ArrowNumber;
 
-pub fn get_standalone_dtype(initial_bytes: &[u8]) -> Result<Option<NumberType>> {
+pub fn get_standalone_dtype(initial_bytes: &[u8]) -> PcoResult<Option<NumberType>> {
   let (fd, src) = FileDecompressor::new(initial_bytes)?;
-  Ok(fd.peek_number_type_or_termination(src)?)
+  fd.peek_number_type_or_termination(src)
 }
 
 pub fn find_col_idx(

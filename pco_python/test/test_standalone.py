@@ -173,14 +173,14 @@ def test_decompress_without_n_hint():
 
 
 def test_multidimensional():
-    nums = np.random.normal(size=[10, 11])
+    src = np.random.normal(size=[10, 11])
     with pytest.raises(
         TypeError, match="2D float64 numpy array could not be cast to 1D"
     ):
-        standalone.simple_compress(nums, ChunkConfig())
+        standalone.simple_compress(src, ChunkConfig())
 
 
 def test_non_contiguous():
-    nums = np.random.normal(size=20)[::2]
+    src = np.random.normal(size=20)[::2]
     with pytest.raises(TypeError, match="not contiguous"):
-        standalone.simple_compress(nums, ChunkConfig())
+        standalone.simple_compress(src, ChunkConfig())

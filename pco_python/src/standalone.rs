@@ -14,11 +14,11 @@ use crate::{utils, PyChunkConfig, PyProgress};
 
 fn simple_compress_generic<'py, T: Number + Element>(
   py: Python<'py>,
-  nums: &Bound<'_, PyArray1<T>>,
+  src: &Bound<'_, PyArray1<T>>,
   config: &ChunkConfig,
 ) -> PyResult<Bound<'py, PyBytes>> {
-  let nums = nums.readonly();
-  let src = nums.as_slice()?;
+  let src = src.readonly();
+  let src = src.as_slice()?;
   let compressed = py
     .detach(|| standalone::simple_compress(src, config))
     .map_err(pco_err_to_py)?;
@@ -44,7 +44,7 @@ fn simple_decompress_into_generic<T: Number + Element>(
 pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   /// Compresses an array into a standalone format.
   ///
-  /// :param nums: numpy array to compress. This must be 1D, contiguous, and
+  /// :param src: numpy array to compress. This must be 1D, contiguous, and
   ///   one of Pco's supported data types, e.g. float16, uint64.
   /// :param config: a ChunkConfig object containing compression level and
   ///   other settings.
@@ -55,14 +55,14 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
   #[pyfunction]
   fn simple_compress<'py>(
     py: Python<'py>,
-    nums: &Bound<'_, PyUntypedArray>,
+    src: &Bound<'_, PyUntypedArray>,
     config: &PyChunkConfig,
   ) -> PyResult<Bound<'py, PyBytes>> {
-    let number_type = utils::number_type_from_numpy(py, &nums.dtype())?;
+    let number_type = utils::number_type_from_numpy(py, &src.dtype())?;
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        simple_compress_generic(py, utils::downcast_to_flat::<T>(nums)?, &config.clone().into())
+        simple_compress_generic(py, utils::downcast_to_flat::<T>(src)?, &config.clone().into())
       }
     )
   }

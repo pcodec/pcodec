@@ -113,7 +113,7 @@ impl FileCompressor {
   /// single chunk.
   pub fn chunk_compressor<T: Number>(
     &self,
-    nums: &[T],
+    src: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
     let number_type = NumberType::from_descriminant(T::NUMBER_TYPE_BYTE).unwrap();
@@ -127,10 +127,10 @@ impl FileCompressor {
     }
 
     let mut config = config.clone();
-    config.paging_spec = PagingSpec::Exact(vec![nums.len()]);
+    config.paging_spec = PagingSpec::Exact(vec![src.len()]);
 
     Ok(ChunkCompressor {
-      inner: self.inner.chunk_compressor(nums, &config)?,
+      inner: self.inner.chunk_compressor(src, &config)?,
       number_type,
     })
   }
