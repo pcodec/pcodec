@@ -60,7 +60,7 @@ impl PyDeltaSpec {
 
   /// :returns: a DeltaSpec that never does delta encoding.
   #[staticmethod]
-  fn none() -> Self {
+  fn no_op() -> Self {
     Self(DeltaSpec::NoOp)
   }
 

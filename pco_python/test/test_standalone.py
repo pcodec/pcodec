@@ -103,27 +103,43 @@ def test_simple_decompress_errors():
     assert standalone.simple_decompress(bytes(compressed)) is None
 
 
-def test_compression_options():
+@pytest.mark.parametrize(
+    "delta_spec",
+    [
+        DeltaSpec.no_op(),
+        DeltaSpec.try_consecutive(1),
+        DeltaSpec.try_lookback(),
+        DeltaSpec.try_conv1(1),
+    ],
+)
+def test_compression_options(delta_spec):
     data = np.random.normal(size=100).astype(np.float32)
     default_size = len(standalone.simple_compress(data, ChunkConfig()))
 
     # this is mostly just to check that there is no error, but these settings
     # should give worse compression than the defaults
-    for delta_spec in [DeltaSpec.try_consecutive(1), DeltaSpec.try_lookback()]:
-        compressed = standalone.simple_compress(
-            data,
-            ChunkConfig(
-                compression_level=0,
-                delta_spec=delta_spec,
-                mode_spec=ModeSpec.classic(),
-                paging_spec=PagingSpec.equal_pages_up_to(77),
-            ),
-        )
-        assert len(compressed) > default_size
+    compressed = standalone.simple_compress(
+        data,
+        ChunkConfig(
+            compression_level=0,
+            delta_spec=delta_spec,
+            mode_spec=ModeSpec.classic(),
+            paging_spec=PagingSpec.equal_pages_up_to(77),
+        ),
+    )
+    out = standalone.simple_decompress(compressed)
+    np.testing.assert_array_equal(data, out)
+    assert len(compressed) >= default_size
 
 
 @pytest.mark.parametrize(
-    "mode_spec", [ModeSpec.auto(), ModeSpec.classic(), ModeSpec.try_int_mult(10)]
+    "mode_spec",
+    [
+        ModeSpec.auto(),
+        ModeSpec.classic(),
+        ModeSpec.try_int_mult(10),
+        ModeSpec.try_dict(),
+    ],
 )
 def test_compression_int_mode_spec_options(mode_spec):
     data = (np.random.normal(size=100) * 1000).astype(np.int32)
