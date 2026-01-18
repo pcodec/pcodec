@@ -38,7 +38,7 @@ pub fn simple_compress_into<T: Number, W: Write>(
     let mut chunk_compressor =
       file_compressor.chunk_compressor(&nums[start..end], &this_chunk_config)?;
 
-    dst = chunk_compressor.write_chunk(dst)?;
+    dst = chunk_compressor.write(dst)?;
     start = end;
   }
 
@@ -71,13 +71,12 @@ pub fn simple_compress<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult
       file_compressor.chunk_compressor(&nums[start..end], &this_chunk_config)?;
 
     if !hinted_size {
-      let file_size_hint =
-        chunk_compressor.chunk_size_hint() as f64 * nums.len() as f64 / page_n as f64;
+      let file_size_hint = chunk_compressor.size_hint() as f64 * nums.len() as f64 / page_n as f64;
       dst.reserve_exact(file_size_hint as usize + 10);
       hinted_size = true;
     }
 
-    chunk_compressor.write_chunk(&mut dst)?;
+    chunk_compressor.write(&mut dst)?;
     start = end;
   }
 

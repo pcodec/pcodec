@@ -13,8 +13,6 @@ pub enum LatentVarKey {
   Delta,
   /// The only required latent variable, used by
   /// [modes][crate::metadata::Mode] to represent number values.
-  ///
-  /// Always has the same precision as the encoded numbers.
   Primary,
   /// An optional additional latent variable, used by certain
   /// [modes][crate::metadata::Mode] to represent number values.

@@ -16,7 +16,7 @@ fn compress_w_meta<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<(Ve
   fc.write_header(&mut compressed)?;
   let mut cd = fc.chunk_compressor(nums, config)?;
   let meta = cd.meta().clone();
-  cd.write_chunk(&mut compressed)?;
+  cd.write(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
 
   Ok((compressed, meta))
@@ -233,9 +233,9 @@ fn test_multi_chunk() -> PcoResult<()> {
   let mut compressed = Vec::new();
   fc.write_header(&mut compressed)?;
   fc.chunk_compressor(&[1_i64, 2, 3], &config)?
-    .write_chunk(&mut compressed)?;
+    .write(&mut compressed)?;
   fc.chunk_compressor(&[11_i64, 12, 13], &config)?
-    .write_chunk(&mut compressed)?;
+    .write(&mut compressed)?;
   fc.write_footer(&mut compressed)?;
 
   let res = simple_decompress::<i64>(&compressed)?;

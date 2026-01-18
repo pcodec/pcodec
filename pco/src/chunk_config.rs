@@ -10,7 +10,7 @@ use crate::DEFAULT_COMPRESSION_LEVEL;
 /// `Classic` if the provided mode is especially bad.
 /// It is recommended that you only use the `Try*` variants if you know for
 /// certain that your numbers benefit from that mode.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub enum ModeSpec {
   /// Automatically detects a good mode.
@@ -53,7 +53,7 @@ pub enum ModeSpec {
 /// to `None` if the provided encoding is especially bad.
 /// It is recommended that you only use the `Try*` variants if you know for
 /// certain that your numbers benefit from delta encoding.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub enum DeltaSpec {
   // TODO in the future: make Auto consider Conv1, assuming we can make it
@@ -92,8 +92,80 @@ pub enum DeltaSpec {
   TryConv1(usize),
 }
 
-// TODO consider adding a "lossiness" spec that allows dropping secondary latent
-// vars.
+/// `PagingSpec` specifies how a chunk is split into pages.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum PagingSpec {
+  /// Divide the chunk into equal pages of up to this many numbers.
+  ///
+  /// For example, with equal pages up to 100,000, a chunk of 150,000
+  /// numbers would be divided into 2 pages, each of 75,000 numbers.
+  EqualPagesUpTo(usize),
+  /// Divide the chunk into the exactly provided counts.
+  ///
+  /// Will return an InvalidArgument error during compression if
+  /// any of the counts are 0 or the sum does not equal the chunk count.
+  Exact(Vec<usize>),
+}
+
+impl Default for PagingSpec {
+  fn default() -> Self {
+    Self::EqualPagesUpTo(DEFAULT_MAX_PAGE_N)
+  }
+}
+
+impl PagingSpec {
+  pub fn n_per_page(&self, n: usize) -> PcoResult<Vec<usize>> {
+    let n_per_page = match self {
+      // You might think it would be beneficial to do either of these:
+      // * greedily fill pages since compressed chunk size seems like a concave
+      //   function of chunk_n
+      // * limit most pages to full batches for efficiency
+      //
+      // But in practice compressed chunk size has an inflection point upward
+      // at some point, so the first idea doesn't work.
+      // And the 2nd idea has only shown mixed/negative results, so I'm leaving
+      // this as-is.
+      PagingSpec::EqualPagesUpTo(max_page_n) => {
+        // Create a sequence of page lengths satisfying these constraints:
+        // * All pages have length at most `max_page_n`
+        // * The page lengths are approximately equal
+        // * As few pages as possible, within the above two constraints.
+        if n == 0 {
+          return Ok(Vec::new());
+        }
+        let n_pages = n.div_ceil(*max_page_n);
+        let page_n_low = n / n_pages;
+        let page_n_high = page_n_low + 1;
+        let r = n % n_pages;
+        debug_assert!(r == 0 || page_n_high <= *max_page_n);
+        let mut res = vec![page_n_low; n_pages];
+        res[..r].fill(page_n_high);
+        res
+      }
+      PagingSpec::Exact(n_per_page) => n_per_page.to_vec(),
+    };
+
+    let summed_n: usize = n_per_page.iter().sum();
+    if summed_n != n {
+      return Err(PcoError::invalid_argument(format!(
+        "paging spec suggests {} numbers but {} were given",
+        summed_n, n,
+      )));
+    }
+
+    for &page_n in &n_per_page {
+      if page_n == 0 {
+        return Err(PcoError::invalid_argument(
+          "cannot write data page of 0 numbers",
+        ));
+      }
+    }
+
+    Ok(n_per_page)
+  }
+}
+
 /// All configurations available for a compressor.
 ///
 /// Some, like `delta_encoding_order`, are explicitly stored in the
@@ -213,79 +285,5 @@ impl ChunkConfig {
     }
 
     Ok(())
-  }
-}
-
-/// `PagingSpec` specifies how a chunk is split into pages.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub enum PagingSpec {
-  /// Divide the chunk into equal pages of up to this many numbers.
-  ///
-  /// For example, with equal pages up to 100,000, a chunk of 150,000
-  /// numbers would be divided into 2 pages, each of 75,000 numbers.
-  EqualPagesUpTo(usize),
-  /// Divide the chunk into the exactly provided counts.
-  ///
-  /// Will return an InvalidArgument error during compression if
-  /// any of the counts are 0 or the sum does not equal the chunk count.
-  Exact(Vec<usize>),
-}
-
-impl Default for PagingSpec {
-  fn default() -> Self {
-    Self::EqualPagesUpTo(DEFAULT_MAX_PAGE_N)
-  }
-}
-
-impl PagingSpec {
-  pub fn n_per_page(&self, n: usize) -> PcoResult<Vec<usize>> {
-    let n_per_page = match self {
-      // You might think it would be beneficial to do either of these:
-      // * greedily fill pages since compressed chunk size seems like a concave
-      //   function of chunk_n
-      // * limit most pages to full batches for efficiency
-      //
-      // But in practice compressed chunk size has an inflection point upward
-      // at some point, so the first idea doesn't work.
-      // And the 2nd idea has only shown mixed/negative results, so I'm leaving
-      // this as-is.
-      PagingSpec::EqualPagesUpTo(max_page_n) => {
-        // Create a sequence of page lengths satisfying these constraints:
-        // * All pages have length at most `max_page_n`
-        // * The page lengths are approximately equal
-        // * As few pages as possible, within the above two constraints.
-        if n == 0 {
-          return Ok(Vec::new());
-        }
-        let n_pages = n.div_ceil(*max_page_n);
-        let page_n_low = n / n_pages;
-        let page_n_high = page_n_low + 1;
-        let r = n % n_pages;
-        debug_assert!(r == 0 || page_n_high <= *max_page_n);
-        let mut res = vec![page_n_low; n_pages];
-        res[..r].fill(page_n_high);
-        res
-      }
-      PagingSpec::Exact(n_per_page) => n_per_page.to_vec(),
-    };
-
-    let summed_n: usize = n_per_page.iter().sum();
-    if summed_n != n {
-      return Err(PcoError::invalid_argument(format!(
-        "paging spec suggests {} numbers but {} were given",
-        summed_n, n,
-      )));
-    }
-
-    for &page_n in &n_per_page {
-      if page_n == 0 {
-        return Err(PcoError::invalid_argument(
-          "cannot write data page of 0 numbers",
-        ));
-      }
-    }
-
-    Ok(n_per_page)
   }
 }

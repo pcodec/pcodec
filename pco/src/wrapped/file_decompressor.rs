@@ -17,7 +17,7 @@ pub struct FileDecompressor {
 }
 
 impl FileDecompressor {
-  /// Reads a short header and returns a `FjjileDecompressor` and the remaining
+  /// Reads a short header and returns a `FileDecompressor` and the remaining
   /// input.
   ///
   /// Will return an error if any corruptions or insufficient data are found.

@@ -6,10 +6,24 @@ use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, LatentVarKey, Mode};
 use std::marker::PhantomData;
 
+mod private {
+  use crate::{
+    data_types::{float::Float, Latent, Number},
+    describers::{ClassicDescriber, FloatMultDescriber, FloatQuantDescriber, IntDescriber},
+  };
+
+  pub trait Sealed {}
+
+  impl<T: Number> Sealed for ClassicDescriber<T> {}
+  impl<L: Latent> Sealed for IntDescriber<L> {}
+  impl<F: Float> Sealed for FloatMultDescriber<F> {}
+  impl<F: Float> Sealed for FloatQuantDescriber<F> {}
+}
+
 /// Interprets the meaning of latent variables and values from [`ChunkMeta`].
 ///
 /// Obtainable via [`crate::data_types::Number::get_latent_describers`].
-pub trait DescribeLatent {
+pub trait DescribeLatent: private::Sealed {
   /// Returns a description for this latent variable.
   fn latent_var(&self) -> String;
   /// Returns a description for this latent variable's units, when formatted

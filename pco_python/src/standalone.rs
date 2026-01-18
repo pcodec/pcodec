@@ -62,7 +62,7 @@ pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     match_number_enum!(
       number_type,
       NumberType<T> => {
-        simple_compress_generic(py, utils::downcast_to_flat::<T>(nums)?, &config.into())
+        simple_compress_generic(py, utils::downcast_to_flat::<T>(nums)?, &config.clone().into())
       }
     )
   }

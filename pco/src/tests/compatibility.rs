@@ -211,10 +211,8 @@ fn v0_4_5_uniform_type() -> PcoResult<()> {
     let mut dst = vec![];
     let fc = FileCompressor::default().with_uniform_type(Some(NumberType::U32));
     fc.write_header(&mut dst)?;
-    fc.chunk_compressor(&nums[0..3], &config)?
-      .write_chunk(&mut dst)?;
-    fc.chunk_compressor(&nums[3..5], &config)?
-      .write_chunk(&mut dst)?;
+    fc.chunk_compressor(&nums[0..3], &config)?.write(&mut dst)?;
+    fc.chunk_compressor(&nums[3..5], &config)?.write(&mut dst)?;
     fc.write_footer(&mut dst)?;
     fs::write(path, dst)?;
   }
@@ -237,7 +235,7 @@ fn v0_4_8_minor_version() -> PcoResult<()> {
     let mut dst = vec![];
     let fc = FileCompressor::default().with_max_supported_version();
     fc.write_header(&mut dst)?;
-    fc.chunk_compressor(&nums, &config)?.write_chunk(&mut dst)?;
+    fc.chunk_compressor(&nums, &config)?.write(&mut dst)?;
     fc.write_footer(&mut dst)?;
     fs::write(path, dst)?;
   }

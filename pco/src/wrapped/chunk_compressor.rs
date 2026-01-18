@@ -522,7 +522,7 @@ impl ChunkCompressor {
     bin_counts_per_latent_var: PerLatentVar<Vec<Weight>>,
   ) -> bool {
     let meta = &self.meta;
-    if meta.delta_encoding == DeltaEncoding::NoOp && meta.mode == Mode::Classic {
+    if matches!(meta.delta_encoding, DeltaEncoding::NoOp) && matches!(meta.mode, Mode::Classic) {
       // we already have a size guarantee in this case
       return false;
     }
@@ -611,7 +611,7 @@ impl ChunkCompressor {
   /// Returns an estimate of the overall size of a specific page.
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
-  /// you can `.reserve(chunk_compressor.chunk_size_hint())` ahead of time.
+  /// you can `.reserve(chunk_compressor.size_hint())` ahead of time.
   pub fn page_size_hint(&self, page_idx: usize) -> usize {
     self.page_size_hint_inner(page_idx, PAGE_SIZE_OVERESTIMATION)
   }

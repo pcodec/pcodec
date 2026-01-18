@@ -49,7 +49,7 @@ impl CodecInternal for ChunkConfigOpt {
   }
 
   fn compress<T: PcoNumber>(&self, nums: &[T]) -> Vec<u8> {
-    let chunk_config = ChunkConfig::from(self);
+    let chunk_config = ChunkConfig::from(self.clone());
     pco::standalone::simple_compress(nums, &chunk_config).expect("invalid config")
   }
 

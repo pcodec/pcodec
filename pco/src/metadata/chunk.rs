@@ -16,7 +16,7 @@ use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{DynBins, Mode};
 
 /// The metadata of a pco chunk.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct ChunkMeta {
   /// The formula `pco` used to compress each number at a low level.
   pub mode: Mode,
