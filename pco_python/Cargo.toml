@@ -16,3 +16,6 @@ half = { workspace = true, features = ["std"] }
 numpy = { workspace = true, features = ["half"] }
 pco = { workspace = true }
 pyo3 = { workspace = true, features = ["extension-module"] }
+
+[target.'cfg(windows)'.dependencies]
+pyo3 = { workspace = true, features = ["extension-module", "generate-import-lib"] }
