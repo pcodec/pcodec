@@ -58,6 +58,7 @@ fn make_latent_decompressors(
             page_latent_var_meta.ans_final_state_idxs,
             &cld.delta_encoding,
             delta_state,
+            n,
           );
           DynPageLatentDecompressor::new(pld)
         }

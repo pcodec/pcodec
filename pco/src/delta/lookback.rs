@@ -193,8 +193,8 @@ pub fn new_window_buffer_and_pos<L: Latent>(
 pub fn decode_in_place<L: Latent>(
   config: DeltaLookbackConfig,
   lookbacks: &[DeltaLookback],
-  window_buffer_pos: &mut usize,
   window_buffer: &mut [L],
+  window_buffer_pos: &mut usize,
   latents: &mut [L],
 ) -> bool {
   super::toggle_center_in_place(latents);
@@ -287,8 +287,8 @@ mod tests {
     let has_oob_lookbacks = decode_in_place(
       config,
       &lookbacks,
-      &mut pos,
       &mut window_buffer,
+      &mut pos,
       &mut deltas_to_decode,
     );
     assert!(!has_oob_lookbacks);
@@ -309,8 +309,8 @@ mod tests {
     let has_oob_lookbacks = decode_in_place(
       config,
       &lookbacks,
-      &mut pos,
       &mut window_buffer,
+      &mut pos,
       &mut latents,
     );
     assert!(has_oob_lookbacks);

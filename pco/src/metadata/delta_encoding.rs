@@ -73,6 +73,34 @@ pub struct DeltaConv2Config {
   weights: Vec<i64>,
 }
 
+impl DeltaConv2Config {
+  pub(crate) fn new(
+    quantization: Bitlen,
+    w: usize,
+    kw: usize,
+    bias: i64,
+    weights: Vec<i64>,
+  ) -> Self {
+    let kh = weights.len() / kw;
+    Self {
+      quantization,
+      w,
+      kh,
+      kw,
+      bias,
+      weights,
+    }
+  }
+
+  pub(crate) fn bias<S: Signed>(&self) -> S {
+    S::from_i64(self.bias)
+  }
+
+  pub(crate) fn weights<S: Signed>(&self) -> Vec<S> {
+    self.weights.iter().cloned().map(S::from_i64).collect()
+  }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LatentVarDeltaEncoding {

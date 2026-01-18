@@ -72,9 +72,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
     ans_final_state_idxs: [AnsState; ANS_INTERLEAVING],
     delta_encoding: &LatentVarDeltaEncoding,
     stored_delta_state: Vec<L>,
+    page_n: usize,
   ) -> Self {
     let (working_delta_state, delta_state_pos) =
-      delta::new_buffer_and_pos(delta_encoding, stored_delta_state);
+      delta::new_buffer_and_pos(delta_encoding, stored_delta_state, page_n);
 
     Self {
       ans_state_idxs: ans_final_state_idxs,
@@ -249,8 +250,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
     delta::decode_in_place(
       &cld.delta_encoding,
       delta_latents,
-      &mut self.delta_state_pos,
       &mut self.delta_state,
+      &mut self.delta_state_pos,
       dst,
     )
   }
