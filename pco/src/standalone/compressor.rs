@@ -26,11 +26,10 @@ unsafe fn write_varint<W: Write>(n: u64, writer: &mut BitWriter<W>) {
 /// let file_compressor = FileCompressor::default();
 /// file_compressor.write_header(&mut compressed)?;
 /// for chunk in [vec![1, 2, 3], vec![4, 5]] {
-///   let mut chunk_compressor = file_compressor.chunk_compressor::<i64>(
+///   file_compressor.chunk_compressor::<i64>(
 ///     &chunk,
 ///     &ChunkConfig::default(),
-///   )?;
-///   chunk_compressor.write_chunk(&mut compressed)?;
+///   )?.write(&mut compressed)?;
 /// }
 /// file_compressor.write_footer(&mut compressed)?;
 /// // now `compressed` is a complete .pco file with 2 chunks
@@ -110,6 +109,8 @@ impl FileCompressor {
   ///
   /// Although this doesn't write anything yet, it does the bulk of
   /// compute necessary for the compression.
+  /// The config's paging spec does not affect this; it will always produce a
+  /// single chunk.
   pub fn chunk_compressor<T: Number>(
     &self,
     nums: &[T],
@@ -161,8 +162,8 @@ impl ChunkCompressor {
   /// Returns an estimate of the overall size of the chunk.
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
-  /// you can `.reserve(chunk_compressor.chunk_size_hint())` ahead of time.
-  pub fn chunk_size_hint(&self) -> usize {
+  /// you can `.reserve(chunk_compressor.size_hint())` ahead of time.
+  pub fn size_hint(&self) -> usize {
     1 + BITS_TO_ENCODE_N_ENTRIES.div_ceil(8) as usize
       + self.inner.meta_size_hint()
       + self.inner.page_size_hint(0)
@@ -171,7 +172,7 @@ impl ChunkCompressor {
   /// Writes an entire chunk to the destination.
   ///
   /// Will return an error if the provided `Write` errors.
-  pub fn write_chunk<W: Write>(&mut self, dst: W) -> PcoResult<W> {
+  pub fn write<W: Write>(&mut self, dst: W) -> PcoResult<W> {
     let mut writer = BitWriter::new(dst, STANDALONE_CHUNK_PREAMBLE_PADDING);
     writer.write_aligned_bytes(&[self.number_type as u8])?;
     let n = self.inner.n_per_page()[0];

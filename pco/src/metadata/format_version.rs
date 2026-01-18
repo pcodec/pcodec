@@ -48,17 +48,18 @@ impl FormatVersion {
     Self { major: 4, minor: 1 }
   }
 
-  /// Returns whether this format version can definitely be read by the
-  /// current library version.
-  pub fn can_definitely_be_decompressed(&self) -> bool {
-    Self::max_supported() >= *self
-  }
-
-  /// Returns whether this format version might be readable by the current
-  /// library version (depending on whether new format additions have been used
-  /// later in the file).
-  pub fn can_maybe_be_decompressed(&self) -> bool {
-    Self::max_supported().major >= self.major
+  /// Returns whether this format version can definitely be read by the current
+  /// library version, or None if it can maybe be decompressed without a
+  /// guarantee.
+  pub fn can_be_decompressed(&self) -> Option<bool> {
+    let max_supported = FormatVersion::max_supported();
+    if max_supported >= *self {
+      Some(true)
+    } else if max_supported.major >= self.major {
+      None
+    } else {
+      Some(false)
+    }
   }
 
   pub(crate) fn read_from(reader: &mut BitReader) -> PcoResult<Self> {
@@ -70,7 +71,7 @@ impl FormatVersion {
     };
     let file_version = FormatVersion { major, minor };
 
-    if !file_version.can_maybe_be_decompressed() {
+    if file_version.can_be_decompressed() == Some(false) {
       return Err(PcoError::corruption(format!(
         "File's format version ({}) definitely cannot be decompressed by this \
         library version; its major version is less than the max supported {}. \
@@ -123,21 +124,18 @@ mod tests {
       major: 0,
       minor: 50,
     };
-    assert!(past_version.can_maybe_be_decompressed());
-    assert!(past_version.can_definitely_be_decompressed());
+    assert!(past_version.can_be_decompressed() == Some(true));
 
     let uncertain_version = FormatVersion {
       major: FormatVersion::max_supported().major,
       minor: 200,
     };
-    assert!(uncertain_version.can_maybe_be_decompressed());
-    assert!(!uncertain_version.can_definitely_be_decompressed());
+    assert!(uncertain_version.can_be_decompressed() == None);
 
     let future_version = FormatVersion {
       major: 200,
       minor: 0,
     };
-    assert!(!future_version.can_maybe_be_decompressed());
-    assert!(!future_version.can_definitely_be_decompressed());
+    assert!(future_version.can_be_decompressed() == Some(false));
   }
 }

@@ -37,13 +37,14 @@ impl ChunkConfigOpt {
   }
 }
 
-impl From<&ChunkConfigOpt> for ChunkConfig {
-  fn from(opt: &ChunkConfigOpt) -> Self {
+impl From<ChunkConfigOpt> for ChunkConfig {
+  fn from(opt: ChunkConfigOpt) -> Self {
+    let enable_8_bit = opt.enable_8_bit();
     ChunkConfig::default()
       .with_compression_level(opt.level)
       .with_delta_spec(opt.delta)
       .with_mode_spec(opt.mode)
       .with_paging_spec(PagingSpec::EqualPagesUpTo(opt.chunk_n))
-      .with_enable_8_bit(opt.enable_8_bit())
+      .with_enable_8_bit(enable_8_bit)
   }
 }

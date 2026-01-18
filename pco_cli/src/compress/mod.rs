@@ -35,5 +35,5 @@ pub fn compress(opt: CompressOpt) -> Result<()> {
   )?;
   let dtype = schema.field(col_idx).data_type();
   let handler = arrow_handlers::from_dtype(dtype)?;
-  handler.compress(&opt, &schema)
+  handler.compress(opt, &schema)
 }

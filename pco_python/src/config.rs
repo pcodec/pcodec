@@ -106,6 +106,7 @@ impl PyPagingSpec {
 }
 
 #[pyclass(get_all, set_all, name = "ChunkConfig")]
+#[derive(Clone)]
 pub struct PyChunkConfig {
   compression_level: usize,
   mode_spec: PyModeSpec,
@@ -156,13 +157,13 @@ impl PyChunkConfig {
   }
 }
 
-impl From<&PyChunkConfig> for ChunkConfig {
-  fn from(py_config: &PyChunkConfig) -> Self {
+impl From<PyChunkConfig> for ChunkConfig {
+  fn from(py_config: PyChunkConfig) -> Self {
     ChunkConfig::default()
       .with_compression_level(py_config.compression_level)
       .with_delta_spec(py_config.delta_spec.0)
       .with_mode_spec(py_config.mode_spec.0)
-      .with_paging_spec(py_config.paging_spec.0.clone())
+      .with_paging_spec(py_config.paging_spec.0)
       .with_enable_8_bit(py_config.enable_8_bit)
   }
 }

@@ -16,6 +16,7 @@ macro_rules! build_dtype_macros {
   ) => {
     $(#[$definer_attrs])*
     macro_rules! $definer {
+      // Enum with neither data nor descriminants
       (#[$enum_attrs: meta] $vis: vis $name: ident) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -36,6 +37,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
+      // Enum with descriminants
       (#[$enum_attrs: meta] #[repr($desc_t: ty)] $vis: vis $name: ident = $desc_val: ident) => {
         #[$enum_attrs]
         #[repr($desc_t)]
@@ -64,6 +66,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
+      // Enum with data
       (#[$enum_attrs: meta] $vis: vis $name: ident($container: ident)) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -146,6 +149,7 @@ macro_rules! build_dtype_macros {
 
     $(#[$matcher_attrs])*
     macro_rules! $matcher {
+      // Enum without data
       ($value: expr, $enum_: ident<$generic: ident> => $block: block) => {
         match $value {
           $($enum_::$variant => {
@@ -155,6 +159,7 @@ macro_rules! build_dtype_macros {
           _ => unreachable!()
         }
       };
+      // Enum with data
       ($value: expr, $enum_: ident<$generic: ident>($inner: ident) => $block: block) => {
         match $value {
           $($enum_::$variant($inner) => {
