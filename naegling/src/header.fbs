@@ -1,0 +1,16 @@
+namespace Pcodec.Naegling;
+
+table Chunk {
+  weights: [int16];
+}
+
+table Header {
+  h: uint32;
+  w: uint32;
+  c: uint32;
+  chunk_h: uint32;
+  chunk_w: uint32;
+  chunks: [Chunk];
+}
+
+root_type Header;

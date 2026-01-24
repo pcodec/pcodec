@@ -1,0 +1,11 @@
+[package]
+name = "naegling"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+better_io = { workspace = true }
+flatbuffers = { workspace = true }
+image = { workspace = true }
+pco = { workspace = true }
