@@ -3,41 +3,52 @@ use std::{
   env,
   fs::{self, OpenOptions},
   io::{self, Cursor, Read, Write},
+  ops::Range,
 };
 
-mod header_generated;
+mod format_generated;
+mod img;
 use anyhow::Result;
 use better_io::{BetterBufRead, BetterBufReader};
 use flatbuffers::{FlatBufferBuilder, SIZE_SIZEPREFIX};
 use image::{DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgb, RgbImage, RgbaImage};
 use pco::{
   ChunkConfig, ModeSpec,
-  standalone::{DecompressorItem, FileCompressor, FileDecompressor},
+  wrapped::{FileCompressor, FileDecompressor},
 };
 
-use crate::header_generated::pcodec::naegling::{self, Header, HeaderArgs, HeaderBuilder};
+use crate::{
+  format_generated::pcodec::naegling::{
+    self, Nae, NaeArgs, NaeBuilder, NaeChunk, NaeChunkArgs, NaeChunkBuilder,
+  },
+  img::Img,
+};
 
-struct Img {
-  h: u32,
-  w: u32,
-  c: u32,
-  values: Vec<u8>,
+// channel-major
+struct ColorSpaceFit {
+  quantization: u32,
+  weights: Vec<i16>,
+  biases: Vec<i16>,
 }
 
-impl From<ImageBuffer<Rgb<u8>, Vec<u8>>> for Img {
-  fn from(value: ImageBuffer<Rgb<u8>, Vec<u8>>) -> Self {
-    Img {
-      h: value.height(),
-      w: value.width(),
-      c: 3,
-      values: value.into_raw(),
-    }
-  }
-}
+// fn decorrelate(s: &ImgSlice) -> ColorSpaceFit {
+//   let c = s.img.c;
+//   let mut weights = vec![0; (c * (c - 1)) / 2];
+//   let mut biases = vec![0; c - 1];
+
+//   let mut weight_idx = 0;
+//   for resp in 1..c {
+//     for pred in 0..resp {
+//       weights[weight_idx] = fit[pred];
+//       weight_idx += 1;
+//     }
+//   }
+//   (weights, biases)
+// }
 
 struct Config {
-  chunk_h: u32,
-  chunk_w: u32,
+  chunk_h: usize,
+  chunk_w: usize,
 }
 
 fn write_naegling_into<W: Write>(img: &Img, config: &Config, mut dst: W) -> Result<()> {
@@ -45,106 +56,84 @@ fn write_naegling_into<W: Write>(img: &Img, config: &Config, mut dst: W) -> Resu
   let w = img.w;
   let c = img.c;
   let &Config { chunk_h, chunk_w } = config;
-  let mut fbb = FlatBufferBuilder::with_capacity(1024);
-  let header = Header::create(
-    &mut fbb,
-    &HeaderArgs {
-      h,
-      w,
-      c,
-      chunk_h,
-      chunk_w,
-    },
-  );
-  fbb.finish_size_prefixed(header, None);
-  dst.write(fbb.finished_data())?;
-
   let config = ChunkConfig::default()
     .with_enable_8_bit(true)
     .with_mode_spec(ModeSpec::Classic);
 
   let fc = FileCompressor::default();
-  fc.write_header(&mut dst)?;
+  let mut pco_header = Vec::new();
+  fc.write_header(&mut pco_header)?;
   let chunk_n = (h * w) as usize;
+  let nh = h.div_ceil(chunk_h);
+  let nw = w.div_ceil(chunk_w);
+  let mut chunks = Vec::with_capacity(nh * nw);
+  let mut fbb = FlatBufferBuilder::with_capacity(1024);
   let mut buf = vec![0; chunk_n];
-  for chunk_i in 0..h.div_ceil(chunk_h) {
-    for chunk_j in 0..w.div_ceil(chunk_w) {
-      let i0 = chunk_i * chunk_h;
-      let j0 = chunk_j * chunk_w;
-      let i1 = (i0 + chunk_h).min(h);
-      let j1 = (j0 + chunk_w).min(w);
-      let real_w = j1 - j0;
-      for k in 0..c {
-        for i in i0..i1 {
-          for j in j0..j1 {
-            buf[((i - i0) * real_w + (j - j0)) as usize] =
-              img.values[(k + c * (i * w + j)) as usize]
-          }
-        }
-        fc.chunk_compressor(
-          &buf[..((i1 - i0) * real_w) as usize],
-          &config,
-        )?
-        .write(&mut dst)?;
-      }
+  for chunk in img.iter_chunks(chunk_h, chunk_w) {
+    let chunk_n = chunk.n();
+    for k in 0..c {
+      chunk.write_flat(k, &mut buf[..chunk_n]);
+      let mut cc = fc.chunk_compressor(&buf[..chunk_n], &config)?;
+      assert!(cc.n_per_page().len() == 1);
+      let mut meta = Vec::with_capacity(cc.meta_size_hint());
+      cc.write_meta(&mut meta)?;
+      let mut page = Vec::with_capacity(cc.page_size_hint(0));
+      cc.write_page(0, &mut page)?;
+
+      let chunk_args = NaeChunkArgs {
+        quantization: 0,
+        weights: None,
+        biases: None,
+        pco_meta: Some(fbb.create_vector(&meta)),
+        pco_page: Some(fbb.create_vector(&page)),
+      };
+      chunks.push(NaeChunk::create(&mut fbb, &chunk_args));
     }
   }
-  fc.write_footer(dst)?;
+
+  let args = NaeArgs {
+    h: h as u32,
+    w: w as u32,
+    c: c as u32,
+    chunk_h: chunk_h as u32,
+    chunk_w: chunk_w as u32,
+    pco_header: Some(fbb.create_vector(&pco_header)),
+    chunks: Some(fbb.create_vector(&chunks)),
+  };
+  let root = Nae::create(&mut fbb, &args);
+  fbb.finish(root, None);
+  dst.write(fbb.finished_data())?;
+
   Ok(())
 }
 
 fn read_naegling_from(src: &[u8]) -> Result<DynamicImage> {
-  let header_size = u32::from_le_bytes(src[..SIZE_SIZEPREFIX].try_into().unwrap()) as usize;
-  let header = naegling::size_prefixed_root_as_header(src).unwrap();
-  println!("{:?}", header);
+  let header = naegling::root_as_nae(src).unwrap();
   let h = header.h() as usize;
   let w = header.w() as usize;
   let c = header.c() as usize;
   let chunk_h = header.chunk_h() as usize;
   let chunk_w = header.chunk_w() as usize;
-  let src = BetterBufReader::new(
-    &[],
-    &src[SIZE_SIZEPREFIX + header_size..],
-    1 << 15,
-  );
-  let chunk_n = h * w;
-  let mut data = vec![0; chunk_n * c];
-  let (fd, mut src) = FileDecompressor::new(src)?;
-  let mut buf = vec![0; chunk_n];
-  for chunk_i in 0..h.div_ceil(chunk_h) {
-    for chunk_j in 0..w.div_ceil(chunk_w) {
-      let i0 = chunk_i * chunk_h;
-      let j0 = chunk_j * chunk_w;
-      let i1 = (i0 + chunk_h).min(h);
-      let j1 = (j0 + chunk_w).min(w);
-      for k in 0..c as usize {
-        let DecompressorItem::Chunk(mut cd) = fd.chunk_decompressor(src)? else {
-          return Err(anyhow!(
-            "ran out of pco chunks before expected"
-          ));
-        };
-        let expected_n = (i1 - i0) * (j1 - j0);
-        assert!(cd.n() == expected_n);
-        let progress = cd.read(&mut buf[..expected_n])?;
-        assert!(progress.n_processed == expected_n);
-        assert!(progress.finished);
-        for i in i0..i1 {
-          for j in j0..j1 {
-            data[k + c * (i * w + j)] = buf[(i - i0) * (j1 - j0) + j - j0];
-          }
-        }
-        src = cd.into_src();
-      }
+  let (fd, _) = FileDecompressor::new(header.pco_header().unwrap().bytes())?;
+  let mut buf = vec![0; chunk_h * chunk_w];
+  let mut img = Img::empty(h, w, c);
+  let mut channel_chunk_idx = 0;
+  let compressed_chunks = header.chunks().unwrap();
+  for img_chunk in img.iter_chunks_mut(chunk_h, chunk_w) {
+    let chunk_n = img_chunk.n();
+    for k in 0..c {
+      let compressed_chunk = &compressed_chunks.get(channel_chunk_idx);
+      let (mut cd, _) = fd.chunk_decompressor(compressed_chunk.pco_meta().unwrap().bytes())?;
+      let page_bytes = compressed_chunk.pco_page().unwrap().bytes();
+      let mut pd = cd.page_decompressor(page_bytes, chunk_n)?;
+      let progress = pd.read(&mut buf[..chunk_n])?;
+      assert!(progress.finished);
+      img_chunk.read_flat(k, &buf[..chunk_n]);
+      channel_chunk_idx += 1;
     }
   }
-  let img = if c == 3 {
-    DynamicImage::ImageRgb8(RgbImage::from_raw(w as u32, h as u32, data).unwrap())
-  } else if c == 4 {
-    DynamicImage::ImageRgba8(RgbaImage::from_raw(w as u32, h as u32, data).unwrap())
-  } else {
-    return Err(anyhow!("unknown number of channels"));
-  };
-  Ok(img)
+
+  Ok(img.into())
 }
 
 fn main() -> Result<()> {
@@ -162,6 +151,7 @@ fn main() -> Result<()> {
   } else {
     ImageReader::open(src_path)?.decode()?
   };
+
   let dst = OpenOptions::new()
     .create(true)
     .truncate(true)
