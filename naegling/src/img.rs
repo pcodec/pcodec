@@ -1,5 +1,4 @@
-use anyhow::{Result, anyhow};
-use std::{marker::PhantomData, ops::Range};
+use std::marker::PhantomData;
 
 use image::{DynamicImage, ImageBuffer, Rgb, RgbImage, RgbaImage};
 
@@ -185,10 +184,16 @@ impl<'a> ImgViewMut<'a> {
   }
 
   #[inline]
-  pub unsafe fn set(&self, i: usize, j: usize, k: usize, val: u8) {
-    let img = (&mut *self.img);
+  pub unsafe fn get(&self, i: usize, j: usize, k: usize) -> u8 { unsafe {
+    let img = &*self.img;
+    img.values[self.offset + k + img.c * (i * img.w + j)]
+  }}
+
+  #[inline]
+  pub unsafe fn set(&self, i: usize, j: usize, k: usize, val: u8) { unsafe {
+    let img = &mut *self.img;
     img.values[self.offset + k + img.c * (i * img.w + j)] = val;
-  }
+  }}
 
   pub fn binary_op_in_place(&self, other: &ImgView, op: impl Fn(u8, u8) -> u8) {
     let &ImgViewMut { offset, h, w, .. } = self;

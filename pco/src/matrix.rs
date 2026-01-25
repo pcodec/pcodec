@@ -1,3 +1,5 @@
+use core::f64;
+
 type Real = f64;
 
 // poor man's nalgebra so we don't need a whole new dep
@@ -91,14 +93,15 @@ impl Matrix {
     for k in 0..w {
       for j in (0..h).rev() {
         unsafe {
-          let diag_value = y.get(j, k) / self.get(j, j);
-          y.set(j, k, diag_value);
+          let diag_value = self.get(j, j);
+          let xjk = if diag_value.abs() >= 1E-12 {
+            y.get(j, k) / diag_value
+          } else {
+            0.0
+          };
+          y.set(j, k, xjk);
           for i in 0..j {
-            y.set(
-              i,
-              k,
-              y.get(i, k) - diag_value * self.get(j, i),
-            );
+            y.set(i, k, y.get(i, k) - xjk * self.get(j, i));
           }
         }
       }
@@ -117,14 +120,15 @@ impl Matrix {
     for k in 0..w {
       for j in 0..h {
         unsafe {
-          let diag_value = y.get(j, k) / self.get(j, j);
-          y.set(j, k, diag_value);
+          let diag_value = self.get(j, j);
+          let xjk = if diag_value.abs() >= 1E-12 {
+            y.get(j, k) / diag_value
+          } else {
+            0.0
+          };
+          y.set(j, k, xjk);
           for i in j + 1..h {
-            y.set(
-              i,
-              k,
-              y.get(i, k) - diag_value * self.get(i, j),
-            );
+            y.set(i, k, y.get(i, k) - xjk * self.get(i, j));
           }
         }
       }
@@ -206,6 +210,7 @@ mod tests {
     ]);
     let x = a.transposed_backward_sub_into(y);
     let expected = vec![1.25, -0.5];
+    println!("{:?}", x.data);
     for i in 0..expected.len() {
       assert!((x.data[i] - expected[i]).abs() < 1E-6);
     }

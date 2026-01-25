@@ -1,145 +1,180 @@
+use core::panic;
+
 use pco::experimental::{Matrix, solve_least_squares};
 
-use crate::img::{Img, ImgView, ImgViewMut};
+use crate::img::{ImgView, ImgViewMut};
 
-pub struct Conv2X2Fit {
-  top_left: Vec<u8>,
-  quantization: u32,
-  weights: Vec<i16>,
-  biases: Vec<i16>,
+#[derive(Clone, Debug)]
+pub struct ConvFit {
+  pub quantization: u32,
+  // Per output channel: 4 positions × c channels = 4*c weights
+  // Layout: [weights for ch0, weights for ch1, ...]
+  // Position order: (-1,-1), (-1,0), (0,-1), (0,0)
+  pub weights: Vec<i32>,
+  pub biases: Vec<i32>,
 }
 
-pub fn fit_2x2<'a>(chunk: &ImgView<'a>) -> Conv2X2Fit {
+/// Fit a 2x2 causal convolution including the current pixel.
+/// For output channel k, the current pixel's channels k..c are treated as 0.
+pub fn fit(chunk: &ImgView) -> ConvFit {
   let (h, w, c) = chunk.hwc();
-  let n_coeffs = 3 * c + 1;
-  let mut xtx = Matrix::constant(0.0, n_coeffs, n_coeffs);
-  let mut xty = Matrix::constant(0.0, n_coeffs, c);
+  let n_weights = 4 * c; // 4 positions × c channels
+  let n_coeffs = n_weights + 1; // + bias
 
-  // Iterate over all pixels, padding the top-left edge by copying nearest valid pixel
-  // Build feature vector x with layout:
-  // [c channels at (-1,-1), c channels at (-1,0), c channels at (0,-1), bias]
-  let mut x = vec![0.0f64; n_coeffs];
-  x[3 * c] = 1.0;
+  // We fit a separate regression per output channel since each has different causal mask
+  let mut all_coeffs = Vec::with_capacity(n_coeffs * c);
 
-  for i in 0..h {
-    for j in 0..w {
-      let pi = i.saturating_sub(1); // padded i-1
-      let pj = j.saturating_sub(1); // padded j-1
+  for out_k in 0..c {
+    let mut xtx = Matrix::constant(0.0, n_coeffs, n_coeffs);
+    let mut xty = Matrix::constant(0.0, n_coeffs, 1);
+    let mut x = vec![0.0f64; n_coeffs];
+    x[n_weights] = 1.0; // bias term
 
-      // Offset (-1, -1): diagonal above-left
-      for k in 0..c {
-        x[k] = chunk.get(pi, pj, k) as f64;
-      }
-      // Offset (-1, 0): directly above
-      for k in 0..c {
-        x[c + k] = chunk.get(pi, j, k) as f64;
-      }
-      // Offset (0, -1): directly left
-      for k in 0..c {
-        x[2 * c + k] = chunk.get(i, pj, k) as f64;
-      }
+    for i in 0..h {
+      for j in 0..w {
+        let pi = i.saturating_sub(1);
+        let pj = j.saturating_sub(1);
 
-      // Accumulate X^T X (outer product x * x^T)
-      for r in 0..n_coeffs {
-        for s in 0..n_coeffs {
-          unsafe {
-            xtx.set(r, s, xtx.get(r, s) + x[r] * x[s]);
+        // When on boundary, use (pi, pj) for neighbor positions to stay causal
+        let (i_above, j_above, i_left, j_left) = if i == 0 || j == 0 {
+          (pi, pj, pi, pj)
+        } else {
+          (pi, j, i, pj)
+        };
+
+        // Position 0: (-1, -1) diagonal above-left
+        for k in 0..c {
+          x[k] = chunk.get(pi, pj, k) as f64;
+        }
+        // Position 1: (-1, 0) directly above
+        for k in 0..c {
+          x[c + k] = chunk.get(i_above, j_above, k) as f64;
+        }
+        // Position 2: (0, -1) directly left
+        for k in 0..c {
+          x[2 * c + k] = chunk.get(i_left, j_left, k) as f64;
+        }
+        // Position 3: (0, 0) current pixel - only channels 0..out_k are causal
+        for k in 0..c {
+          if k < out_k {
+            x[3 * c + k] = chunk.get(i, j, k) as f64;
+          } else {
+            x[3 * c + k] = 0.0; // causally unknown, treat as 0
           }
         }
-      }
 
-      // Accumulate X^T y for each output channel
-      for out_k in 0..c {
+        // Accumulate X^T X
+        for r in 0..n_coeffs {
+          for s in 0..n_coeffs {
+            unsafe {
+              xtx.set(r, s, xtx.get(r, s) + x[r] * x[s]);
+            }
+          }
+        }
+
+        // Accumulate X^T y
         let y = chunk.get(i, j, out_k) as f64;
         for r in 0..n_coeffs {
           unsafe {
-            xty.set(r, out_k, xty.get(r, out_k) + x[r] * y);
+            xty.set(r, 0, xty.get(r, 0) + x[r] * y);
           }
         }
       }
     }
+
+    let coeffs = solve_least_squares(xtx, xty).data;
+    all_coeffs.extend_from_slice(&coeffs);
   }
 
-  let coeffs = solve_least_squares(xtx, xty).data;
-
-  // Quantize weights to i16
-  // The prediction will be: (sum(w_i * x_i) + bias) >> quantization
-  // where x_i are u8 [0, 255] and w_i, bias are i16
-  // We need the worst case sum(|w_i| * 255) + |bias| to fit in i16
-  let n_weights = 3 * c;
-
-  // Find max possible magnitude of (w . x + b) across all output channels
+  // println!("{:?}", all_coeffs);
+  // Quantize weights
   let mut max_magnitude = 0.0f64;
   for out_k in 0..c {
     let mut sum_abs_weights = 0.0f64;
     for r in 0..n_weights {
-      sum_abs_weights += coeffs[r + out_k * n_coeffs].abs();
+      sum_abs_weights += all_coeffs[out_k * n_coeffs + r].abs();
     }
-    let bias = coeffs[n_weights + out_k * n_coeffs];
+    let bias = all_coeffs[out_k * n_coeffs + n_weights];
     let magnitude = sum_abs_weights * 255.0 + bias.abs();
+    if !magnitude.is_finite() {
+      panic!("Non-finite max magnitude in convolution fit");
+    }
     max_magnitude = max_magnitude.max(magnitude);
   }
 
-  // Choose quantization such that max_magnitude * 2^quantization <= 32767
   let quantization = if max_magnitude > 0.0 {
-    ((32767.0 / max_magnitude).log2().floor() as u32).min(15)
+    ((i32::MAX as f64 / max_magnitude).log2().floor() as u32).min(31) - 1
   } else {
-    8
+    16
   };
-  let scale = (1u32 << quantization) as f64;
+  let scale = (1u64 << quantization) as f64;
 
   let mut weights = Vec::with_capacity(n_weights * c);
   let mut biases = Vec::with_capacity(c);
 
-  // Extract and scale weights (rows 0..n_weights for each output channel)
   for out_k in 0..c {
     for r in 0..n_weights {
-      let coeff = coeffs[r + out_k * n_coeffs];
-      weights.push((coeff * scale).round() as i16);
+      let coeff = all_coeffs[out_k * n_coeffs + r];
+      weights.push((coeff * scale).round() as i32);
     }
   }
 
-  // Extract and scale biases (row n_weights = 3*c for each output channel)
   for out_k in 0..c {
-    let coeff = coeffs[n_weights + out_k * n_coeffs];
-    biases.push((coeff * scale).round() as i16);
+    // +0.5, taking into account that our right shift rounds down during prediction
+    let coeff = all_coeffs[out_k * n_coeffs + n_weights] + 0.5;
+    biases.push((coeff * scale).round() as i32 + 0);
   }
+  println!(
+    "{} {:?} {:?}",
+    quantization, &weights, &biases
+  );
 
-  Conv2X2Fit {
-    top_left: (0..c).map(|k| chunk.get(0, 0, k)).collect(),
+  ConvFit {
     quantization,
     weights,
     biases,
   }
 }
 
-pub fn predict<'a>(fit: &Conv2X2Fit, chunk: &ImgView, dst: &ImgViewMut<'a>) {
+/// Apply the fitted convolution to predict values
+pub fn predict(fit: &ConvFit, chunk: &ImgView, dst: &ImgViewMut) {
   let (h, w, c) = chunk.hwc();
-  let n_weights = 3 * c;
+  let n_weights = 4 * c;
 
   for i in 0..h {
     for j in 0..w {
       let pi = i.saturating_sub(1);
       let pj = j.saturating_sub(1);
 
+      let (i_above, j_above, i_left, j_left) = if i == 0 || j == 0 {
+        (pi, pj, pi, pj)
+      } else {
+        (pi, j, i, pj)
+      };
+
       for out_k in 0..c {
-        let mut sum: i16 = 0;
+        let mut sum: i32 = fit.biases[out_k];
+        let w_base = out_k * n_weights;
 
-        // Offset (-1, -1): diagonal above-left
+        // Position 0: (-1, -1)
         for k in 0..c {
-          sum += fit.weights[out_k * n_weights + k].wrapping_mul(chunk.get(pi, pj, k) as i16);
+          sum += fit.weights[w_base + k].wrapping_mul(chunk.get(pi, pj, k) as i32);
         }
-        // Offset (-1, 0): directly above
+        // Position 1: (-1, 0)
         for k in 0..c {
-          sum += fit.weights[out_k * n_weights + c + k].wrapping_mul(chunk.get(pi, j, k) as i16);
+          sum += fit.weights[w_base + c + k].wrapping_mul(chunk.get(i_above, j_above, k) as i32);
         }
-        // Offset (0, -1): directly left
+        // Position 2: (0, -1)
         for k in 0..c {
-          sum +=
-            fit.weights[out_k * n_weights + 2 * c + k].wrapping_mul(chunk.get(i, pj, k) as i16);
+          sum += fit.weights[w_base + 2 * c + k].wrapping_mul(chunk.get(i_left, j_left, k) as i32);
         }
+        // Position 3: (0, 0) - only channels 0..out_k are causal
+        for k in 0..out_k {
+          // Use original values from chunk (same as what fit was trained on)
+          sum += fit.weights[w_base + 3 * c + k].wrapping_mul(chunk.get(i, j, k) as i32);
+        }
+        // Channels out_k..c at (0,0) are 0, so no contribution
 
-        sum += fit.biases[out_k];
         let pred = (sum >> fit.quantization).clamp(0, 255) as u8;
         unsafe {
           dst.set(i, j, out_k, pred);
@@ -154,129 +189,30 @@ mod tests {
   use super::*;
   use crate::img::Img;
 
-  fn apply_fit(fit: &Conv2X2Fit, chunk: &ImgView, i: usize, j: usize, out_k: usize) -> i16 {
-    let (_, _, c) = chunk.hwc();
-    let n_weights = 3 * c;
-    let mut sum: i32 = 0;
-
-    // Offset (-1, -1)
-    for k in 0..c {
-      let w = fit.weights[out_k * n_weights + k] as i32;
-      let x = chunk.get(i - 1, j - 1, k) as i32;
-      sum += w * x;
-    }
-    // Offset (-1, 0)
-    for k in 0..c {
-      let w = fit.weights[out_k * n_weights + c + k] as i32;
-      let x = chunk.get(i - 1, j, k) as i32;
-      sum += w * x;
-    }
-    // Offset (0, -1)
-    for k in 0..c {
-      let w = fit.weights[out_k * n_weights + 2 * c + k] as i32;
-      let x = chunk.get(i, j - 1, k) as i32;
-      sum += w * x;
-    }
-    sum += fit.biases[out_k] as i32;
-
-    // Verify it fits in i16 before shift
-    assert!(
-      sum >= i16::MIN as i32 && sum <= i16::MAX as i32,
-      "sum {} overflows i16",
-      sum
-    );
-
-    sum as i16
-  }
-
   #[test]
-  fn test_fit_2x2_grayscale_gradient() {
-    // Create a simple grayscale gradient image
-    let h = 4;
-    let w = 4;
-    let c = 1;
-    let mut img = Img::empty(h, w, c);
-    // Fill with a gradient: value = i + j
-    for i in 0..h {
-      for j in 0..w {
-        img.values[i * w + j] = (i + j) as u8;
-      }
-    }
-
-    let chunk = img.iter_chunks(h, w).next().unwrap();
-    let fit = fit_2x2(&chunk);
-
-    assert_eq!(fit.weights.len(), 3 * c);
-    assert_eq!(fit.biases.len(), c);
-
-    // Verify predictions stay in i16 bounds
-    let chunk = img.iter_chunks(h, w).next().unwrap();
-    for i in 1..h {
-      for j in 1..w {
-        let pred = apply_fit(&fit, &chunk, i, j, 0);
-        // Just verify no overflow occurred (assert in apply_fit)
-        let _ = pred;
-      }
-    }
-  }
-
-  #[test]
-  fn test_fit_2x2_rgb_constant() {
-    // Create a constant RGB image - should learn zero weights and constant bias
+  fn test_fit_predict_basic() {
     let h = 4;
     let w = 4;
     let c = 3;
     let mut img = Img::empty(h, w, c);
+    // Fill with gradient
     for i in 0..h {
       for j in 0..w {
-        img.values[c * (i * w + j) + 0] = 100; // R
-        img.values[c * (i * w + j) + 1] = 150; // G
-        img.values[c * (i * w + j) + 2] = 200; // B
-      }
-    }
-
-    let chunk = img.iter_chunks(h, w).next().unwrap();
-    let fit = fit_2x2(&chunk);
-
-    assert_eq!(fit.weights.len(), 3 * c * c); // 9 weights per output channel, 3 channels
-    assert_eq!(fit.biases.len(), c);
-
-    // Verify predictions stay in i16 bounds for all channels
-    let chunk = img.iter_chunks(h, w).next().unwrap();
-    for i in 1..h {
-      for j in 1..w {
-        for out_k in 0..c {
-          let pred = apply_fit(&fit, &chunk, i, j, out_k);
-          let _ = pred;
+        for k in 0..c {
+          img.values[c * (i * w + j) + k] = ((i + j + k) * 20) as u8;
         }
       }
     }
-  }
-
-  #[test]
-  fn test_fit_2x2_extreme_values() {
-    // Test with extreme values to verify i16 bounds
-    let h = 4;
-    let w = 4;
-    let c = 1;
-    let mut img = Img::empty(h, w, c);
-    // Checkerboard of 0 and 255
-    for i in 0..h {
-      for j in 0..w {
-        img.values[i * w + j] = if (i + j) % 2 == 0 { 0 } else { 255 };
-      }
-    }
 
     let chunk = img.iter_chunks(h, w).next().unwrap();
-    let fit = fit_2x2(&chunk);
+    let fit_result = fit(&chunk);
 
-    // Verify predictions stay in i16 bounds
-    let chunk = img.iter_chunks(h, w).next().unwrap();
-    for i in 1..h {
-      for j in 1..w {
-        let pred = apply_fit(&fit, &chunk, i, j, 0);
-        let _ = pred;
-      }
-    }
+    assert_eq!(fit_result.weights.len(), 4 * c * c);
+    assert_eq!(fit_result.biases.len(), c);
+
+    // Verify predict doesn't crash
+    let mut out = Img::empty(h, w, c);
+    let out_view = out.as_view_mut(h, w);
+    predict(&fit_result, &chunk, &out_view);
   }
 }

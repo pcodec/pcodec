@@ -2323,6 +2323,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "better_io 0.2.0",
+ "clap",
  "flatbuffers 25.12.19",
  "image",
  "pco 1.0.0",

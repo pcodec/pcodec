@@ -226,6 +226,7 @@ pub fn choose_config<L: Latent>(order: usize, latents: &[L]) -> Option<DeltaConv
     .take(order)
     .map(|x| (x * quantize_factor).round() as i64)
     .collect::<Vec<_>>();
+  // TODO should we add 0.5 to the bias and also round?
   let bias = (float_bias * quantize_factor) as i64;
 
   let config = DeltaConv1Config::new(quantization as Bitlen, bias, weights);
