@@ -1,20 +1,21 @@
-use anyhow::anyhow;
-use std::{
-  env,
-  fs::{self, OpenOptions},
-  io::{self, Cursor, Read, Write},
-  ops::Range,
-};
-
+mod conv;
 mod format_generated;
 mod img;
+
 use anyhow::Result;
+use anyhow::anyhow;
 use better_io::{BetterBufRead, BetterBufReader};
 use flatbuffers::{FlatBufferBuilder, SIZE_SIZEPREFIX};
 use image::{DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgb, RgbImage, RgbaImage};
 use pco::{
   ChunkConfig, ModeSpec,
   wrapped::{FileCompressor, FileDecompressor},
+};
+use std::{
+  env,
+  fs::{self, OpenOptions},
+  io::{self, Cursor, Read, Write},
+  ops::Range,
 };
 
 use crate::{
@@ -23,28 +24,6 @@ use crate::{
   },
   img::Img,
 };
-
-// channel-major
-struct ColorSpaceFit {
-  quantization: u32,
-  weights: Vec<i16>,
-  biases: Vec<i16>,
-}
-
-// fn decorrelate(s: &ImgSlice) -> ColorSpaceFit {
-//   let c = s.img.c;
-//   let mut weights = vec![0; (c * (c - 1)) / 2];
-//   let mut biases = vec![0; c - 1];
-
-//   let mut weight_idx = 0;
-//   for resp in 1..c {
-//     for pred in 0..resp {
-//       weights[weight_idx] = fit[pred];
-//       weight_idx += 1;
-//     }
-//   }
-//   (weights, biases)
-// }
 
 struct Config {
   chunk_h: usize,
@@ -69,10 +48,17 @@ fn write_naegling_into<W: Write>(img: &Img, config: &Config, mut dst: W) -> Resu
   let mut chunks = Vec::with_capacity(nh * nw);
   let mut fbb = FlatBufferBuilder::with_capacity(1024);
   let mut buf = vec![0; chunk_n];
+  let mut scratch = Img::empty(chunk_h, chunk_w, c);
   for chunk in img.iter_chunks(chunk_h, chunk_w) {
+    let scratch_view = scratch.as_view_mut(chunk.h, chunk.w);
     let chunk_n = chunk.n();
+    let fit = conv::fit_2x2(&chunk);
+    conv::predict(&fit, &chunk, &scratch_view);
+    scratch_view.binary_op_in_place(&chunk, |pred, orig| {
+      orig.wrapping_sub(pred).wrapping_add(128)
+    });
     for k in 0..c {
-      chunk.write_flat(k, &mut buf[..chunk_n]);
+      scratch_view.write_flat(k, &mut buf[..chunk_n]);
       let mut cc = fc.chunk_compressor(&buf[..chunk_n], &config)?;
       assert!(cc.n_per_page().len() == 1);
       let mut meta = Vec::with_capacity(cc.meta_size_hint());

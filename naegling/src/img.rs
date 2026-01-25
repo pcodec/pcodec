@@ -21,18 +21,42 @@ impl Img {
     }
   }
 
+  #[inline]
+  pub fn get(&self, i: usize, j: usize, k: usize) -> u8 {
+    self.values[k + self.c * (i * self.w + j)]
+  }
+
+  pub fn as_view<'a>(&'a self, h: usize, w: usize) -> ImgView<'a> {
+    ImgView {
+      img: self,
+      offset: 0,
+      h,
+      w,
+    }
+  }
+
+  pub fn as_view_mut<'a>(&'a mut self, h: usize, w: usize) -> ImgViewMut<'a> {
+    ImgViewMut {
+      img: self as *mut Img,
+      offset: 0,
+      h,
+      w,
+      _phantom: PhantomData,
+    }
+  }
+
   pub fn iter_chunks<'a>(
     &'a self,
     chunk_h: usize,
     chunk_w: usize,
-  ) -> impl Iterator<Item = ImgChunk<'a>> {
+  ) -> impl Iterator<Item = ImgView<'a>> {
     let &Img { h, w, c, .. } = self;
     (0..h).step_by(chunk_h).flat_map(move |i0| {
       let i1 = (i0 + chunk_h).min(h);
       (0..w).step_by(chunk_w).map(move |j0| {
         let j1 = (j0 + chunk_w).min(w);
         let offset = c * (i0 * w + j0);
-        ImgChunk {
+        ImgView {
           img: self,
           offset,
           h: i1 - i0,
@@ -46,7 +70,7 @@ impl Img {
     &'a mut self,
     chunk_h: usize,
     chunk_w: usize,
-  ) -> impl Iterator<Item = ImgChunkMut<'a>> {
+  ) -> impl Iterator<Item = ImgViewMut<'a>> {
     let &mut Img { h, w, c, .. } = self;
     let img = self as *mut Img;
     (0..h).step_by(chunk_h).flat_map(move |i0| {
@@ -54,7 +78,7 @@ impl Img {
       (0..w).step_by(chunk_w).map(move |j0| {
         let j1 = (j0 + chunk_w).min(w);
         let offset = c * (i0 * w + j0);
-        ImgChunkMut {
+        ImgViewMut {
           img,
           offset,
           h: i1 - i0,
@@ -125,53 +149,82 @@ impl Into<DynamicImage> for Img {
 //   }
 // }
 
-pub struct ImgChunk<'a> {
+pub struct ImgView<'a> {
   img: &'a Img,
   offset: usize,
-  h: usize,
-  w: usize,
+  pub h: usize,
+  pub w: usize,
 }
 
-impl<'a> ImgChunk<'a> {
+impl<'a> ImgView<'a> {
+  pub fn hwc(&self) -> (usize, usize, usize) {
+    (self.h, self.w, self.img.c)
+  }
+
   pub fn n(&self) -> usize {
     self.h * self.w
   }
 
-  pub fn write_flat(&self, k: usize, dst: &mut [u8]) {
-    let &ImgChunk { offset, h, w, .. } = self;
-    let img_w = self.img.w;
-    let c = self.img.c;
-    for i in 0..h {
-      for j in 0..w {
-        dst[i * w + j] = self.img.values[offset + k + c * (i * img_w + j)];
-      }
-    }
+  #[inline]
+  pub fn get(&self, i: usize, j: usize, k: usize) -> u8 {
+    self.img.values[self.offset + k + self.img.c * (i * self.img.w + j)]
   }
 }
 
-pub struct ImgChunkMut<'a> {
+pub struct ImgViewMut<'a> {
   img: *mut Img,
   offset: usize,
-  h: usize,
-  w: usize,
+  pub h: usize,
+  pub w: usize,
   _phantom: PhantomData<&'a mut Img>,
 }
 
-impl<'a> ImgChunkMut<'a> {
+impl<'a> ImgViewMut<'a> {
   pub fn n(&self) -> usize {
     self.h * self.w
   }
 
-  pub fn read_flat(&self, k: usize, src: &[u8]) {
-    let &ImgChunkMut { offset, h, w, .. } = self;
-    unsafe {
-      let img = &mut *self.img;
-      let img_w = img.w;
-      let c = img.c;
-      for i in 0..h {
-        for j in 0..w {
-          img.values[offset + k + c * (i * img_w + j)] = src[i * w + j];
+  #[inline]
+  pub unsafe fn set(&self, i: usize, j: usize, k: usize, val: u8) {
+    let img = (&mut *self.img);
+    img.values[self.offset + k + img.c * (i * img.w + j)] = val;
+  }
+
+  pub fn binary_op_in_place(&self, other: &ImgView, op: impl Fn(u8, u8) -> u8) {
+    let &ImgViewMut { offset, h, w, .. } = self;
+    let img = unsafe { &mut *self.img };
+    let other_img = other.img;
+    let other_offset = other.offset;
+    let img_w = img.w;
+    let c = img.c;
+    for i in 0..h {
+      for j in 0..w {
+        for k in 0..c {
+          let self_idx = offset + k + c * (i * img_w + j);
+          let self_value = img.values[self_idx];
+          let other_value = other_img.values[other_offset + k + c * (i * other_img.w + j)];
+          img.values[self_idx] = op(self_value, other_value);
         }
+      }
+    }
+  }
+
+  pub fn read_flat(&self, k: usize, src: &[u8]) {
+    for i in 0..self.h {
+      for j in 0..self.w {
+        unsafe { self.set(i, j, k, src[i * self.w + j]) };
+      }
+    }
+  }
+
+  pub fn write_flat(&self, k: usize, dst: &mut [u8]) {
+    let &ImgViewMut { offset, h, w, .. } = self;
+    let img = unsafe { &*self.img };
+    let img_w = img.w;
+    let c = img.c;
+    for i in 0..h {
+      for j in 0..w {
+        dst[i * w + j] = img.values[offset + k + c * (i * img_w + j)];
       }
     }
   }

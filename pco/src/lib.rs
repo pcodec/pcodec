@@ -25,6 +25,9 @@ pub mod data_types;
 /// for inspecting certain types of Pco metadata
 pub mod describers;
 pub mod errors;
+/// experimental-only utils with no API stability guarantees
+#[cfg(feature = "experimental")]
+pub mod experimental;
 /// structs representing stored information about how compression was done
 pub mod metadata;
 /// for compressing/decompressing .pco files
@@ -47,6 +50,7 @@ mod delta;
 mod dyn_latent_slice;
 mod histograms;
 mod macros;
+mod matrix;
 mod mode;
 mod page_latent_decompressor;
 mod progress;

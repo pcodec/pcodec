@@ -8,4 +8,4 @@ anyhow = { workspace = true }
 better_io = { workspace = true }
 flatbuffers = { workspace = true }
 image = { workspace = true }
-pco = { workspace = true }
+pco = { workspace = true, features = ["experimental"] }
