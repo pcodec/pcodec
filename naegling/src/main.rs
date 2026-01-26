@@ -167,8 +167,8 @@ fn main() -> Result<()> {
   let src_path = &opt.src;
   let dst_path = &opt.dst;
 
-  let ext = src_path.extension().and_then(|e| e.to_str());
-  let img = if matches!(ext, Some("nae")) {
+  let src_ext = src_path.extension().and_then(|e| e.to_str());
+  let img = if matches!(src_ext, Some("nae")) {
     let src = fs::read(src_path)?;
     read_naegling_from(&src)?
   } else {
@@ -181,14 +181,10 @@ fn main() -> Result<()> {
     .write(true)
     .open(dst_path)?;
 
-  let ext = dst_path.extension().and_then(|e| e.to_str());
-  if matches!(ext, Some("nae")) {
-    let img: Img = match img {
-      DynamicImage::ImageRgb8(img) => img.into(),
-      _ => panic!("not prepared for this input image format"),
-    };
-    write_naegling_into(&img, &opt, dst)?;
-  } else if matches!(ext, Some("webp")) {
+  let dst_ext = dst_path.extension().and_then(|e| e.to_str());
+  if matches!(dst_ext, Some("nae")) {
+    write_naegling_into(&img.into(), &opt, dst)?;
+  } else if matches!(dst_ext, Some("webp")) {
     img.write_to(dst, ImageFormat::WebP)?;
   } else {
     panic!();

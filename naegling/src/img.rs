@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use image::{DynamicImage, ImageBuffer, Rgb, RgbImage, RgbaImage};
+use image::{DynamicImage, RgbImage, RgbaImage};
 
 #[derive(Clone)]
 pub struct Img {
@@ -75,13 +75,34 @@ impl Img {
   }
 }
 
-impl From<ImageBuffer<Rgb<u8>, Vec<u8>>> for Img {
-  fn from(value: ImageBuffer<Rgb<u8>, Vec<u8>>) -> Self {
-    Img {
-      h: value.height() as usize,
-      w: value.width() as usize,
-      c: 3,
-      values: value.into_raw(),
+impl From<DynamicImage> for Img {
+  fn from(dyn_img: DynamicImage) -> Self {
+    match dyn_img {
+      DynamicImage::ImageLuma8(img) => Img {
+        h: img.height() as usize,
+        w: img.width() as usize,
+        c: 1,
+        values: img.into_raw(),
+      },
+      DynamicImage::ImageLumaA8(img) => Img {
+        h: img.height() as usize,
+        w: img.width() as usize,
+        c: 2,
+        values: img.into_raw(),
+      },
+      DynamicImage::ImageRgb8(img) => Img {
+        h: img.height() as usize,
+        w: img.width() as usize,
+        c: 3,
+        values: img.into_raw(),
+      },
+      DynamicImage::ImageRgba8(img) => Img {
+        h: img.height() as usize,
+        w: img.width() as usize,
+        c: 4,
+        values: img.into_raw(),
+      },
+      _ => panic!("unsupported input image format"),
     }
   }
 }
