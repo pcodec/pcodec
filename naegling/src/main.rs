@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)]
 mod conv;
 mod format_generated;
 mod img;
@@ -52,12 +53,12 @@ fn write_naegling_into<W: Write>(img: &Img, opt: &Opt, mut dst: W) -> Result<()>
   let fc = FileCompressor::default();
   let mut pco_header = Vec::new();
   fc.write_header(&mut pco_header)?;
-  let chunk_n = (h * w) as usize;
+  let max_chunk_n = chunk_h * chunk_w;
   let nh = h.div_ceil(chunk_h);
   let nw = w.div_ceil(chunk_w);
   let mut chunks = Vec::with_capacity(nh * nw);
   let mut fbb = FlatBufferBuilder::with_capacity(1024);
-  let mut buf = vec![0; chunk_n];
+  let mut buf = vec![0; max_chunk_n];
   let mut scratch_img = Img::empty(chunk_h, chunk_w, c);
   let mut meta = vec![];
   let mut page = vec![];
@@ -109,7 +110,7 @@ fn write_naegling_into<W: Write>(img: &Img, opt: &Opt, mut dst: W) -> Result<()>
   };
   let root = Nae::create(&mut fbb, &args);
   fbb.finish(root, None);
-  dst.write(fbb.finished_data())?;
+  dst.write_all(fbb.finished_data())?;
 
   Ok(())
 }
@@ -186,7 +187,7 @@ fn main() -> Result<()> {
       DynamicImage::ImageRgb8(img) => img.into(),
       _ => panic!("not prepared for this input image format"),
     };
-    write_naegling_into(&img.into(), &opt, dst)?;
+    write_naegling_into(&img, &opt, dst)?;
   } else if matches!(ext, Some("webp")) {
     img.write_to(dst, ImageFormat::WebP)?;
   } else {

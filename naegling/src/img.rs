@@ -20,20 +20,6 @@ impl Img {
     }
   }
 
-  #[inline]
-  pub fn get(&self, i: usize, j: usize, k: usize) -> u8 {
-    self.values[k + self.c * (i * self.w + j)]
-  }
-
-  pub fn as_view<'a>(&'a self, h: usize, w: usize) -> ImgView<'a> {
-    ImgView {
-      img: self,
-      offset: 0,
-      h,
-      w,
-    }
-  }
-
   pub fn as_view_mut<'a>(&'a mut self, h: usize, w: usize) -> ImgViewMut<'a> {
     ImgViewMut {
       img: self as *mut Img,
@@ -100,13 +86,13 @@ impl From<ImageBuffer<Rgb<u8>, Vec<u8>>> for Img {
   }
 }
 
-impl Into<DynamicImage> for Img {
-  fn into(self) -> DynamicImage {
-    let &Img { h, w, c, .. } = &self;
-    if self.c == 3 {
-      DynamicImage::ImageRgb8(RgbImage::from_raw(w as u32, h as u32, self.values).unwrap())
+impl From<Img> for DynamicImage {
+  fn from(img: Img) -> DynamicImage {
+    let &Img { h, w, c, .. } = &img;
+    if img.c == 3 {
+      DynamicImage::ImageRgb8(RgbImage::from_raw(w as u32, h as u32, img.values).unwrap())
     } else if c == 4 {
-      DynamicImage::ImageRgba8(RgbaImage::from_raw(w as u32, h as u32, self.values).unwrap())
+      DynamicImage::ImageRgba8(RgbaImage::from_raw(w as u32, h as u32, img.values).unwrap())
     } else {
       panic!("unknown number of channels");
     }
@@ -165,22 +151,6 @@ impl<'a> ImgViewMut<'a> {
     unsafe {
       let img = &mut *self.img;
       img.values[self.offset + k + img.c * (i * img.w + j)] = val;
-    }
-  }
-
-  pub fn unary_op_in_place(&self, op: impl Fn(u8) -> u8) {
-    let &ImgViewMut { offset, h, w, .. } = self;
-    let img = unsafe { &mut *self.img };
-    let img_w = img.w;
-    let c = img.c;
-    for i in 0..h {
-      for j in 0..w {
-        for k in 0..c {
-          let self_idx = offset + k + c * (i * img_w + j);
-          let self_value = img.values[self_idx];
-          img.values[self_idx] = op(self_value);
-        }
-      }
     }
   }
 
