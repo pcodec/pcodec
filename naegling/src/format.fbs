@@ -1,9 +1,9 @@
 namespace Pcodec.Naegling;
 
-table NaeChunk {
+table NaeChunkChannel {
   quantization: uint32;
   weights: [int16];
-  biases: [int16];
+  bias: int32;
   pco_meta: [ubyte];
   pco_page: [ubyte];
 }
@@ -15,7 +15,7 @@ table Nae {
   chunk_h: uint32;
   chunk_w: uint32;
   pco_header: [ubyte];
-  chunks: [NaeChunk];
+  chunks: [NaeChunkChannel];
 }
 
 root_type Nae;

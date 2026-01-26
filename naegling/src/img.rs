@@ -113,41 +113,6 @@ impl Into<DynamicImage> for Img {
   }
 }
 
-// struct ImgChunkIter<'a> {
-//   img: &'a mut Img,
-//   chunk_h: usize,
-//   chunk_w: usize,
-//   i: usize,
-//   j: usize,
-// }
-
-// impl<'a> Iterator for ImgChunkIter<'a> {
-//   type Item = ImgChunk<'a>;
-
-//   fn next(&mut self) -> Option<Self::Item> {
-//     if self.i >= self.img.h.div_ceil(self.chunk_h) {
-//       return None;
-//     }
-
-//     let w = self.img.w;
-//     let i0 = self.i * self.chunk_h;
-//     let i1 = (i0 + self.chunk_h).min(self.img.h);
-//     let j0 = self.j * self.chunk_w;
-//     let j1 = (j0 + self.chunk_w).min(w);
-
-//     let chunk = self.img.slice(i0..i1, j0..j1);
-
-//     if self.j >= w.div_ceil(self.chunk_w) {
-//       self.j = 0;
-//       self.i += 1;
-//     } else {
-//       self.j += 1;
-//     }
-
-//     Some(chunk)
-//   }
-// }
-
 pub struct ImgView<'a> {
   img: &'a Img,
   offset: usize,
@@ -184,16 +149,20 @@ impl<'a> ImgViewMut<'a> {
   }
 
   #[inline]
-  pub unsafe fn get(&self, i: usize, j: usize, k: usize) -> u8 { unsafe {
-    let img = &*self.img;
-    img.values[self.offset + k + img.c * (i * img.w + j)]
-  }}
+  pub unsafe fn get(&self, i: usize, j: usize, k: usize) -> u8 {
+    unsafe {
+      let img = &*self.img;
+      img.values[self.offset + k + img.c * (i * img.w + j)]
+    }
+  }
 
   #[inline]
-  pub unsafe fn set(&self, i: usize, j: usize, k: usize, val: u8) { unsafe {
-    let img = &mut *self.img;
-    img.values[self.offset + k + img.c * (i * img.w + j)] = val;
-  }}
+  pub unsafe fn set(&self, i: usize, j: usize, k: usize, val: u8) {
+    unsafe {
+      let img = &mut *self.img;
+      img.values[self.offset + k + img.c * (i * img.w + j)] = val;
+    }
+  }
 
   pub fn binary_op_in_place(&self, other: &ImgView, op: impl Fn(u8, u8) -> u8) {
     let &ImgViewMut { offset, h, w, .. } = self;
@@ -214,7 +183,7 @@ impl<'a> ImgViewMut<'a> {
     }
   }
 
-  pub fn read_flat(&self, k: usize, src: &[u8]) {
+  pub fn read_channel_flat(&self, k: usize, src: &[u8]) {
     for i in 0..self.h {
       for j in 0..self.w {
         unsafe { self.set(i, j, k, src[i * self.w + j]) };
@@ -222,7 +191,7 @@ impl<'a> ImgViewMut<'a> {
     }
   }
 
-  pub fn write_flat(&self, k: usize, dst: &mut [u8]) {
+  pub fn write_channel_flat(&self, k: usize, dst: &mut [u8]) {
     let &ImgViewMut { offset, h, w, .. } = self;
     let img = unsafe { &*self.img };
     let img_w = img.w;

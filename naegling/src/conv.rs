@@ -8,23 +8,27 @@ use crate::img::{ImgView, ImgViewMut};
 pub struct ConvFit {
   pub quantization: u32,
   // Per output channel: 4 positions × c channels = 4*c weights
-  // Layout: [weights for ch0, weights for ch1, ...]
   // Position order: (-1,-1), (-1,0), (0,-1), (0,0)
   pub weights: Vec<i32>,
-  pub biases: Vec<i32>,
+  pub bias: i32,
+}
+
+impl ConvFit {
+  pub fn weights_i16(&self) -> Vec<i16> {
+    self.weights.iter().map(|&w| w as i16).collect()
+  }
 }
 
 /// Fit a 2x2 causal convolution including the current pixel.
 /// For output channel k, the current pixel's channels k..c are treated as 0.
-pub fn fit(chunk: &ImgView) -> ConvFit {
+pub fn fit_conv(chunk: &ImgView) -> Vec<ConvFit> {
   let (h, w, c) = chunk.hwc();
   let n_weights = 4 * c; // 4 positions × c channels
   let n_coeffs = n_weights + 1; // + bias
-
-  // We fit a separate regression per output channel since each has different causal mask
-  let mut all_coeffs = Vec::with_capacity(n_coeffs * c);
+  let mut fits = Vec::with_capacity(c);
 
   for out_k in 0..c {
+    // We fit a separate regression per output channel since each has different causal mask
     let mut xtx = Matrix::constant(0.0, n_coeffs, n_coeffs);
     let mut xty = Matrix::constant(0.0, n_coeffs, 1);
     let mut x = vec![0.0f64; n_coeffs];
@@ -83,63 +87,52 @@ pub fn fit(chunk: &ImgView) -> ConvFit {
     }
 
     let coeffs = solve_least_squares(xtx, xty).data;
-    all_coeffs.extend_from_slice(&coeffs);
-  }
 
-  // println!("{:?}", all_coeffs);
-  // Quantize weights
-  let mut max_magnitude = 0.0f64;
-  for out_k in 0..c {
-    let mut sum_abs_weights = 0.0f64;
+    // Quantize weights
+    let mut max_abs_weight = 0.0_f64;
+    let mut sum_abs_weights = 0.0_f64;
     for r in 0..n_weights {
-      sum_abs_weights += all_coeffs[out_k * n_coeffs + r].abs();
+      let abs_weight = coeffs[r].abs();
+      sum_abs_weights += abs_weight;
+      max_abs_weight = max_abs_weight.max(abs_weight);
     }
-    let bias = all_coeffs[out_k * n_coeffs + n_weights];
-    let magnitude = sum_abs_weights * 255.0 + bias.abs();
-    if !magnitude.is_finite() {
+    let bias = coeffs[n_weights];
+    let max_abs_sum = sum_abs_weights * 255.0 + bias.abs();
+    if !max_abs_sum.is_finite() {
       panic!("Non-finite max magnitude in convolution fit");
     }
-    max_magnitude = max_magnitude.max(magnitude);
-  }
 
-  let quantization = if max_magnitude > 0.0 {
-    ((i32::MAX as f64 / max_magnitude).log2().floor() as u32).min(31) - 1
-  } else {
-    16
-  };
-  let scale = (1u64 << quantization) as f64;
+    let mut quantization_bounds = vec![31];
+    if max_abs_weight > 0.0 {
+      // bound to avoid arithmetic overflow
+      quantization_bounds.push((i32::MAX as f64 / max_abs_sum).log2().floor() as u32 - 1);
+      // bound to fit weights in i16
+      quantization_bounds.push((i16::MAX as f64 / max_abs_weight).log2().floor() as u32 - 1);
+    };
+    let quantization = *quantization_bounds.iter().min().unwrap();
+    let scale = (1u64 << quantization) as f64;
 
-  let mut weights = Vec::with_capacity(n_weights * c);
-  let mut biases = Vec::with_capacity(c);
-
-  for out_k in 0..c {
-    for r in 0..n_weights {
-      let coeff = all_coeffs[out_k * n_coeffs + r];
-      weights.push((coeff * scale).round() as i32);
-    }
-  }
-
-  for out_k in 0..c {
+    let weights = coeffs
+      .iter()
+      .take(n_weights)
+      .map(|&coeff| (coeff * scale).round() as i32)
+      .collect::<Vec<_>>();
     // +0.5, taking into account that our right shift rounds down during prediction
-    let coeff = all_coeffs[out_k * n_coeffs + n_weights] + 0.5;
-    biases.push((coeff * scale).round() as i32 + 0);
-  }
-  println!(
-    "{} {:?} {:?}",
-    quantization, &weights, &biases
-  );
+    let bias = ((coeffs[n_weights] + 0.5) * scale).round() as i32;
 
-  ConvFit {
-    quantization,
-    weights,
-    biases,
+    fits.push(ConvFit {
+      quantization,
+      weights,
+      bias,
+    });
   }
+
+  fits
 }
 
 /// Apply the fitted convolution to predict values
-pub fn predict(fit: &ConvFit, chunk: &ImgView, dst: &ImgViewMut) {
+pub fn predict(fits: &[ConvFit], chunk: &ImgView, dst: &ImgViewMut) {
   let (h, w, c) = chunk.hwc();
-  let n_weights = 4 * c;
 
   for i in 0..h {
     for j in 0..w {
@@ -153,25 +146,26 @@ pub fn predict(fit: &ConvFit, chunk: &ImgView, dst: &ImgViewMut) {
       };
 
       for out_k in 0..c {
-        let mut sum: i32 = fit.biases[out_k];
-        let w_base = out_k * n_weights;
+        let fit = &fits[out_k];
+        let weights = &fit.weights;
+        let mut sum: i32 = fit.bias;
 
         // Position 0: (-1, -1)
         for k in 0..c {
-          sum += fit.weights[w_base + k].wrapping_mul(chunk.get(pi, pj, k) as i32);
+          sum += weights[k].wrapping_mul(chunk.get(pi, pj, k) as i32);
         }
         // Position 1: (-1, 0)
         for k in 0..c {
-          sum += fit.weights[w_base + c + k].wrapping_mul(chunk.get(i_above, j_above, k) as i32);
+          sum += weights[c + k].wrapping_mul(chunk.get(i_above, j_above, k) as i32);
         }
         // Position 2: (0, -1)
         for k in 0..c {
-          sum += fit.weights[w_base + 2 * c + k].wrapping_mul(chunk.get(i_left, j_left, k) as i32);
+          sum += weights[2 * c + k].wrapping_mul(chunk.get(i_left, j_left, k) as i32);
         }
         // Position 3: (0, 0) - only channels 0..out_k are causal
         for k in 0..out_k {
-          // Use original values from chunk (same as what fit was trained on)
-          sum += fit.weights[w_base + 3 * c + k].wrapping_mul(chunk.get(i, j, k) as i32);
+          // Use original values from chunk (same as what was trained on)
+          sum += weights[3 * c + k].wrapping_mul(chunk.get(i, j, k) as i32);
         }
         // Channels out_k..c at (0,0) are 0, so no contribution
 
@@ -205,14 +199,14 @@ mod tests {
     }
 
     let chunk = img.iter_chunks(h, w).next().unwrap();
-    let fit_result = fit(&chunk);
+    let fits = fit_conv(&chunk);
 
-    assert_eq!(fit_result.weights.len(), 4 * c * c);
-    assert_eq!(fit_result.biases.len(), c);
+    assert_eq!(fits.len(), c);
+    assert_eq!(fits[0].weights.len(), 4 * c);
 
     // Verify predict doesn't crash
     let mut out = Img::empty(h, w, c);
     let out_view = out.as_view_mut(h, w);
-    predict(&fit_result, &chunk, &out_view);
+    predict(&fits, &chunk, &out_view);
   }
 }

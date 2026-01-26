@@ -10,41 +10,41 @@ pub mod pcodec {
 pub mod naegling {
 
 
-pub enum NaeChunkOffset {}
+pub enum NaeChunkChannelOffset {}
 #[derive(Copy, Clone, PartialEq)]
 
-pub struct NaeChunk<'a> {
+pub struct NaeChunkChannel<'a> {
   pub _tab: ::flatbuffers::Table<'a>,
 }
 
-impl<'a> ::flatbuffers::Follow<'a> for NaeChunk<'a> {
-  type Inner = NaeChunk<'a>;
+impl<'a> ::flatbuffers::Follow<'a> for NaeChunkChannel<'a> {
+  type Inner = NaeChunkChannel<'a>;
   #[inline]
   unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
     Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
   }
 }
 
-impl<'a> NaeChunk<'a> {
+impl<'a> NaeChunkChannel<'a> {
   pub const VT_QUANTIZATION: ::flatbuffers::VOffsetT = 4;
   pub const VT_WEIGHTS: ::flatbuffers::VOffsetT = 6;
-  pub const VT_BIASES: ::flatbuffers::VOffsetT = 8;
+  pub const VT_BIAS: ::flatbuffers::VOffsetT = 8;
   pub const VT_PCO_META: ::flatbuffers::VOffsetT = 10;
   pub const VT_PCO_PAGE: ::flatbuffers::VOffsetT = 12;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-    NaeChunk { _tab: table }
+    NaeChunkChannel { _tab: table }
   }
   #[allow(unused_mut)]
   pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
     _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-    args: &'args NaeChunkArgs<'args>
-  ) -> ::flatbuffers::WIPOffset<NaeChunk<'bldr>> {
-    let mut builder = NaeChunkBuilder::new(_fbb);
+    args: &'args NaeChunkChannelArgs<'args>
+  ) -> ::flatbuffers::WIPOffset<NaeChunkChannel<'bldr>> {
+    let mut builder = NaeChunkChannelBuilder::new(_fbb);
     if let Some(x) = args.pco_page { builder.add_pco_page(x); }
     if let Some(x) = args.pco_meta { builder.add_pco_meta(x); }
-    if let Some(x) = args.biases { builder.add_biases(x); }
+    builder.add_bias(args.bias);
     if let Some(x) = args.weights { builder.add_weights(x); }
     builder.add_quantization(args.quantization);
     builder.finish()
@@ -56,39 +56,39 @@ impl<'a> NaeChunk<'a> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<u32>(NaeChunk::VT_QUANTIZATION, Some(0)).unwrap()}
+    unsafe { self._tab.get::<u32>(NaeChunkChannel::VT_QUANTIZATION, Some(0)).unwrap()}
   }
   #[inline]
   pub fn weights(&self) -> Option<::flatbuffers::Vector<'a, i16>> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, i16>>>(NaeChunk::VT_WEIGHTS, None)}
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, i16>>>(NaeChunkChannel::VT_WEIGHTS, None)}
   }
   #[inline]
-  pub fn biases(&self) -> Option<::flatbuffers::Vector<'a, i16>> {
+  pub fn bias(&self) -> i32 {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, i16>>>(NaeChunk::VT_BIASES, None)}
+    unsafe { self._tab.get::<i32>(NaeChunkChannel::VT_BIAS, Some(0)).unwrap()}
   }
   #[inline]
   pub fn pco_meta(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(NaeChunk::VT_PCO_META, None)}
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(NaeChunkChannel::VT_PCO_META, None)}
   }
   #[inline]
   pub fn pco_page(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(NaeChunk::VT_PCO_PAGE, None)}
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(NaeChunkChannel::VT_PCO_PAGE, None)}
   }
 }
 
-impl ::flatbuffers::Verifiable for NaeChunk<'_> {
+impl ::flatbuffers::Verifiable for NaeChunkChannel<'_> {
   #[inline]
   fn run_verifier(
     v: &mut ::flatbuffers::Verifier, pos: usize
@@ -96,79 +96,79 @@ impl ::flatbuffers::Verifiable for NaeChunk<'_> {
     v.visit_table(pos)?
      .visit_field::<u32>("quantization", Self::VT_QUANTIZATION, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, i16>>>("weights", Self::VT_WEIGHTS, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, i16>>>("biases", Self::VT_BIASES, false)?
+     .visit_field::<i32>("bias", Self::VT_BIAS, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("pco_meta", Self::VT_PCO_META, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("pco_page", Self::VT_PCO_PAGE, false)?
      .finish();
     Ok(())
   }
 }
-pub struct NaeChunkArgs<'a> {
+pub struct NaeChunkChannelArgs<'a> {
     pub quantization: u32,
     pub weights: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, i16>>>,
-    pub biases: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, i16>>>,
+    pub bias: i32,
     pub pco_meta: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
     pub pco_page: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
 }
-impl<'a> Default for NaeChunkArgs<'a> {
+impl<'a> Default for NaeChunkChannelArgs<'a> {
   #[inline]
   fn default() -> Self {
-    NaeChunkArgs {
+    NaeChunkChannelArgs {
       quantization: 0,
       weights: None,
-      biases: None,
+      bias: 0,
       pco_meta: None,
       pco_page: None,
     }
   }
 }
 
-pub struct NaeChunkBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+pub struct NaeChunkChannelBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
   fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
   start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
 }
-impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> NaeChunkBuilder<'a, 'b, A> {
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> NaeChunkChannelBuilder<'a, 'b, A> {
   #[inline]
   pub fn add_quantization(&mut self, quantization: u32) {
-    self.fbb_.push_slot::<u32>(NaeChunk::VT_QUANTIZATION, quantization, 0);
+    self.fbb_.push_slot::<u32>(NaeChunkChannel::VT_QUANTIZATION, quantization, 0);
   }
   #[inline]
   pub fn add_weights(&mut self, weights: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , i16>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunk::VT_WEIGHTS, weights);
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunkChannel::VT_WEIGHTS, weights);
   }
   #[inline]
-  pub fn add_biases(&mut self, biases: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , i16>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunk::VT_BIASES, biases);
+  pub fn add_bias(&mut self, bias: i32) {
+    self.fbb_.push_slot::<i32>(NaeChunkChannel::VT_BIAS, bias, 0);
   }
   #[inline]
   pub fn add_pco_meta(&mut self, pco_meta: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunk::VT_PCO_META, pco_meta);
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunkChannel::VT_PCO_META, pco_meta);
   }
   #[inline]
   pub fn add_pco_page(&mut self, pco_page: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunk::VT_PCO_PAGE, pco_page);
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(NaeChunkChannel::VT_PCO_PAGE, pco_page);
   }
   #[inline]
-  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> NaeChunkBuilder<'a, 'b, A> {
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> NaeChunkChannelBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
-    NaeChunkBuilder {
+    NaeChunkChannelBuilder {
       fbb_: _fbb,
       start_: start,
     }
   }
   #[inline]
-  pub fn finish(self) -> ::flatbuffers::WIPOffset<NaeChunk<'a>> {
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<NaeChunkChannel<'a>> {
     let o = self.fbb_.end_table(self.start_);
     ::flatbuffers::WIPOffset::new(o.value())
   }
 }
 
-impl ::core::fmt::Debug for NaeChunk<'_> {
+impl ::core::fmt::Debug for NaeChunkChannel<'_> {
   fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-    let mut ds = f.debug_struct("NaeChunk");
+    let mut ds = f.debug_struct("NaeChunkChannel");
       ds.field("quantization", &self.quantization());
       ds.field("weights", &self.weights());
-      ds.field("biases", &self.biases());
+      ds.field("bias", &self.bias());
       ds.field("pco_meta", &self.pco_meta());
       ds.field("pco_page", &self.pco_page());
       ds.finish()
@@ -262,11 +262,11 @@ impl<'a> Nae<'a> {
     unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(Nae::VT_PCO_HEADER, None)}
   }
   #[inline]
-  pub fn chunks(&self) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<NaeChunk<'a>>>> {
+  pub fn chunks(&self) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<NaeChunkChannel<'a>>>> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<NaeChunk>>>>(Nae::VT_CHUNKS, None)}
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<NaeChunkChannel>>>>(Nae::VT_CHUNKS, None)}
   }
 }
 
@@ -282,7 +282,7 @@ impl ::flatbuffers::Verifiable for Nae<'_> {
      .visit_field::<u32>("chunk_h", Self::VT_CHUNK_H, false)?
      .visit_field::<u32>("chunk_w", Self::VT_CHUNK_W, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("pco_header", Self::VT_PCO_HEADER, false)?
-     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<NaeChunk>>>>("chunks", Self::VT_CHUNKS, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<NaeChunkChannel>>>>("chunks", Self::VT_CHUNKS, false)?
      .finish();
     Ok(())
   }
@@ -294,7 +294,7 @@ pub struct NaeArgs<'a> {
     pub chunk_h: u32,
     pub chunk_w: u32,
     pub pco_header: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
-    pub chunks: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<NaeChunk<'a>>>>>,
+    pub chunks: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<NaeChunkChannel<'a>>>>>,
 }
 impl<'a> Default for NaeArgs<'a> {
   #[inline]
@@ -341,7 +341,7 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> NaeBuilder<'a, 'b, A> {
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Nae::VT_PCO_HEADER, pco_header);
   }
   #[inline]
-  pub fn add_chunks(&mut self, chunks: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , ::flatbuffers::ForwardsUOffset<NaeChunk<'b >>>>) {
+  pub fn add_chunks(&mut self, chunks: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , ::flatbuffers::ForwardsUOffset<NaeChunkChannel<'b >>>>) {
     self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Nae::VT_CHUNKS, chunks);
   }
   #[inline]

@@ -97,6 +97,13 @@ impl Matrix {
           let xjk = if diag_value.abs() >= 1E-12 {
             y.get(j, k) / diag_value
           } else {
+            assert!(
+              y.get(j, k).abs() < 1E-10,
+              "back substitution: divisor {} << {}",
+              diag_value,
+              y.get(j, k)
+            );
+            // assert!(y.get(j, k).abs() < 1E-12);
             0.0
           };
           y.set(j, k, xjk);
@@ -124,6 +131,12 @@ impl Matrix {
           let xjk = if diag_value.abs() >= 1E-12 {
             y.get(j, k) / diag_value
           } else {
+            assert!(
+              y.get(j, k).abs() < 1E-10,
+              "forward substitution: divisor {} << {}",
+              diag_value,
+              y.get(j, k)
+            );
             0.0
           };
           y.set(j, k, xjk);
@@ -210,7 +223,6 @@ mod tests {
     ]);
     let x = a.transposed_backward_sub_into(y);
     let expected = vec![1.25, -0.5];
-    println!("{:?}", x.data);
     for i in 0..expected.len() {
       assert!((x.data[i] - expected[i]).abs() < 1E-6);
     }
