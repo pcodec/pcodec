@@ -1,6 +1,7 @@
 namespace Pcodec.Naegling;
 
 table NaeChunkChannel {
+  top_left: ubyte;
   quantization: uint32;
   weights: [int16];
   bias: int32;

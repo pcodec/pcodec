@@ -144,12 +144,16 @@ pub struct ImgViewMut<'a> {
 }
 
 impl<'a> ImgViewMut<'a> {
+  pub fn hwc(&self) -> (usize, usize, usize) {
+    (self.h, self.w, unsafe { (*self.img).c })
+  }
+
   pub fn n(&self) -> usize {
     self.h * self.w
   }
 
   #[inline]
-  pub unsafe fn get(&self, i: usize, j: usize, k: usize) -> u8 {
+  pub fn get(&self, i: usize, j: usize, k: usize) -> u8 {
     unsafe {
       let img = &*self.img;
       img.values[self.offset + k + img.c * (i * img.w + j)]
@@ -157,10 +161,26 @@ impl<'a> ImgViewMut<'a> {
   }
 
   #[inline]
-  pub unsafe fn set(&self, i: usize, j: usize, k: usize, val: u8) {
+  pub fn set(&self, i: usize, j: usize, k: usize, val: u8) {
     unsafe {
       let img = &mut *self.img;
       img.values[self.offset + k + img.c * (i * img.w + j)] = val;
+    }
+  }
+
+  pub fn unary_op_in_place(&self, op: impl Fn(u8) -> u8) {
+    let &ImgViewMut { offset, h, w, .. } = self;
+    let img = unsafe { &mut *self.img };
+    let img_w = img.w;
+    let c = img.c;
+    for i in 0..h {
+      for j in 0..w {
+        for k in 0..c {
+          let self_idx = offset + k + c * (i * img_w + j);
+          let self_value = img.values[self_idx];
+          img.values[self_idx] = op(self_value);
+        }
+      }
     }
   }
 
@@ -186,7 +206,7 @@ impl<'a> ImgViewMut<'a> {
   pub fn read_channel_flat(&self, k: usize, src: &[u8]) {
     for i in 0..self.h {
       for j in 0..self.w {
-        unsafe { self.set(i, j, k, src[i * self.w + j]) };
+        self.set(i, j, k, src[i * self.w + j]);
       }
     }
   }

@@ -26,11 +26,12 @@ impl<'a> ::flatbuffers::Follow<'a> for NaeChunkChannel<'a> {
 }
 
 impl<'a> NaeChunkChannel<'a> {
-  pub const VT_QUANTIZATION: ::flatbuffers::VOffsetT = 4;
-  pub const VT_WEIGHTS: ::flatbuffers::VOffsetT = 6;
-  pub const VT_BIAS: ::flatbuffers::VOffsetT = 8;
-  pub const VT_PCO_META: ::flatbuffers::VOffsetT = 10;
-  pub const VT_PCO_PAGE: ::flatbuffers::VOffsetT = 12;
+  pub const VT_TOP_LEFT: ::flatbuffers::VOffsetT = 4;
+  pub const VT_QUANTIZATION: ::flatbuffers::VOffsetT = 6;
+  pub const VT_WEIGHTS: ::flatbuffers::VOffsetT = 8;
+  pub const VT_BIAS: ::flatbuffers::VOffsetT = 10;
+  pub const VT_PCO_META: ::flatbuffers::VOffsetT = 12;
+  pub const VT_PCO_PAGE: ::flatbuffers::VOffsetT = 14;
 
   #[inline]
   pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -47,10 +48,18 @@ impl<'a> NaeChunkChannel<'a> {
     builder.add_bias(args.bias);
     if let Some(x) = args.weights { builder.add_weights(x); }
     builder.add_quantization(args.quantization);
+    builder.add_top_left(args.top_left);
     builder.finish()
   }
 
 
+  #[inline]
+  pub fn top_left(&self) -> u8 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u8>(NaeChunkChannel::VT_TOP_LEFT, Some(0)).unwrap()}
+  }
   #[inline]
   pub fn quantization(&self) -> u32 {
     // Safety:
@@ -94,6 +103,7 @@ impl ::flatbuffers::Verifiable for NaeChunkChannel<'_> {
     v: &mut ::flatbuffers::Verifier, pos: usize
   ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
     v.visit_table(pos)?
+     .visit_field::<u8>("top_left", Self::VT_TOP_LEFT, false)?
      .visit_field::<u32>("quantization", Self::VT_QUANTIZATION, false)?
      .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, i16>>>("weights", Self::VT_WEIGHTS, false)?
      .visit_field::<i32>("bias", Self::VT_BIAS, false)?
@@ -104,6 +114,7 @@ impl ::flatbuffers::Verifiable for NaeChunkChannel<'_> {
   }
 }
 pub struct NaeChunkChannelArgs<'a> {
+    pub top_left: u8,
     pub quantization: u32,
     pub weights: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, i16>>>,
     pub bias: i32,
@@ -114,6 +125,7 @@ impl<'a> Default for NaeChunkChannelArgs<'a> {
   #[inline]
   fn default() -> Self {
     NaeChunkChannelArgs {
+      top_left: 0,
       quantization: 0,
       weights: None,
       bias: 0,
@@ -128,6 +140,10 @@ pub struct NaeChunkChannelBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> 
   start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
 }
 impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> NaeChunkChannelBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_top_left(&mut self, top_left: u8) {
+    self.fbb_.push_slot::<u8>(NaeChunkChannel::VT_TOP_LEFT, top_left, 0);
+  }
   #[inline]
   pub fn add_quantization(&mut self, quantization: u32) {
     self.fbb_.push_slot::<u32>(NaeChunkChannel::VT_QUANTIZATION, quantization, 0);
@@ -166,6 +182,7 @@ impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> NaeChunkChannelBuilder<'a, 'b
 impl ::core::fmt::Debug for NaeChunkChannel<'_> {
   fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
     let mut ds = f.debug_struct("NaeChunkChannel");
+      ds.field("top_left", &self.top_left());
       ds.field("quantization", &self.quantization());
       ds.field("weights", &self.weights());
       ds.field("bias", &self.bias());

@@ -3,6 +3,7 @@ mod format_generated;
 mod img;
 
 use crate::{
+  conv::ConvFit,
   format_generated::pcodec::naegling::{self, Nae, NaeArgs, NaeChunkChannel, NaeChunkChannelArgs},
   img::Img,
 };
@@ -70,10 +71,10 @@ fn write_naegling_into<W: Write>(img: &Img, opt: &Opt, mut dst: W) -> Result<()>
     pred_view.binary_op_in_place(&chunk, |pred, orig| {
       orig.wrapping_sub(pred).wrapping_add(128)
     });
-    let residual_view = pred_view;
+    let centered_residual_view = pred_view;
     let chunk_n = chunk.n();
     for k in 0..c {
-      residual_view.write_channel_flat(k, &mut buf[..chunk_n]);
+      centered_residual_view.write_channel_flat(k, &mut buf[..chunk_n]);
       let mut cc = fc.chunk_compressor(&buf[..chunk_n], &config)?;
       assert!(cc.n_per_page().len() == 1);
       cc.write_meta(&mut meta)?;
@@ -81,7 +82,8 @@ fn write_naegling_into<W: Write>(img: &Img, opt: &Opt, mut dst: W) -> Result<()>
 
       let fit = &fits[k];
       let chunk_args = NaeChunkChannelArgs {
-        quantization: 0,
+        top_left: fit.top_left,
+        quantization: fit.quantization,
         weights: Some(fbb.create_vector(&fit.weights_i16())),
         bias: fit.bias,
         pco_meta: Some(fbb.create_vector(&meta)),
@@ -113,19 +115,20 @@ fn write_naegling_into<W: Write>(img: &Img, opt: &Opt, mut dst: W) -> Result<()>
 }
 
 fn read_naegling_from(src: &[u8]) -> Result<DynamicImage> {
-  let header = naegling::root_as_nae(src).unwrap();
-  let h = header.h() as usize;
-  let w = header.w() as usize;
-  let c = header.c() as usize;
-  let chunk_h = header.chunk_h() as usize;
-  let chunk_w = header.chunk_w() as usize;
-  let (fd, _) = FileDecompressor::new(header.pco_header().unwrap().bytes())?;
-  let mut buf = vec![0; chunk_h * chunk_w];
+  let nae = naegling::root_as_nae(src).unwrap();
+  let h = nae.h() as usize;
+  let w = nae.w() as usize;
+  let c = nae.c() as usize;
+  let chunk_h = nae.chunk_h() as usize;
+  let chunk_w = nae.chunk_w() as usize;
+  let (fd, _) = FileDecompressor::new(nae.pco_header().unwrap().bytes())?;
+  let mut buf = vec![0_u8; chunk_h * chunk_w];
   let mut img = Img::empty(h, w, c);
   let mut channel_chunk_idx = 0;
-  let compressed_chunks = header.chunks().unwrap();
-  for residual_chunk in img.iter_chunks_mut(chunk_h, chunk_w) {
-    let chunk_n = residual_chunk.n();
+  let compressed_chunks = nae.chunks().unwrap();
+  for dst_view in img.iter_chunks_mut(chunk_h, chunk_w) {
+    let chunk_n = dst_view.n();
+    let mut fits = Vec::with_capacity(c);
     for k in 0..c {
       let compressed_chunk = &compressed_chunks.get(channel_chunk_idx);
       let (mut cd, _) = fd.chunk_decompressor(compressed_chunk.pco_meta().unwrap().bytes())?;
@@ -133,11 +136,26 @@ fn read_naegling_from(src: &[u8]) -> Result<DynamicImage> {
       let mut pd = cd.page_decompressor(page_bytes, chunk_n)?;
       let progress = pd.read(&mut buf[..chunk_n])?;
       assert!(progress.finished);
-      residual_chunk.read_channel_flat(k, &buf[..chunk_n]);
-
-      // TODO apply causal conv
+      for centered_residual in buf[..chunk_n].iter_mut() {
+        *centered_residual = centered_residual.wrapping_sub(128);
+      }
+      dst_view.read_channel_flat(k, &buf[..chunk_n]);
+      fits.push(ConvFit {
+        top_left: compressed_chunk.top_left(),
+        quantization: compressed_chunk.quantization(),
+        weights: compressed_chunk
+          .weights()
+          .unwrap()
+          .iter()
+          .map(|x| x as i32)
+          .collect(),
+        bias: compressed_chunk.bias(),
+      });
       channel_chunk_idx += 1;
     }
+
+    // now dst_view is residuals
+    conv::decode(&fits, &dst_view);
   }
 
   Ok(img.into())

@@ -6,6 +6,7 @@ use crate::img::{ImgView, ImgViewMut};
 
 #[derive(Clone, Debug)]
 pub struct ConvFit {
+  pub top_left: u8,
   pub quantization: u32,
   // Per output channel: 4 positions × c channels = 4*c weights
   // Position order: (-1,-1), (-1,0), (0,-1), (0,0)
@@ -121,6 +122,7 @@ pub fn fit_conv(chunk: &ImgView) -> Vec<ConvFit> {
     let bias = ((coeffs[n_weights] + 0.5) * scale).round() as i32;
 
     fits.push(ConvFit {
+      top_left: chunk.get(0, 0, out_k),
       quantization,
       weights,
       bias,
@@ -170,9 +172,64 @@ pub fn predict(fits: &[ConvFit], chunk: &ImgView, dst: &ImgViewMut) {
         // Channels out_k..c at (0,0) are 0, so no contribution
 
         let pred = (sum >> fit.quantization).clamp(0, 255) as u8;
-        unsafe {
-          dst.set(i, j, out_k, pred);
+        dst.set(i, j, out_k, pred);
+      }
+    }
+  }
+
+  for out_k in 0..c {
+    dst.set(0, 0, out_k, fits[out_k].top_left);
+  }
+}
+
+/// Decode one pixel channel at a time, reconstructing original values from residuals.
+/// Uses top_left from each ConvFit for the initial pixel and computes predictions
+/// from already-decoded values in dst.
+pub fn decode(fits: &[ConvFit], dst: &ImgViewMut) {
+  let (h, w, c) = dst.hwc();
+
+  // Initialize top-left corner for all channels (residuals assumed to be 0)
+  for out_k in 0..c {
+    dst.set(0, 0, out_k, fits[out_k].top_left);
+  }
+
+  for i in 0..h {
+    let jmin = if i == 0 { 1 } else { 0 };
+    for j in jmin..w {
+      let pi = i.saturating_sub(1);
+      let pj = j.saturating_sub(1);
+
+      let (i_above, j_above, i_left, j_left) = if i == 0 || j == 0 {
+        (pi, pj, pi, pj)
+      } else {
+        (pi, j, i, pj)
+      };
+
+      for out_k in 0..c {
+        let fit = &fits[out_k];
+        let weights = &fit.weights;
+        let mut sum: i32 = fit.bias;
+
+        // Position 0: (-1, -1) - use already-decoded values from dst
+        for k in 0..c {
+          sum += weights[k].wrapping_mul(dst.get(pi, pj, k) as i32);
         }
+        // Position 1: (-1, 0) - use already-decoded values from dst
+        for k in 0..c {
+          sum += weights[c + k].wrapping_mul(dst.get(i_above, j_above, k) as i32);
+        }
+        // Position 2: (0, -1) - use already-decoded values from dst
+        for k in 0..c {
+          sum += weights[2 * c + k].wrapping_mul(dst.get(i_left, j_left, k) as i32);
+        }
+        // Position 3: (0, 0) - only channels 0..out_k are causal (already decoded)
+        for k in 0..out_k {
+          sum += weights[3 * c + k].wrapping_mul(dst.get(i, j, k) as i32);
+        }
+
+        let pred = (sum >> fit.quantization).clamp(0, 255) as u8;
+        let decoded = pred.wrapping_add(dst.get(i, j, out_k));
+        dst.set(i, j, out_k, decoded);
       }
     }
   }
