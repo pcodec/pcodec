@@ -93,6 +93,7 @@ pub struct ChunkLatentCompressor<L: Latent> {
 }
 
 impl<L: Latent> ChunkLatentCompressor<L> {
+  #[inline(never)]
   pub fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Box<Self>> {
     let needs_ans = bins.len() != 1;
 

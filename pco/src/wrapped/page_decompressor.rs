@@ -85,13 +85,13 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
   }
 }
 
-fn read_primary_or_secondary<'a, R: BetterBufRead>(
+fn read_primary_or_secondary<R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   delta_latents: Option<DynLatentSlice>,
   n_remaining: usize,
-  dyn_cld: &'a mut DynChunkLatentDecompressor,
-  dyn_pld: &'a mut DynPageLatentDecompressor,
-) -> PcoResult<DynLatentSlice<'a>> {
+  dyn_cld: &mut DynChunkLatentDecompressor,
+  dyn_pld: &mut DynPageLatentDecompressor,
+) -> PcoResult<()> {
   reader_builder.with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
     match_latent_enum!(
       dyn_pld,
@@ -106,18 +106,16 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
       }
     )
   })?;
-  Ok(dyn_cld.latents())
+  Ok(())
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
-  fn read_batch<T: Number>(
+  fn read_latents(
     &mut self,
+    batch_n: usize,
+    n_remaining: usize,
     cd: &mut ChunkDecompressorInner,
-    dst: &mut [T],
   ) -> PcoResult<()> {
-    let batch_n = dst.len();
-    let n_remaining = self.n_remaining;
-
     // DELTA LATENTS
     if let Some(dyn_pld) = self.latent_decompressors.delta.as_mut() {
       let limit = min(
@@ -146,7 +144,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     }
 
     // PRIMARY AND SECONDARY LATENTS
-    let primary = read_primary_or_secondary(
+    read_primary_or_secondary(
       &mut self.reader_builder,
       cd.per_latent_var.delta.as_mut().map(|cld| cld.latents()),
       n_remaining,
@@ -154,7 +152,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       &mut self.latent_decompressors.primary,
     )?;
 
-    let secondary = match self.latent_decompressors.secondary.as_mut() {
+    match self.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(read_primary_or_secondary(
         &mut self.reader_builder,
         cd.per_latent_var.delta.as_mut().map(|cld| cld.latents()),
@@ -165,8 +163,10 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       None => None,
     };
 
-    T::join_latents(&cd.meta.mode, primary, secondary, dst)?;
+    Ok(())
+  }
 
+  fn finish_batch(&mut self, batch_n: usize) -> PcoResult<()> {
     self.n_remaining -= batch_n;
     if self.n_remaining == 0 {
       self.reader_builder.with_reader(1, |reader| {
@@ -177,23 +177,48 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     Ok(())
   }
 
+  fn read_batch<T: Number>(
+    &mut self,
+    cd: &mut ChunkDecompressorInner,
+    dst: &mut [T],
+  ) -> PcoResult<()> {
+    let batch_n = dst.len();
+    let n_remaining = self.n_remaining;
+
+    self.read_latents(batch_n, n_remaining, cd)?;
+
+    T::join_latents(
+      &cd.meta.mode,
+      cd.per_latent_var.primary.latents(),
+      cd.per_latent_var
+        .secondary
+        .as_mut()
+        .map(|cld| cld.latents()),
+      dst,
+    )?;
+
+    self.finish_batch(batch_n)
+  }
+
+  fn n_to_process(&self, dst_len: usize) -> PcoResult<usize> {
+    let n_remaining = self.n_remaining;
+    if !dst_len.is_multiple_of(FULL_BATCH_N) && dst_len < n_remaining {
+      return Err(PcoError::invalid_argument(format!(
+        "num_dst's length must either be a multiple of {} or be \
+         at least the count of numbers remaining ({} < {})",
+        FULL_BATCH_N, dst_len, n_remaining,
+      )));
+    }
+
+    Ok(min(dst_len, self.n_remaining))
+  }
+
   pub fn read<T: Number>(
     &mut self,
     cd: &mut ChunkDecompressorInner,
     num_dst: &mut [T],
   ) -> PcoResult<Progress> {
-    let n_remaining = self.n_remaining;
-    if !num_dst.len().is_multiple_of(FULL_BATCH_N) && num_dst.len() < n_remaining {
-      return Err(PcoError::invalid_argument(format!(
-        "num_dst's length must either be a multiple of {} or be \
-         at least the count of numbers remaining ({} < {})",
-        FULL_BATCH_N,
-        num_dst.len(),
-        n_remaining,
-      )));
-    }
-
-    let n_to_process = min(num_dst.len(), n_remaining);
+    let n_to_process = self.n_to_process(num_dst.len())?;
 
     let mut n_processed = 0;
     while n_processed < n_to_process {

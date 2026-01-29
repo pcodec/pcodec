@@ -48,16 +48,16 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
 
     let only_bin = if bins.len() == 1 { Some(bins[0]) } else { None };
 
-    let mut offset_bits_csum_scratch = ScratchArray([0; FULL_BATCH_N]);
-    let mut offset_bits_scratch = ScratchArray([0; FULL_BATCH_N]);
+    let mut offset_bits_csum = ScratchArray([0; FULL_BATCH_N]);
+    let mut offset_bits = ScratchArray([0; FULL_BATCH_N]);
     let mut latents = ScratchArray([L::ZERO; FULL_BATCH_N]);
 
     if let Some(bin) = &only_bin {
       // we optimize performance by setting state once and never again
       let mut csum = 0;
       for i in 0..FULL_BATCH_N {
-        offset_bits_scratch[i] = bin.offset_bits;
-        offset_bits_csum_scratch[i] = csum;
+        offset_bits[i] = bin.offset_bits;
+        offset_bits_csum[i] = csum;
         latents[i] = bin.lower;
         csum += bin.offset_bits;
       }
@@ -70,8 +70,8 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       decoder,
       delta_encoding,
       scratch: ChunkLatentDecompressorScratch {
-        offset_bits_csum: offset_bits_csum_scratch,
-        offset_bits: offset_bits_scratch,
+        offset_bits_csum,
+        offset_bits,
         latents,
       },
     }))

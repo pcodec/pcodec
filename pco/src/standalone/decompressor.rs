@@ -170,23 +170,18 @@ impl FileDecompressor {
     }
   }
 
-  /// Reads a chunk's metadata and returns either a `ChunkDecompressor` or
-  /// the rest of the source if at the end of the pco file.
-  ///
-  /// Will return an error if corruptions or insufficient
-  /// data are found.
-  pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
+  // returns (n, is_terminated, rest)
+  fn chunk_preamble<R: BetterBufRead>(
     &self,
     src: R,
-  ) -> PcoResult<DecompressorItem<T, R>> {
+    expected_type_byte: u8,
+  ) -> PcoResult<(usize, bool, R)> {
     let mut reader_builder = BitReaderBuilder::new(src);
     let type_or_termination_byte = reader_builder.with_reader(1, |reader| {
       Ok(reader.read_aligned_bytes(1)?[0])
     })?;
     if type_or_termination_byte == MAGIC_TERMINATION_BYTE {
-      return Ok(DecompressorItem::EndOfData(
-        reader_builder.into_inner(),
-      ));
+      return Ok((0, true, reader_builder.into_inner()));
     }
 
     if let Some(uniform_type) = self.uniform_type() {
@@ -197,12 +192,12 @@ impl FileDecompressor {
         )));
       }
     }
-    if type_or_termination_byte != T::NUMBER_TYPE_BYTE {
+    if type_or_termination_byte != expected_type_byte {
       // This is most likely user error, but since we can't be certain
       // of that, we call it a corruption.
       return Err(PcoError::corruption(format!(
         "requested chunk decompression with {:?} does not match chunk's number type of {:?}",
-        NumberType::from_descriminant(T::NUMBER_TYPE_BYTE),
+        NumberType::from_descriminant(expected_type_byte),
         type_or_termination_byte,
       )));
     }
@@ -211,7 +206,23 @@ impl FileDecompressor {
       BITS_TO_ENCODE_N_ENTRIES as usize + OVERSHOOT_PADDING,
       |reader| unsafe { Ok(reader.read_usize(BITS_TO_ENCODE_N_ENTRIES) + 1) },
     )?;
-    let src = reader_builder.into_inner();
+    Ok((n, false, reader_builder.into_inner()))
+  }
+
+  /// Reads a chunk's metadata and returns either a `ChunkDecompressor` or
+  /// the rest of the source if at the end of the pco file.
+  ///
+  /// Will return an error if corruptions or insufficient
+  /// data are found.
+  pub fn chunk_decompressor<T: Number, R: BetterBufRead>(
+    &self,
+    src: R,
+  ) -> PcoResult<DecompressorItem<T, R>> {
+    let (n, is_terminated, src) = self.chunk_preamble(src, T::NUMBER_TYPE_BYTE)?;
+    if is_terminated {
+      return Ok(DecompressorItem::EndOfData(src));
+    }
+
     let (inner_cd, src) = self.inner.chunk_decompressor::<T, R>(src)?;
     let inner_pd = wrapped::PageDecompressorState::new(src, &inner_cd.inner, n)?;
 
