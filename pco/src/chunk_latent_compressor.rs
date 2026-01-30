@@ -10,7 +10,7 @@ use crate::constants::ANS_INTERLEAVING;
 use crate::constants::MAX_BATCH_LATENT_VAR_SIZE;
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
-use crate::macros::{define_latent_enum, match_latent_enum};
+use crate::macros::define_latent_enum;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
@@ -92,6 +92,45 @@ pub struct ChunkLatentCompressor<L: Latent> {
   scratch: ChunkLatentCompressorScratch<L>,
 }
 
+#[inline(never)]
+fn encode_ans_in_reverse(
+  encoder: &ans::Encoder,
+  ans_vals: &mut [AnsState],
+  ans_bits: &mut [Bitlen],
+  ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
+  dst: &mut [Symbol],
+) {
+  if encoder.size_log() == 0 {
+    // trivial case: there's only one symbol. ANS values and states don't
+    // matter.
+    ans_bits.fill(0);
+    return;
+  }
+
+  let final_base_i = (ans_vals.len() / ANS_INTERLEAVING) * ANS_INTERLEAVING;
+  let final_j = ans_vals.len() % ANS_INTERLEAVING;
+
+  // first get the jagged part out of the way
+  for j in (0..final_j).rev() {
+    let i = final_base_i + j;
+    let (new_state, bitlen) = encoder.encode(ans_final_states[j], dst[i]);
+    ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
+    ans_bits[i] = bitlen;
+    ans_final_states[j] = new_state;
+  }
+
+  // then do the main loop
+  for base_i in (0..final_base_i).step_by(ANS_INTERLEAVING).rev() {
+    for j in (0..ANS_INTERLEAVING).rev() {
+      let i = base_i + j;
+      let (new_state, bitlen) = encoder.encode(ans_final_states[j], dst[i]);
+      ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
+      ans_bits[i] = bitlen;
+      ans_final_states[j] = new_state;
+    }
+  }
+}
+
 impl<L: Latent> ChunkLatentCompressor<L> {
   #[inline(never)]
   pub fn new(trained: TrainedBins<L>, bins: &[Bin<L>], latents: Vec<L>) -> PcoResult<Box<Self>> {
@@ -153,49 +192,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     }
   }
 
-  #[inline(never)]
-  fn encode_ans_in_reverse(
-    &self,
-    ans_vals: &mut [AnsState],
-    ans_bits: &mut [Bitlen],
-    ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
-  ) {
-    if self.encoder.size_log() == 0 {
-      // trivial case: there's only one symbol. ANS values and states don't
-      // matter.
-      ans_bits.fill(0);
-      return;
-    }
-
-    let final_base_i = (ans_vals.len() / ANS_INTERLEAVING) * ANS_INTERLEAVING;
-    let final_j = ans_vals.len() % ANS_INTERLEAVING;
-
-    // first get the jagged part out of the way
-    for j in (0..final_j).rev() {
-      let i = final_base_i + j;
-      let (new_state, bitlen) = self
-        .encoder
-        .encode(ans_final_states[j], self.scratch.symbols[i]);
-      ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
-      ans_bits[i] = bitlen;
-      ans_final_states[j] = new_state;
-    }
-
-    // then do the main loop
-    for base_i in (0..final_base_i).step_by(ANS_INTERLEAVING).rev() {
-      for j in (0..ANS_INTERLEAVING).rev() {
-        let i = base_i + j;
-        let (new_state, bitlen) = self
-          .encoder
-          .encode(ans_final_states[j], self.scratch.symbols[i]);
-        ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
-        ans_bits[i] = bitlen;
-        ans_final_states[j] = new_state;
-      }
-    }
-  }
-
-  fn dissect_batch_latents(
+  fn dissect_batch(
     &mut self,
     page_start: usize,
     relative_batch_range: Range<usize>,
@@ -227,10 +224,12 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       &mut offsets[relative_batch_range.clone()],
     );
 
-    self.encode_ans_in_reverse(
+    encode_ans_in_reverse(
+      &self.encoder,
       &mut ans_vals[relative_batch_range.clone()],
       &mut ans_bits[relative_batch_range],
       ans_final_states,
+      &mut self.scratch.symbols.0,
     );
   }
 
@@ -262,7 +261,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     for batch_idx in (0..n_batches).rev() {
       let relative_batch_range =
         batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(page_n);
-      self.dissect_batch_latents(
+      self.dissect_batch(
         page_range.start,
         relative_batch_range,
         &mut page_dissected_var,
@@ -277,7 +276,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     batch_start: usize,
     writer: &mut BitWriter<W>,
   ) -> PcoResult<()> {
-    assert!(writer.buf.len() >= MAX_BATCH_LATENT_VAR_SIZE);
+    debug_assert!(writer.buf.len() >= MAX_BATCH_LATENT_VAR_SIZE);
     writer.flush()?;
 
     if batch_start >= page_dissected_var.offsets.len() {
@@ -299,36 +298,32 @@ impl<L: Latent> ChunkLatentCompressor<L> {
 
     // write offsets
     (writer.stale_byte_idx, writer.bits_past_byte) = unsafe {
-      match_latent_enum!(
-        &page_dissected_var.offsets,
-        DynLatents<L>(offsets) => {
-          match self.max_u64s_per_offset {
-            0 => (writer.stale_byte_idx, writer.bits_past_byte),
-            1 => write_short_uints::<L>(
-              &offsets[batch_start..],
-              &page_dissected_var.offset_bits[batch_start..],
-              writer.stale_byte_idx,
-              writer.bits_past_byte,
-              &mut writer.buf,
-            ),
-            2 => write_uints::<L, 2>(
-              &offsets[batch_start..],
-              &page_dissected_var.offset_bits[batch_start..],
-              writer.stale_byte_idx,
-              writer.bits_past_byte,
-              &mut writer.buf,
-            ),
-            3 => write_uints::<L, 3>(
-              &offsets[batch_start..],
-              &page_dissected_var.offset_bits[batch_start..],
-              writer.stale_byte_idx,
-              writer.bits_past_byte,
-              &mut writer.buf,
-            ),
-            _ => panic!("[ChunkCompressor] data type is too large"),
-          }
-        }
-      )
+      let offsets = page_dissected_var.offsets.downcast_ref::<L>().unwrap();
+      match self.max_u64s_per_offset {
+        0 => (writer.stale_byte_idx, writer.bits_past_byte),
+        1 => write_short_uints::<L>(
+          &offsets[batch_start..],
+          &page_dissected_var.offset_bits[batch_start..],
+          writer.stale_byte_idx,
+          writer.bits_past_byte,
+          &mut writer.buf,
+        ),
+        2 => write_uints::<L, 2>(
+          &offsets[batch_start..],
+          &page_dissected_var.offset_bits[batch_start..],
+          writer.stale_byte_idx,
+          writer.bits_past_byte,
+          &mut writer.buf,
+        ),
+        3 => write_uints::<L, 3>(
+          &offsets[batch_start..],
+          &page_dissected_var.offset_bits[batch_start..],
+          writer.stale_byte_idx,
+          writer.bits_past_byte,
+          &mut writer.buf,
+        ),
+        _ => panic!("[ChunkCompressor] data type is too large"),
+      }
     };
 
     Ok(())
