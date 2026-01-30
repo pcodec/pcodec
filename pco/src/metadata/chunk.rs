@@ -125,11 +125,12 @@ impl ChunkMeta {
   }
 
   pub(crate) fn read_from<R: BetterBufRead>(
-    reader_builder: &mut BitReaderBuilder<R>,
+    src: R,
     version: &FormatVersion,
     latent_type: LatentType,
-  ) -> PcoResult<Self> {
-    let mode = Mode::read_from(reader_builder, version, latent_type)?;
+  ) -> PcoResult<(Self, R)> {
+    let mut reader_builder = BitReaderBuilder::new(src);
+    let mode = Mode::read_from(&mut reader_builder, version, latent_type)?;
     let delta_encoding = reader_builder.with_reader(
       DeltaEncoding::MAX_BIT_SIZE.div_ceil(8) + OVERSHOOT_PADDING,
       |reader| unsafe { DeltaEncoding::read_from(reader, version) },
@@ -137,7 +138,7 @@ impl ChunkMeta {
 
     let delta = if let Some(delta_latent_type) = delta_encoding.latent_type() {
       Some(ChunkLatentVarMeta::read_from::<R>(
-        reader_builder,
+        &mut reader_builder,
         delta_latent_type,
       )?)
     } else {
@@ -145,13 +146,13 @@ impl ChunkMeta {
     };
 
     let primary = ChunkLatentVarMeta::read_from::<R>(
-      reader_builder,
+      &mut reader_builder,
       mode.primary_latent_type(latent_type),
     )?;
 
     let secondary = if let Some(secondary_latent_type) = mode.secondary_latent_type(latent_type) {
       Some(ChunkLatentVarMeta::read_from::<R>(
-        reader_builder,
+        &mut reader_builder,
         secondary_latent_type,
       )?)
     } else {
@@ -168,7 +169,8 @@ impl ChunkMeta {
       reader.drain_empty_byte("nonzero bits in end of final byte of chunk metadata")
     })?;
 
-    Self::new(mode, delta_encoding, per_latent_var)
+    let cd = Self::new(mode, delta_encoding, per_latent_var)?;
+    Ok((cd, reader_builder.into_inner()))
   }
 
   pub(crate) unsafe fn write_to<W: Write>(&self, writer: &mut BitWriter<W>) -> PcoResult<()> {

@@ -2,9 +2,9 @@ use std::io::Write;
 
 use crate::bit_writer::BitWriter;
 use crate::data_types::Number;
+use crate::dyn_slices::DynNumberSlice;
 use crate::errors::PcoResult;
 use crate::metadata::format_version::FormatVersion;
-use crate::wrapped::chunk_compressor;
 use crate::wrapped::chunk_compressor::ChunkCompressor;
 use crate::ChunkConfig;
 
@@ -70,6 +70,6 @@ impl FileCompressor {
     src: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
-    chunk_compressor::new(src, config)
+    ChunkCompressor::new(DynNumberSlice::new(src), config)
   }
 }

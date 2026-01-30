@@ -164,6 +164,7 @@ impl<'a> BitReader<'a> {
     Ok(&self.src[byte_idx..new_byte_idx])
   }
 
+  #[inline]
   pub unsafe fn read_uint<U: ReadWriteUint>(&mut self, n: Bitlen) -> U {
     self.refill();
     let res = match U::MAX_BYTES {
@@ -194,14 +195,17 @@ impl<'a> BitReader<'a> {
     res
   }
 
+  #[inline]
   pub unsafe fn read_usize(&mut self, n: Bitlen) -> usize {
     self.read_uint(n)
   }
 
+  #[inline]
   pub unsafe fn read_bitlen(&mut self, n: Bitlen) -> Bitlen {
     self.read_uint(n)
   }
 
+  #[inline]
   pub unsafe fn read_bool(&mut self) -> bool {
     self.refill();
     let res = self.src[self.stale_byte_idx] & (1 << self.bits_past_byte) != 0;

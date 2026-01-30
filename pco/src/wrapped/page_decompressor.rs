@@ -1,14 +1,16 @@
 use std::cmp::min;
+use std::ops::Range;
 
 use better_io::BetterBufRead;
 
 use crate::bit_reader::BitReaderBuilder;
 use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
+use crate::data_types::number_priv::NumberPriv;
 use crate::data_types::Number;
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::{DynLatentSlice, DynNumberSliceMut};
 use crate::errors::{PcoError, PcoResult};
-use crate::macros::match_latent_enum;
+use crate::macros::{match_latent_enum, match_number_enum};
 use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
@@ -110,12 +112,13 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
-  fn read_batch<T: Number>(
+  fn read_batch(
     &mut self,
     cd: &mut ChunkDecompressorInner,
-    dst: &mut [T],
+    range: Range<usize>,
+    dst: &mut DynNumberSliceMut,
   ) -> PcoResult<()> {
-    let batch_n = dst.len();
+    let batch_n = range.len();
     let n_remaining = self.n_remaining;
 
     // DELTA LATENTS
@@ -165,7 +168,17 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       None => None,
     };
 
-    T::join_latents(&cd.meta.mode, primary, secondary, dst)?;
+    match_number_enum!(
+      dst,
+      DynNumberSliceMut<T>(dst) => {
+        T::join_latents(
+          &cd.meta.mode,
+          primary,
+          secondary,
+          &mut dst[range],
+        )?;
+      }
+    );
 
     self.n_remaining -= batch_n;
     if self.n_remaining == 0 {
@@ -177,28 +190,27 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     Ok(())
   }
 
-  pub fn read<T: Number>(
+  pub fn read(
     &mut self,
     cd: &mut ChunkDecompressorInner,
-    num_dst: &mut [T],
+    mut dst: DynNumberSliceMut,
   ) -> PcoResult<Progress> {
     let n_remaining = self.n_remaining;
-    if !num_dst.len().is_multiple_of(FULL_BATCH_N) && num_dst.len() < n_remaining {
+    let dst_len = dst.len();
+    if !dst_len.is_multiple_of(FULL_BATCH_N) && dst_len < n_remaining {
       return Err(PcoError::invalid_argument(format!(
         "num_dst's length must either be a multiple of {} or be \
          at least the count of numbers remaining ({} < {})",
-        FULL_BATCH_N,
-        num_dst.len(),
-        n_remaining,
+        FULL_BATCH_N, dst_len, n_remaining,
       )));
     }
 
-    let n_to_process = min(num_dst.len(), n_remaining);
+    let n_to_process = min(dst_len, self.n_remaining);
 
     let mut n_processed = 0;
     while n_processed < n_to_process {
       let dst_batch_end = min(n_processed + FULL_BATCH_N, n_to_process);
-      self.read_batch(cd, &mut num_dst[n_processed..dst_batch_end])?;
+      self.read_batch(cd, n_processed..dst_batch_end, &mut dst)?;
       n_processed = dst_batch_end;
     }
 
@@ -228,7 +240,10 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    self.state.read(&mut self.cd.inner, dst)
+    self.state.read(
+      &mut self.cd.inner,
+      DynNumberSliceMut::new(dst),
+    )
   }
 
   /// Returns the rest of the compressed data source.

@@ -1,7 +1,9 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::PagingSpec;
 use crate::data_types::{Number, NumberType};
+use crate::dyn_slices::DynNumberSlice;
 use crate::errors::{PcoError, PcoResult};
+use crate::macros::match_number_enum;
 use crate::metadata::ChunkMeta;
 use crate::standalone::constants::*;
 use crate::{bits, wrapped, ChunkConfig};
@@ -116,7 +118,20 @@ impl FileCompressor {
     src: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
-    let number_type = NumberType::from_descriminant(T::NUMBER_TYPE_BYTE).unwrap();
+    self.chunk_compressor_dyn(DynNumberSlice::new(src), config)
+  }
+
+  pub(crate) fn chunk_compressor_dyn(
+    &self,
+    src: DynNumberSlice,
+    config: &ChunkConfig,
+  ) -> PcoResult<ChunkCompressor> {
+    let (number_type, n) = match_number_enum!(
+      src,
+      DynNumberSlice<T>(inner) => {
+        (NumberType::new::<T>(), inner.len())
+      }
+    );
     if let Some(uniform_type) = self.uniform_type {
       if number_type != uniform_type {
         return Err(PcoError::corruption(format!(
@@ -127,10 +142,11 @@ impl FileCompressor {
     }
 
     let mut config = config.clone();
-    config.paging_spec = PagingSpec::Exact(vec![src.len()]);
+    config.paging_spec = PagingSpec::Exact(vec![n]);
 
+    let cc = wrapped::ChunkCompressor::new(src, &config)?;
     Ok(ChunkCompressor {
-      inner: self.inner.chunk_compressor(src, &config)?,
+      inner: cc,
       number_type,
     })
   }

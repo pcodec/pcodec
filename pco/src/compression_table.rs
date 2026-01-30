@@ -13,8 +13,6 @@ pub struct CompressionTable<L: Latent> {
 
 impl<L: Latent> From<Vec<BinCompressionInfo<L>>> for CompressionTable<L> {
   fn from(mut infos: Vec<BinCompressionInfo<L>>) -> Self {
-    infos.sort_unstable_by_key(|info| info.lower);
-
     let search_size_log = if infos.len() <= 1 {
       0
     } else {

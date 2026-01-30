@@ -1,7 +1,7 @@
 use crate::constants::Bitlen;
 use crate::data_types::{unsigned, ModeAndLatents, Number, NumberPriv};
 use crate::describers::LatentDescriber;
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};

@@ -52,10 +52,8 @@ impl<T: Number> ChunkDecompressor<T> {
       )));
     }
 
-    let inner = ChunkDecompressorInner::new(meta)?;
-
-    Ok(Self {
-      inner,
+    ChunkDecompressorInner::new(meta).map(|cd| Self {
+      inner: cd,
       phantom: PhantomData,
     })
   }

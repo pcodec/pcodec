@@ -5,7 +5,7 @@ mod lookback;
 use crate::bits;
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
@@ -136,7 +136,7 @@ pub fn decode_in_place<L: Latent>(
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
-        delta_latents.unwrap().downcast_unwrap::<DeltaLookback>(),
+        delta_latents.unwrap().downcast::<DeltaLookback>().unwrap(),
         state_pos,
         state,
         latents,

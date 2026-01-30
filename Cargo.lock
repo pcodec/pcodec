@@ -916,7 +916,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "libc",
- "pco 1.0.0",
+ "pco 1.0.1",
 ]
 
 [[package]]
@@ -1022,7 +1022,7 @@ checksum = "d3a5ccdfd6c5e7e2fea9c5cf256f2a08216047fab19c621c3da64e9ae4a1462d"
 
 [[package]]
 name = "dtype_dispatch"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "dyn-hash"
@@ -2269,10 +2269,10 @@ dependencies = [
 
 [[package]]
 name = "pco"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "better_io 0.2.0",
- "dtype_dispatch 0.2.0",
+ "dtype_dispatch 0.2.1",
  "half",
  "rand 0.8.5",
  "rand_xoshiro",
@@ -2294,7 +2294,7 @@ dependencies = [
  "indicatif",
  "once_cell",
  "parquet",
- "pco 1.0.0",
+ "pco 1.0.1",
  "q_compress",
  "rayon",
  "rust-openzl",
@@ -2315,7 +2315,7 @@ version = "0.1.0"
 dependencies = [
  "half",
  "jni",
- "pco 1.0.0",
+ "pco 1.0.1",
 ]
 
 [[package]]
@@ -2324,7 +2324,7 @@ version = "1.0.0"
 dependencies = [
  "half",
  "numpy",
- "pco 1.0.0",
+ "pco 1.0.1",
  "pyo3",
 ]
 

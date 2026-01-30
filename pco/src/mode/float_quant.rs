@@ -3,7 +3,7 @@ use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::float::Float;
 use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::SplitLatents;
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
@@ -16,8 +16,8 @@ pub(crate) fn join_latents<F: Float>(
   secondary: Option<DynLatentSlice>,
   dst: &mut [F],
 ) -> PcoResult<()> {
-  let primary = primary.downcast_unwrap::<F::L>();
-  let secondary = secondary.unwrap().downcast_unwrap::<F::L>();
+  let primary = primary.downcast::<F::L>().unwrap();
+  let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;

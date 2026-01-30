@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::fmt::Debug;
 
 use crate::constants::CLASSIC_MEMORIZABLE_BINS_LOG;
 use rand_xoshiro::rand_core::{RngCore, SeedableRng};
@@ -26,7 +25,7 @@ fn calc_sample_n(n: usize) -> Option<usize> {
 }
 
 #[inline(never)]
-pub fn choose_sample<T, S: Copy + Debug, Filter: Fn(&T) -> Option<S>>(
+pub fn choose_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   nums: &[T],
   filter: Filter,
 ) -> Option<Vec<S>> {
