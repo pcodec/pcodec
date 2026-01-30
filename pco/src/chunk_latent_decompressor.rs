@@ -1,16 +1,13 @@
+use crate::ans::{self, Spec};
+use crate::constants::Bitlen;
+use crate::data_types::Latent;
 use crate::dyn_slices::DynLatentSlice;
+use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
-use crate::metadata::{ChunkLatentVarMeta, DynBins};
+use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
+use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
 use crate::scratch_array::ScratchArray;
-use crate::FULL_BATCH_N;
-use crate::{
-  ans::{self, Spec},
-  constants::Bitlen,
-  data_types::Latent,
-  errors::PcoResult,
-  metadata::{bins, delta_encoding::LatentVarDeltaEncoding, Bin},
-  read_write_uint,
-};
+use crate::{read_write_uint, FULL_BATCH_N};
 
 #[derive(Clone, Debug)]
 pub struct ChunkLatentDecompressorScratch<L: Latent> {

@@ -1,8 +1,6 @@
 use crate::result::Result;
-use jni::{
-  objects::{JObject, JValueOwned},
-  JNIEnv,
-};
+use jni::objects::{JObject, JValueOwned};
+use jni::JNIEnv;
 use pco::ChunkConfig;
 
 pub fn from_java(env: &mut JNIEnv, j_chunk_config: JObject) -> Result<ChunkConfig> {

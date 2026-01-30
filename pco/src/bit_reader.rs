@@ -340,10 +340,8 @@ fn ensure_buf_read_capacity<R: BetterBufRead>(src: &mut R, required: usize) {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
-    constants::OVERSHOOT_PADDING,
-    errors::{ErrorKind, PcoResult},
-  };
+  use crate::constants::OVERSHOOT_PADDING;
+  use crate::errors::{ErrorKind, PcoResult};
 
   use super::*;
 

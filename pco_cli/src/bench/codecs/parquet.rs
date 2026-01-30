@@ -5,8 +5,7 @@ use clap::Parser;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::column::reader::get_typed_column_reader;
 use parquet::file::properties::{WriterProperties, WriterVersion};
-use parquet::file::reader::FileReader;
-use parquet::file::reader::SerializedFileReader;
+use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::file::writer::SerializedFileWriter;
 use parquet::schema::parser::parse_message_type;
 

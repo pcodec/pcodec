@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::{data_types::Latent, FULL_BATCH_N};
+use crate::data_types::Latent;
+use crate::FULL_BATCH_N;
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
 // improve performance for SIMD operations. The primary goal here is to avoid

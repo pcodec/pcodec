@@ -1,13 +1,8 @@
-use crate::ans::AnsState;
-use crate::ans::Symbol;
+use crate::ans::{AnsState, Symbol};
 use crate::bit_writer::BitWriter;
-use crate::bits;
-use crate::compression_intermediates::PageDissectedVar;
-use crate::compression_intermediates::TrainedBins;
+use crate::compression_intermediates::{PageDissectedVar, TrainedBins};
 use crate::compression_table::CompressionTable;
-use crate::constants::Bitlen;
-use crate::constants::ANS_INTERLEAVING;
-use crate::constants::MAX_BATCH_LATENT_VAR_SIZE;
+use crate::constants::{Bitlen, ANS_INTERLEAVING, MAX_BATCH_LATENT_VAR_SIZE};
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
@@ -15,7 +10,7 @@ use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
 use crate::scratch_array::ScratchArray;
-use crate::{ans, bit_reader, bit_writer, read_write_uint, FULL_BATCH_N};
+use crate::{ans, bit_reader, bit_writer, bits, read_write_uint, FULL_BATCH_N};
 use std::io::Write;
 use std::ops::Range;
 

@@ -1,17 +1,15 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
-use std::fs;
-use std::mem;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
+use std::{fs, mem};
 
 use crate::bench::codecs::parquet::ParquetConfig;
 use crate::bench::codecs::pcopage::PaginatedPcoConfig;
 use crate::bench::codecs::snappy::SnappyConfig;
 use crate::bench::codecs::zstd::ZstdConfig;
-use crate::bench::IterOpt;
-use crate::bench::{BenchStat, Precomputed};
+use crate::bench::{BenchStat, IterOpt, Precomputed};
 use crate::chunk_config_opt::ChunkConfigOpt;
 use crate::dtypes::PcoNumber;
 use crate::num_vec::NumVec;

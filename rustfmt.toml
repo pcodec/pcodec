@@ -1,3 +1,4 @@
 edition = "2018"
 fn_call_width = 45
+imports_granularity = "Module"
 tab_spaces = 2

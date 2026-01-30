@@ -1,6 +1,5 @@
 pub use compressor::Compressor;
-pub use decompressor::DecompressedItem;
-pub use decompressor::Decompressor;
+pub use decompressor::{DecompressedItem, Decompressor};
 
 mod compressor;
 mod decompressor;

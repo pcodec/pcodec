@@ -13,7 +13,8 @@ use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::dyn_latent::DynLatent;
 use crate::metadata::format_version::FormatVersion;
-use crate::metadata::{DynLatents, Mode::*};
+use crate::metadata::DynLatents;
+use crate::metadata::Mode::*;
 use std::fmt::Debug;
 use std::io::Write;
 

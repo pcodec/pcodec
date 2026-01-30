@@ -61,7 +61,4 @@ dtype_dispatch::build_dtype_macros!(
   },
 );
 
-pub(crate) use define_latent_enum;
-pub(crate) use define_number_enum;
-pub(crate) use match_latent_enum;
-pub(crate) use match_number_enum;
+pub(crate) use {define_latent_enum, define_number_enum, match_latent_enum, match_number_enum};

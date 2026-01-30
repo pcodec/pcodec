@@ -2,7 +2,8 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, Shl, Shr, Sub};
 
 use crate::constants::Bitlen;
-use crate::data_types::{latent_priv::LatentPriv, Latent};
+use crate::data_types::latent_priv::LatentPriv;
+use crate::data_types::Latent;
 
 // this applies to reading and also works for byte-aligned precisions
 pub const fn calc_max_bytes(precision: Bitlen) -> usize {

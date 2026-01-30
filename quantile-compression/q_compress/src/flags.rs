@@ -7,12 +7,11 @@ use std::convert::{TryFrom, TryInto};
 
 use crate::bit_reader::BitReader;
 use crate::bit_writer::BitWriter;
-use crate::bits;
 use crate::constants::{
   BITS_TO_ENCODE_DELTA_ENCODING_ORDER, BITS_TO_ENCODE_N_ENTRIES, MAX_DELTA_ENCODING_ORDER,
 };
 use crate::errors::{QCompressError, QCompressResult};
-use crate::CompressorConfig;
+use crate::{bits, CompressorConfig};
 
 /// The configuration stored in a Quantile-compressed header.
 ///

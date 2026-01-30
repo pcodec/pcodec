@@ -1,14 +1,10 @@
-use std::{
-  array, cmp,
-  mem::{self, MaybeUninit},
-};
+use std::mem::{self, MaybeUninit};
+use std::{array, cmp};
 
-use crate::{
-  constants::{Bitlen, DeltaLookback},
-  data_types::Latent,
-  metadata::DeltaLookbackConfig,
-  FULL_BATCH_N,
-};
+use crate::constants::{Bitlen, DeltaLookback};
+use crate::data_types::Latent;
+use crate::metadata::DeltaLookbackConfig;
+use crate::FULL_BATCH_N;
 
 // there are 3 types of proposed lookbacks:
 // * brute force: just try the most recent few latents
