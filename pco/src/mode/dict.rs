@@ -1,18 +1,18 @@
 use std::{cmp, collections::HashMap};
 
 use crate::{
-  data_types::{ModeAndLatents, Number, SplitLatents},
+  data_types::{Latent, ModeAndLatents, Number, SplitLatents},
   dyn_latent_slice::DynLatentSlice,
   errors::{PcoError, PcoResult},
   metadata::{DynLatents, Mode},
 };
 
-pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLatents> {
+fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> PcoResult<ModeAndLatents> {
   let mut counts = HashMap::new();
-  for &num in nums {
-    *counts.entry(num.to_latent_ordered()).or_insert(0_u32) += 1;
+  for &num in &classic_nums {
+    *counts.entry(num).or_insert(0_u32) += 1;
   }
-  let mut counts = counts.into_iter().collect::<Vec<(T::L, u32)>>();
+  let mut counts = counts.into_iter().collect::<Vec<(L, u32)>>();
   counts.sort_by_key(|&(_, count)| cmp::Reverse(count));
   let ordered_unique = counts.into_iter().map(|(x, _)| x).collect::<Vec<_>>();
   let mut index_hashmap = HashMap::new();
@@ -20,9 +20,9 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
     index_hashmap.insert(val, i as u32);
   }
   let mode = Mode::Dict(DynLatents::new(ordered_unique));
-  let indices = nums
-    .iter()
-    .map(|&num| *index_hashmap.get(&num.to_latent_ordered()).unwrap())
+  let indices = classic_nums
+    .into_iter()
+    .map(|num| *index_hashmap.get(&num.to_latent_ordered()).unwrap())
     .collect();
   let latents = DynLatents::U32(indices);
   Ok((
@@ -32,6 +32,14 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
       secondary: None,
     },
   ))
+}
+
+pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLatents> {
+  let classic_nums = nums
+    .iter()
+    .map(|&num| num.to_latent_ordered())
+    .collect::<Vec<_>>();
+  configure_less_specialized(classic_nums)
 }
 
 pub fn join_latents<T: Number>(
