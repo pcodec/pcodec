@@ -87,13 +87,13 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
   }
 }
 
-fn read_primary_or_secondary<R: BetterBufRead>(
+fn read_primary_or_secondary<'a, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   delta_latents: Option<DynLatentSlice>,
   n_remaining: usize,
-  dyn_cld: &mut DynChunkLatentDecompressor,
-  dyn_pld: &mut DynPageLatentDecompressor,
-) -> PcoResult<()> {
+  dyn_cld: &'a mut DynChunkLatentDecompressor,
+  dyn_pld: &'a mut DynPageLatentDecompressor,
+) -> PcoResult<DynLatentSlice<'a>> {
   reader_builder.with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
     match_latent_enum!(
       dyn_pld,
@@ -108,11 +108,17 @@ fn read_primary_or_secondary<R: BetterBufRead>(
       }
     )
   })?;
-  Ok(())
+  Ok(dyn_cld.latents())
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
-  fn read_latents(&mut self, batch_n: usize, cd: &mut ChunkDecompressorInner) -> PcoResult<()> {
+  fn read_batch(
+    &mut self,
+    cd: &mut ChunkDecompressorInner,
+    range: Range<usize>,
+    dst: &mut DynNumberSliceMut,
+  ) -> PcoResult<()> {
+    let batch_n = range.len();
     let n_remaining = self.n_remaining;
 
     // DELTA LATENTS
@@ -145,7 +151,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     }
 
     // PRIMARY AND SECONDARY LATENTS
-    read_primary_or_secondary(
+    let primary = read_primary_or_secondary(
       &mut self.reader_builder,
       cd.per_latent_var.delta.as_mut().map(|cld| cld.latents()),
       n_remaining,
@@ -153,7 +159,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       &mut self.latent_decompressors.primary,
     )?;
 
-    match self.latent_decompressors.secondary.as_mut() {
+    let secondary = match self.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(read_primary_or_secondary(
         &mut self.reader_builder,
         cd.per_latent_var.delta.as_mut().map(|cld| cld.latents()),
@@ -164,32 +170,13 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       None => None,
     };
 
-    Ok(())
-  }
-
-  fn read_batch(
-    &mut self,
-    cd: &mut ChunkDecompressorInner,
-    range: Range<usize>,
-    dst: &mut DynNumberSliceMut,
-  ) -> PcoResult<()> {
-    let batch_n = range.len();
-
-    self.read_latents(batch_n, cd)?;
-
-    let primary_latents = cd.per_latent_var.primary.latents();
-    let secondary_latents = cd
-      .per_latent_var
-      .secondary
-      .as_mut()
-      .map(|cld| cld.latents());
     match_number_enum!(
       dst,
       DynNumberSliceMut<T>(dst) => {
         T::join_latents(
           &cd.meta.mode,
-          primary_latents,
-          secondary_latents,
+          primary,
+          secondary,
           &mut dst[range],
         )?;
       }
