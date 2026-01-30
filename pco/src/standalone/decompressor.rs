@@ -304,7 +304,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
       dst.set_len(initial_len + remaining);
     }
     let progress = self.read(&mut dst[initial_len..])?;
-    assert!(progress.finished);
+    debug_assert!(progress.finished);
     Ok(())
   }
 }

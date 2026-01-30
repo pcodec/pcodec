@@ -26,7 +26,7 @@ fn calc_sample_n(n: usize) -> Option<usize> {
 }
 
 #[inline(never)]
-pub fn choose_sample<T, S: Copy + Debug, Filter: Fn(&T) -> Option<S>>(
+pub fn choose_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   nums: &[T],
   filter: Filter,
 ) -> Option<Vec<S>> {
