@@ -2,7 +2,7 @@ use std::{cmp, collections::HashMap};
 
 use crate::{
   data_types::{Latent, ModeAndLatents, Number, SplitLatents},
-  dyn_latent_slice::DynLatentSlice,
+  dyn_slices::DynLatentSlice,
   errors::{PcoError, PcoResult},
   metadata::{DynLatents, Mode},
 };
@@ -48,7 +48,7 @@ pub fn join_latents<T: Number>(
   dst: &mut [T],
 ) -> PcoResult<()> {
   let dict = dict.downcast_ref::<T::L>().unwrap();
-  let idxs = primary.downcast_unwrap::<u32>();
+  let idxs = primary.downcast::<u32>().unwrap();
   if idxs.iter().any(|idx| *idx > dict.len() as u32) {
     // in some cases it is possible to prove the indices are in range from
     // looking at the bins ahead of time, but just keeping this simple for now

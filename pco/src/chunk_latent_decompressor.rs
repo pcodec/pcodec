@@ -1,4 +1,4 @@
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::DynLatentSlice;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::{ChunkLatentVarMeta, DynBins};
 use crate::scratch_array::ScratchArray;

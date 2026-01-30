@@ -3,6 +3,7 @@ use std::io::Write;
 
 use crate::chunk_config::ChunkConfig;
 use crate::data_types::{Number, NumberType};
+use crate::dyn_slices::DynNumberSlice;
 use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
@@ -55,12 +56,17 @@ pub fn simple_compress_into<T: Number, W: Write>(
 /// For standalone, the concepts of chunk and page are conflated since each
 /// chunk has exactly one page.
 pub fn simple_compress<T: Number>(src: &[T], config: &ChunkConfig) -> PcoResult<Vec<u8>> {
+  simple_compress_dyn(DynNumberSlice::new(src), config)
+}
+
+pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResult<Vec<u8>> {
+  let n = src.len();
   let mut dst = Vec::new();
-  let file_compressor = FileCompressor::default().with_n_hint(src.len());
+  let file_compressor = FileCompressor::default().with_n_hint(n);
   file_compressor.write_header(&mut dst)?;
 
   // here we use the paging spec to determine chunks; each chunk has 1 page
-  let n_per_page = config.paging_spec.n_per_page(src.len())?;
+  let n_per_page = config.paging_spec.n_per_page(n)?;
   let mut start = 0;
   let mut this_chunk_config = config.clone();
   let mut hinted_size = false;
@@ -68,10 +74,10 @@ pub fn simple_compress<T: Number>(src: &[T], config: &ChunkConfig) -> PcoResult<
     let end = start + page_n;
     this_chunk_config.paging_spec = PagingSpec::Exact(vec![page_n]);
     let mut chunk_compressor =
-      file_compressor.chunk_compressor(&src[start..end], &this_chunk_config)?;
+      file_compressor.chunk_compressor_dyn(src.slice(start..end), &this_chunk_config)?;
 
     if !hinted_size {
-      let file_size_hint = chunk_compressor.size_hint() as f64 * src.len() as f64 / page_n as f64;
+      let file_size_hint = chunk_compressor.size_hint() as f64 * n as f64 / page_n as f64;
       dst.reserve_exact(file_size_hint as usize + 10);
       hinted_size = true;
     }

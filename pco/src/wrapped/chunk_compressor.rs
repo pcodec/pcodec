@@ -7,12 +7,14 @@ use crate::constants::{
   Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
   MAX_CONSECUTIVE_DELTA_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
+use crate::data_types::number_priv::NumberPriv;
 use crate::data_types::SplitLatents;
 use crate::data_types::{Latent, LatentType, Number};
 use crate::delta::DeltaState;
+use crate::dyn_slices::DynNumberSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::histograms::histogram;
-use crate::macros::match_latent_enum;
+use crate::macros::{match_latent_enum, match_number_enum};
 use crate::metadata::chunk_latent_var::ChunkLatentVarMeta;
 use crate::metadata::dyn_bins::DynBins;
 use crate::metadata::dyn_latents::DynLatents;
@@ -494,24 +496,35 @@ fn fallback_chunk_compressor(
 }
 
 // This is where the bulk of compression happens.
-pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<ChunkCompressor> {
-  let latent_type = LatentType::new::<T::L>();
+pub(crate) fn new(nums: DynNumberSlice, config: &ChunkConfig) -> PcoResult<ChunkCompressor> {
+  let latent_type = match_number_enum!(
+    &nums,
+    DynNumberSlice<T>(_inner) => {
+      LatentType::new::<<T as NumberPriv>::L>()
+    }
+  );
   config.validate(latent_type)?;
   let n = nums.len();
   validate_chunk_size(n)?;
 
   // 1. choose mode and split the latents
   // TODO in a later PR: validate mode on initialization of Mode or maybe ChunkMeta
-  let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
-  if !T::mode_is_valid(&mode) {
-    return Err(PcoError::invalid_argument(format!(
-      "The chosen mode of {:?} was invalid for type {}. \
-      This is most likely due to an invalid argument, but if using Auto mode \
-      spec, it could also be a bug in pco.",
-      mode,
-      any::type_name::<T>(),
-    )));
-  }
+  let (mode, latents) = match_number_enum!(
+    nums,
+    DynNumberSlice<T>(nums) => {
+      let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
+      if !T::mode_is_valid(&mode) {
+        return Err(PcoError::invalid_argument(format!(
+          "The chosen mode of {:?} was invalid for type {}. \
+          This is most likely due to an invalid argument, but if using Auto mode \
+          spec, it could also be a bug in pco.",
+          mode,
+          any::type_name::<T>(),
+        )));
+      }
+      (mode, latents)
+    }
+  );
 
   // 2. choose delta encoding
   let unoptimized_bins_log = choose_unoptimized_bins_log(config.compression_level, n);
@@ -530,7 +543,12 @@ pub(crate) fn new<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Chun
 
   // 4. check that our compressed size meets guarantees and fall back if not
   if candidate.should_fallback(latent_type, n, bin_counts) {
-    let split_latents = classic::split_latents(nums);
+    let split_latents = match_number_enum!(
+      nums,
+      DynNumberSlice<T>(nums) => {
+        classic::split_latents(nums)
+      }
+    );
     return fallback_chunk_compressor(split_latents, config);
   }
 

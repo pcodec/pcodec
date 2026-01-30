@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use crate::{
   data_types::{latent_priv::LatentPriv, ModeAndLatents},
-  dyn_latent_slice::DynLatentSlice,
+  dyn_slices::DynLatentSlice,
   errors::PcoResult,
   metadata::Mode,
   ChunkConfig,

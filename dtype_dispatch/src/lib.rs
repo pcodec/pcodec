@@ -145,6 +145,84 @@ macro_rules! build_dtype_macros {
           }
         }
       };
+      // Enum with reference data
+      (#[$enum_attrs: meta] $vis: vis $name: ident(&$container: ident)) => {
+        #[$enum_attrs]
+        #[non_exhaustive]
+        $vis enum $name<'a> {
+          $($variant(&'a $container<$t>),)+
+        }
+
+        impl<'a> $name<'a> {
+          #[inline]
+          pub fn new<S: $constraint>(inner: &$container<S>) -> Self {
+            let type_id = std::any::TypeId::of::<S>();
+            $(
+              if type_id == std::any::TypeId::of::<$t>() {
+                let ptr = inner as *const $container<S> as *const $container<$t>;
+                let typed = unsafe { &*ptr };
+                return $name::$variant(typed);
+              }
+            )+
+            unreachable!();
+          }
+
+          pub fn downcast<T: $constraint>(self) -> Option<&'a $container<T>> {
+            match self {
+              $(
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    let ptr = inner as *const $container<$t> as *const $container<T>;
+                    let typed = unsafe { &*ptr };
+                    Some(typed)
+                  } else {
+                    None
+                  }
+                }
+              )+
+            }
+          }
+        }
+      };
+      // Enum with mutable reference data
+      (#[$enum_attrs: meta] $vis: vis $name: ident(&mut $container: ident)) => {
+        #[$enum_attrs]
+        #[non_exhaustive]
+        $vis enum $name<'a> {
+          $($variant(&'a mut $container<$t>),)+
+        }
+
+        impl<'a> $name<'a> {
+          #[inline]
+          pub fn new<S: $constraint>(inner: &mut $container<S>) -> Self {
+            let type_id = std::any::TypeId::of::<S>();
+            $(
+              if type_id == std::any::TypeId::of::<$t>() {
+                let ptr = inner as *mut $container<S> as *mut $container<$t>;
+                let typed = unsafe { &mut *ptr };
+                return $name::$variant(typed);
+              }
+            )+
+            unreachable!();
+          }
+
+          pub fn downcast<T: $constraint>(self) -> Option<&'a mut $container<T>> {
+            match self {
+              $(
+                Self::$variant(inner) => {
+                  if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
+                    let ptr = inner as *mut $container<$t> as *mut $container<T>;
+                    let typed = unsafe { &mut *ptr };
+                    Some(typed)
+                  } else {
+                    None
+                  }
+                }
+              )+
+            }
+          }
+        }
+      };
     }
 
     $(#[$matcher_attrs])*

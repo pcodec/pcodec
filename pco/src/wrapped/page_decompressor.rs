@@ -6,7 +6,7 @@ use crate::bit_reader::BitReaderBuilder;
 use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
 use crate::data_types::Number;
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::page::PageMeta;

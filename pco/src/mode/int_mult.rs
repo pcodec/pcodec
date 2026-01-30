@@ -6,7 +6,7 @@ use std::mem;
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::SplitLatents;
 use crate::data_types::{latent_priv::LatentPriv, number_priv::NumberPriv, Latent, Number};
-use crate::dyn_latent_slice::DynLatentSlice;
+use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatent, DynLatents};
 use crate::sampling::{self, PrimaryLatentAndSavings};
@@ -45,8 +45,8 @@ pub(crate) fn join_latents<T: Number>(
   dst: &mut [T],
 ) -> PcoResult<()> {
   let base = *dyn_base.downcast_ref::<T::L>().unwrap();
-  let primary = primary.downcast_unwrap::<T::L>();
-  let secondary = secondary.unwrap().downcast_unwrap::<T::L>();
+  let primary = primary.downcast::<T::L>().unwrap();
+  let secondary = secondary.unwrap().downcast::<T::L>().unwrap();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
   }

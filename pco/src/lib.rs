@@ -44,7 +44,7 @@ mod compression_intermediates;
 mod compression_table;
 mod constants;
 mod delta;
-mod dyn_latent_slice;
+mod dyn_slices;
 mod histograms;
 mod macros;
 mod mode;
