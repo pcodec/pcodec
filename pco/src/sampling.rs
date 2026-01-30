@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::fmt::Debug;
 
 use crate::constants::CLASSIC_MEMORIZABLE_BINS_LOG;
 use rand_xoshiro::rand_core::{RngCore, SeedableRng};

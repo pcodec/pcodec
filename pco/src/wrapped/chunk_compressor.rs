@@ -247,7 +247,7 @@ fn foo(
   let res = match_latent_enum!(
     latents,
     DynLatents<L>(latents) => {
-      let contiguous_deltas = collect_contiguous_latents(&latents, &page_infos, key);
+      let contiguous_deltas = collect_contiguous_latents(&latents, page_infos, key);
       let trained = train_infos(contiguous_deltas, unoptimized_bins_log)?;
 
       let bins = bins_from_compression_infos(&trained.infos);

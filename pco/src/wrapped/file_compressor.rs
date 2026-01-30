@@ -5,7 +5,6 @@ use crate::data_types::Number;
 use crate::dyn_slices::DynNumberSlice;
 use crate::errors::PcoResult;
 use crate::metadata::format_version::FormatVersion;
-use crate::wrapped::chunk_compressor;
 use crate::wrapped::chunk_compressor::ChunkCompressor;
 use crate::ChunkConfig;
 
