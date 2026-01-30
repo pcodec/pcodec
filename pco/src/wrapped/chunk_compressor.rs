@@ -51,7 +51,6 @@ fn quantize_weights<L: Latent>(
   ans_size_log
 }
 
-#[inline(never)]
 fn train_infos<L: Latent>(
   mut latents: Vec<L>,
   unoptimized_bins_log: Bitlen,
@@ -109,7 +108,6 @@ pub struct ChunkCompressor {
   page_infos: Vec<PageInfo>,
 }
 
-#[inline(never)]
 fn bins_from_compression_infos<L: Latent>(infos: &[BinCompressionInfo<L>]) -> Vec<Bin<L>> {
   infos.iter().cloned().map(Bin::from).collect()
 }
@@ -130,7 +128,6 @@ fn validate_chunk_size(n: usize) -> PcoResult<()> {
   Ok(())
 }
 
-#[inline(never)]
 fn collect_contiguous_latents<L: Latent>(
   latents: &[L],
   page_infos: &[PageInfo],
@@ -221,52 +218,6 @@ fn delta_encode_and_build_page_infos(
   (latents, page_infos)
 }
 
-#[inline(never)]
-fn foo(
-  key: LatentVarKey,
-  unoptimized_bins_log: Bitlen,
-  latents: DynLatents,
-  page_infos: &[PageInfo],
-) -> PcoResult<(
-  ChunkLatentVarMeta,
-  DynChunkLatentCompressor,
-  Vec<Weight>,
-)> {
-  let unoptimized_bins_log = match key {
-    // primary latents are generally the most important to compress, and
-    // delta latents typically have a small number of discrete values, so
-    // aren't slow to optimize anyway
-    LatentVarKey::Delta | LatentVarKey::Primary => unoptimized_bins_log,
-    // secondary latents should be compressed faster
-    LatentVarKey::Secondary => min(
-      unoptimized_bins_log,
-      LIMITED_UNOPTIMIZED_BINS_LOG,
-    ),
-  };
-
-  let res = match_latent_enum!(
-    latents,
-    DynLatents<L>(latents) => {
-      let contiguous_deltas = collect_contiguous_latents(&latents, page_infos, key);
-      let trained = train_infos(contiguous_deltas, unoptimized_bins_log)?;
-
-      let bins = bins_from_compression_infos(&trained.infos);
-
-      let ans_size_log = trained.ans_size_log;
-      let bin_counts = trained.counts.to_vec();
-      let clc = DynChunkLatentCompressor::new(
-        ChunkLatentCompressor::new(trained, &bins, latents)?
-      );
-      let var_meta = ChunkLatentVarMeta {
-        bins: DynBins::new(bins),
-        ans_size_log,
-      };
-      (var_meta, clc, bin_counts)
-    }
-  );
-  Ok(res)
-}
-
 fn new_candidate(
   latents: SplitLatents, // start out plain, gets delta encoded in place
   paging_spec: &PagingSpec,
@@ -286,12 +237,38 @@ fn new_candidate(
   let mut chunk_latent_compressors = PerLatentVarBuilder::default();
   let mut bin_countss = PerLatentVarBuilder::default();
   for (key, latents) in latents.enumerated() {
-    let (var_meta, clc, bin_counts) = foo(
-      key,
-      unoptimized_bins_log,
+    let unoptimized_bins_log = match key {
+      // primary latents are generally the most important to compress, and
+      // delta latents typically have a small number of discrete values, so
+      // aren't slow to optimize anyway
+      LatentVarKey::Delta | LatentVarKey::Primary => unoptimized_bins_log,
+      // secondary latents should be compressed faster
+      LatentVarKey::Secondary => min(
+        unoptimized_bins_log,
+        LIMITED_UNOPTIMIZED_BINS_LOG,
+      ),
+    };
+
+    let (var_meta, clc, bin_counts) = match_latent_enum!(
       latents,
-      &page_infos,
-    )?;
+      DynLatents<L>(latents) => {
+        let contiguous_deltas = collect_contiguous_latents(&latents, &page_infos, key);
+        let trained = train_infos(contiguous_deltas, unoptimized_bins_log)?;
+
+        let bins = bins_from_compression_infos(&trained.infos);
+
+        let ans_size_log = trained.ans_size_log;
+        let bin_counts = trained.counts.to_vec();
+        let clc = DynChunkLatentCompressor::new(
+          ChunkLatentCompressor::new(trained, &bins, latents)?
+        );
+        let var_meta = ChunkLatentVarMeta {
+          bins: DynBins::new(bins),
+          ans_size_log,
+        };
+        (var_meta, clc, bin_counts)
+      }
+    );
     var_metas.set(key, var_meta);
     chunk_latent_compressors.set(key, clc);
     bin_countss.set(key, bin_counts);

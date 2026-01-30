@@ -124,7 +124,6 @@ impl ChunkMeta {
     bit_size.div_ceil(8)
   }
 
-  #[inline(never)]
   pub(crate) fn read_from<R: BetterBufRead>(
     src: R,
     version: &FormatVersion,

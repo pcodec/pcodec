@@ -112,16 +112,15 @@ fn read_primary_or_secondary<R: BetterBufRead>(
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
-  fn read_latents(
-    &mut self,
-    batch_n: usize,
-    n_remaining: usize,
-    cd: &mut ChunkDecompressorInner,
-  ) -> PcoResult<()> {
+  fn read_latents(&mut self, batch_n: usize, cd: &mut ChunkDecompressorInner) -> PcoResult<()> {
+    let n_remaining = self.n_remaining;
+
     // DELTA LATENTS
     if let Some(dyn_pld) = self.latent_decompressors.delta.as_mut() {
       let limit = min(
-        n_remaining.saturating_sub(cd.n_latents_per_delta_state()),
+        self
+          .n_remaining
+          .saturating_sub(cd.n_latents_per_delta_state()),
         batch_n,
       );
       self
@@ -175,9 +174,8 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     dst: &mut DynNumberSliceMut,
   ) -> PcoResult<()> {
     let batch_n = range.len();
-    let n_remaining = self.n_remaining;
 
-    self.read_latents(batch_n, n_remaining, cd)?;
+    self.read_latents(batch_n, cd)?;
 
     let primary_latents = cd.per_latent_var.primary.latents();
     let secondary_latents = cd
@@ -207,8 +205,13 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     Ok(())
   }
 
-  fn n_to_process(&self, dst_len: usize) -> PcoResult<usize> {
+  pub fn read(
+    &mut self,
+    cd: &mut ChunkDecompressorInner,
+    mut dst: DynNumberSliceMut,
+  ) -> PcoResult<Progress> {
     let n_remaining = self.n_remaining;
+    let dst_len = dst.len();
     if !dst_len.is_multiple_of(FULL_BATCH_N) && dst_len < n_remaining {
       return Err(PcoError::invalid_argument(format!(
         "num_dst's length must either be a multiple of {} or be \
@@ -217,15 +220,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
       )));
     }
 
-    Ok(min(dst_len, self.n_remaining))
-  }
-
-  pub fn read(
-    &mut self,
-    cd: &mut ChunkDecompressorInner,
-    mut dst: DynNumberSliceMut,
-  ) -> PcoResult<Progress> {
-    let n_to_process = self.n_to_process(dst.len())?;
+    let n_to_process = min(dst_len, self.n_remaining);
 
     let mut n_processed = 0;
     while n_processed < n_to_process {

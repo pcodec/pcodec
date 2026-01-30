@@ -14,7 +14,6 @@ pub struct ChunkDecompressorInner {
 }
 
 impl ChunkDecompressorInner {
-  #[inline(never)]
   fn new(meta: ChunkMeta) -> PcoResult<Self> {
     let per_latent_var = meta.per_latent_var.as_ref().map_result(|key, latent_var| {
       let delta_encoding = meta.delta_encoding.for_latent_var(key);
@@ -44,7 +43,6 @@ pub struct ChunkDecompressor<T: Number> {
 }
 
 impl<T: Number> ChunkDecompressor<T> {
-  #[inline(never)]
   pub(crate) fn new(meta: ChunkMeta) -> PcoResult<Self> {
     if !T::mode_is_valid(&meta.mode) {
       return Err(PcoError::corruption(format!(

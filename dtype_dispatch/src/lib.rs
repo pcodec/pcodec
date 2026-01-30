@@ -66,7 +66,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
-      // Enum with data
+      // Enum with owned data
       (#[$enum_attrs: meta] $vis: vis $name: ident($container: ident)) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -145,7 +145,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
-      // Enum with reference data
+      // Enum with refs
       (#[$enum_attrs: meta] $vis: vis $name: ident(&$container: ident)) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -184,7 +184,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
-      // Enum with mutable reference data
+      // Enum with mutable refs
       (#[$enum_attrs: meta] $vis: vis $name: ident(&mut $container: ident)) => {
         #[$enum_attrs]
         #[non_exhaustive]
