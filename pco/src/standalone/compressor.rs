@@ -144,12 +144,7 @@ impl FileCompressor {
     let mut config = config.clone();
     config.paging_spec = PagingSpec::Exact(vec![n]);
 
-    let cc = match_number_enum!(
-      src,
-      DynNumberSlice<T>(inner) => {
-        self.inner.chunk_compressor(inner, &config)?
-      }
-    );
+    let cc = wrapped::ChunkCompressor::new(src, &config)?;
     Ok(ChunkCompressor {
       inner: cc,
       number_type,

@@ -71,14 +71,6 @@ impl FileCompressor {
     src: &[T],
     config: &ChunkConfig,
   ) -> PcoResult<ChunkCompressor> {
-    chunk_compressor::new(DynNumberSlice::new(src), config)
-  }
-
-  pub fn chunk_compressor_dyn(
-    &self,
-    src: DynNumberSlice,
-    config: &ChunkConfig,
-  ) -> PcoResult<ChunkCompressor> {
-    chunk_compressor::new(src, config)
+    ChunkCompressor::new(DynNumberSlice::new(src), config)
   }
 }
