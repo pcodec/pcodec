@@ -124,9 +124,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     // DELTA LATENTS
     if let Some(dyn_pld) = self.latent_decompressors.delta.as_mut() {
       let limit = min(
-        self
-          .n_remaining
-          .saturating_sub(cd.n_latents_per_delta_state()),
+        n_remaining.saturating_sub(cd.n_latents_per_delta_state()),
         batch_n,
       );
       self
