@@ -39,8 +39,8 @@ numerical sequences with
 
 * columnar data
 * long-term time series data
-* serving numerical data to web clients
-* low-bandwidth communication
+* tensor data
+* serving numerical data to web clients or edge devices
 
 **Data types:**
 `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `f16`, `f32`, `f64`
@@ -63,10 +63,10 @@ Pco uses a holistic, 3-step approach:
 
 * **modes**.
   Pco identifies an approximate structure of the numbers called a
-  mode and then uses it to split numbers into "latents".
-  As an example, if all numbers are approximately multiples of 777, int mult mode
-  splits each number `x` into latent variables `l_0` and
-  `l_1` such that `x = 777 * l_0 + l_1`.
+  _mode_ and then uses it to split numbers into _latents_.
+  As an example, if most numbers in a chunk are approximately multiples of 777,
+  int mult mode splits each number `x` into latent variables `l_0` and `l_1`
+  such that `x = 777 * l_0 + l_1`.
   Most natural data uses classic mode, which simply matches `x = l_0`.
 * **delta encoding**.
   Pco identifies whether certain latent variables would be better compressed as
@@ -75,26 +75,24 @@ Pco uses a holistic, 3-step approach:
   If so, it takes differences.
 * **binning**.
   This is the heart and most novel part of Pco.
-  Pco represents each (delta-encoded) latent variable as an approximate,
-  entropy-coded bin paired an exact offset into that bin.
+  Pco represents each delta-encoded latent variable as an approximate,
+  entropy-coded bin paired with an exact offset into that bin.
   This nears the Shannon entropy of any smooth distribution very efficiently.
 
 These 3 steps cohesively capture most entropy of numerical data without waste.
-
-In contrast, LZ compressors are only effective for patterns like repeating
+In contrast, LZ compressors are only very effective for patterns like repeating
 exact sequences of numbers.
-Such patterns constitute just a small fraction of most numerical data's
-entropy.
 
 ## Usage Details
 
 ### Wrapped or Standalone
 
 Pco is designed to embed into wrapping formats.
-It provides a powerful wrapped API with the building blocks to interleave it
-with the wrapping format.
-This is useful if the wrapping format needs to support things like nullability,
-multiple columns, random access, or seeking.
+To that end, we provide a wrapped API that allows users to place each of Pco's
+components in their files as needed.
+This separates concerns by allowing Pco to handle compression while the wrapping
+format to handles domain-specific needs like nullability, multiple
+columns/channels, random access, or seeking.
 
 The standalone format is a minimal implementation of a wrapped format.
 It supports batched decompression only with no other niceties.
