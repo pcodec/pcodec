@@ -5,9 +5,8 @@ use rand::Rng;
 
 use q_compress::data_types::{NumberLike, TimestampMicros96};
 use q_compress::errors::QCompressResult;
-use q_compress::wrapped;
 use q_compress::wrapped::ChunkSpec;
-use q_compress::{Compressor, CompressorConfig};
+use q_compress::{wrapped, Compressor, CompressorConfig};
 
 const BASE_DIR: &str = "q_compress/assets";
 

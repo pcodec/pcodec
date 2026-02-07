@@ -7,13 +7,11 @@ use crate::chunk_spec::ChunkSpec;
 use crate::compression_table::CompressionTable;
 use crate::constants::*;
 use crate::data_types::{NumberLike, UnsignedLike};
-use crate::delta_encoding;
 use crate::delta_encoding::DeltaMoments;
 use crate::errors::{QCompressError, QCompressResult};
 use crate::gcd_utils::{GcdOperator, GeneralGcdOp, TrivialGcdOp};
 use crate::prefix::{Prefix, PrefixCompressionInfo};
-use crate::prefix_optimization;
-use crate::{gcd_utils, huffman_encoding, Flags};
+use crate::{delta_encoding, gcd_utils, huffman_encoding, prefix_optimization, Flags};
 
 /// All configurations available for a compressor.
 ///

@@ -1,7 +1,6 @@
 use crate::ans::{AnsState, Symbol};
 use crate::constants::{Bitlen, Weight, ANS_INTERLEAVING};
-use crate::data_types::SplitLatents;
-use crate::data_types::{Latent, Number};
+use crate::data_types::{Latent, Number, SplitLatents};
 use crate::delta::DeltaState;
 use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar};
 use crate::metadata::{DynLatents, Mode};

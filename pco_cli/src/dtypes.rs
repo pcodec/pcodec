@@ -1,10 +1,8 @@
 use std::{any, mem};
 
-use anyhow::anyhow;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use arrow::datatypes as arrow_dtypes;
-use arrow::datatypes::DataType as ArrowDataType;
-use arrow::datatypes::{ArrowPrimitiveType, DataType};
+use arrow::datatypes::{ArrowPrimitiveType, DataType as ArrowDataType, DataType};
 use half::f16;
 use pco::data_types::{Number, NumberType};
 

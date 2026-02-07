@@ -1,15 +1,15 @@
 use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
 use crate::chunk_latent_compressor::{ChunkLatentCompressor, DynChunkLatentCompressor};
-use crate::compression_intermediates::{BinCompressionInfo, PageInfoVar, TrainedBins};
-use crate::compression_intermediates::{DissectedPage, PageInfo};
+use crate::compression_intermediates::{
+  BinCompressionInfo, DissectedPage, PageInfo, PageInfoVar, TrainedBins,
+};
 use crate::constants::{
   Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
   MAX_CONSECUTIVE_DELTA_ORDER, MAX_ENTRIES, OVERSHOOT_PADDING,
 };
 use crate::data_types::number_priv::NumberPriv;
-use crate::data_types::SplitLatents;
-use crate::data_types::{Latent, LatentType};
+use crate::data_types::{Latent, LatentType, SplitLatents};
 use crate::delta::DeltaState;
 use crate::dyn_slices::DynNumberSlice;
 use crate::errors::{PcoError, PcoResult};

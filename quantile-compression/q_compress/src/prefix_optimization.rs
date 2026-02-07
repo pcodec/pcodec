@@ -1,7 +1,6 @@
 use crate::bits::{avg_depth_bits, avg_offset_bits};
 use crate::data_types::{NumberLike, UnsignedLike};
-use crate::run_len_utils;
-use crate::{gcd_utils, Flags, Prefix};
+use crate::{gcd_utils, run_len_utils, Flags, Prefix};
 
 fn prefix_bit_cost<U: UnsignedLike>(
   base_meta_cost: f64,

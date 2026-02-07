@@ -6,9 +6,8 @@ use clap::Parser;
 
 use pco::standalone::{DecompressorItem, FileDecompressor};
 
-use crate::core_handlers;
 use crate::inspect::handler::{CompressionSummary, Output};
-use crate::utils;
+use crate::{core_handlers, utils};
 
 pub mod handler;
 

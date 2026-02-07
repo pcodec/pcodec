@@ -1,11 +1,10 @@
-use std::{cmp, collections::HashMap};
+use std::cmp;
+use std::collections::HashMap;
 
-use crate::{
-  data_types::{Latent, ModeAndLatents, Number, SplitLatents},
-  dyn_slices::DynLatentSlice,
-  errors::{PcoError, PcoResult},
-  metadata::{DynLatents, Mode},
-};
+use crate::data_types::{Latent, ModeAndLatents, Number, SplitLatents};
+use crate::dyn_slices::DynLatentSlice;
+use crate::errors::{PcoError, PcoResult};
+use crate::metadata::{DynLatents, Mode};
 
 fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> PcoResult<ModeAndLatents> {
   let mut count_by_unique = HashMap::new();

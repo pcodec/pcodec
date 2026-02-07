@@ -1,12 +1,11 @@
 use std::fmt::{Debug, Display};
 
-use crate::{
-  data_types::{latent_priv::LatentPriv, ModeAndLatents},
-  dyn_slices::DynLatentSlice,
-  errors::PcoResult,
-  metadata::Mode,
-  ChunkConfig,
-};
+use crate::data_types::latent_priv::LatentPriv;
+use crate::data_types::ModeAndLatents;
+use crate::dyn_slices::DynLatentSlice;
+use crate::errors::PcoResult;
+use crate::metadata::Mode;
+use crate::ChunkConfig;
 
 pub trait NumberPriv: Copy + Debug + Display + Default + PartialEq + Send + Sync + 'static {
   // To choose a header byte for a new data type, review all header bytes in

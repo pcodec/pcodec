@@ -1,10 +1,9 @@
-use jni::{
-  objects::{JObject, JValueGen, JValueOwned},
-  JNIEnv,
-};
+use jni::objects::{JObject, JValueGen, JValueOwned};
+use jni::JNIEnv;
 use pco::data_types::{Number, NumberType};
 
-use crate::{result::Result, traits::JavaConversions};
+use crate::result::Result;
+use crate::traits::JavaConversions;
 
 const TYPE_SIGNATURE: &str = "Lio/github/pcodec/NumArray;";
 

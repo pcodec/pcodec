@@ -1,15 +1,17 @@
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::float::Float;
-use crate::data_types::{latent_priv::LatentPriv, Latent, Number};
+use crate::data_types::latent_priv::LatentPriv;
+use crate::data_types::{Latent, Number};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, DeltaEncoding, DynLatent, LatentVarKey, Mode};
 use std::marker::PhantomData;
 
 mod private {
-  use crate::{
-    data_types::{float::Float, Latent, Number},
-    describers::{ClassicDescriber, FloatMultDescriber, FloatQuantDescriber, IntDescriber},
+  use crate::data_types::float::Float;
+  use crate::data_types::{Latent, Number};
+  use crate::describers::{
+    ClassicDescriber, FloatMultDescriber, FloatQuantDescriber, IntDescriber,
   };
 
   pub trait Sealed {}

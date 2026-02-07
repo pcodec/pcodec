@@ -3,8 +3,7 @@ use std::io::Write;
 
 use crate::data_types::NumberLike;
 use crate::errors::QCompressResult;
-use crate::wrapped::ChunkSpec;
-use crate::wrapped::{Compressor, Decompressor};
+use crate::wrapped::{ChunkSpec, Compressor, Decompressor};
 use crate::{CompressorConfig, DecompressorConfig};
 
 fn encode_usize(x: usize) -> [u8; 4] {
