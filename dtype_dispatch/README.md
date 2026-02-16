@@ -223,17 +223,15 @@ define_an_enum!(
   pub MySliceMut(&mut Arr)
 );
 
-fn main() {
-  let my_data = MyVec::new(vec![0_i32, 1, 2, 3]);
-  let sliced = match_an_enum!(
-    &my_data,
-    MyVec<T>(inner) => {
-      MySlice::new(&inner[1..3])
-    }
-  );
-  // just to show that the slice worked:
-  assert_eq!(format!("{:?}", sliced), "I32([1, 2])");
-}
+let my_data = MyVec::new(vec![0_i32, 1, 2, 3]);
+let sliced = match_an_enum!(
+  &my_data,
+  MyVec<T>(inner) => {
+    MySlice::new(&inner[1..3])
+  }
+);
+// just to show that the slice worked:
+assert_eq!(format!("{:?}", sliced), "I32([1, 2])");
 ```
 
 ## Limitations

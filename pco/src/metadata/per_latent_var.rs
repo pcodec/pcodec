@@ -153,14 +153,6 @@ impl<T> PerLatentVar<T> {
   where
     T: Sum,
   {
-    let mut values = Vec::with_capacity(3);
-    if let Some(value) = self.delta {
-      values.push(value);
-    }
-    values.push(self.primary);
-    if let Some(value) = self.secondary {
-      values.push(value);
-    }
-    T::sum(values.into_iter())
+    self.enumerated().into_iter().map(|(_, v)| v).sum()
   }
 }

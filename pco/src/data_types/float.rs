@@ -547,9 +547,23 @@ mod tests {
     assert_eq!(<f64 as Float>::exp2(0), 1.0);
   }
 
+  fn check_int_float_invertibility<F: Float + Display>(values: &[F]) {
+    for &x in values {
+      let int = x.int_float_to_latent();
+      let recovered = F::int_float_from_latent(int);
+      assert_eq!(
+        x.to_latent_bits(),
+        recovered.to_latent_bits(),
+        "{} != {}",
+        x,
+        recovered
+      );
+    }
+  }
+
   #[test]
   fn int_float32_invertibility() {
-    for x in [
+    check_int_float_invertibility(&[
       -f32::NAN,
       f32::NEG_INFINITY,
       f32::MIN,
@@ -560,23 +574,12 @@ mod tests {
       f32::MAX,
       f32::INFINITY,
       f32::NAN,
-    ] {
-      let int = x.int_float_to_latent();
-      let recovered = f32::int_float_from_latent(int);
-      // gotta compare unsigneds because floats don't implement Equal
-      assert_eq!(
-        x.to_bits(),
-        recovered.to_bits(),
-        "{} != {}",
-        x,
-        recovered
-      );
-    }
+    ]);
   }
 
   #[test]
   fn int_float64_invertibility() {
-    for x in [
+    check_int_float_invertibility(&[
       -f64::NAN,
       f64::NEG_INFINITY,
       f64::MIN,
@@ -587,18 +590,7 @@ mod tests {
       f64::MAX,
       f64::INFINITY,
       f64::NAN,
-    ] {
-      let int = x.int_float_to_latent();
-      let recovered = f64::int_float_from_latent(int);
-      // gotta compare unsigneds because floats don't implement Equal
-      assert_eq!(
-        x.to_bits(),
-        recovered.to_bits(),
-        "{} != {}",
-        x,
-        recovered
-      );
-    }
+    ]);
   }
 
   #[test]
