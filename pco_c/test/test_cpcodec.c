@@ -15,21 +15,27 @@ static int test_caller_alloc_api(void) {
   printf("\n=== Caller-allocates API (thread-safe) ===\n");
 
   /* --- Compression ---------------------------------------------------- */
-  size_t bound = pco_compress_bound(num_elems, PCO_TYPE_F64);
+  size_t bound = pco_standalone_guarantee_file_size(num_elems, PCO_TYPE_F64);
   if (bound == 0) {
-    printf("FAIL: pco_compress_bound returned 0\n");
+    printf("FAIL: pco_standalone_guarantee_file_size returned 0\n");
     return 1;
   }
-  printf("Compression bound for %d f64s: %zu bytes\n", num_elems, bound);
+  printf("File size guarantee for %d f64s: %zu bytes\n", num_elems, bound);
 
   unsigned char *cbuf = (unsigned char *)malloc(bound);
   if (!cbuf) { printf("FAIL: malloc\n"); return 1; }
 
+  struct PcoChunkConfig config;
+  config.compression_level = 8;
+  config.max_page_n = 0;  /* use library default */
+
   size_t compressed_len = 0;
-  enum PcoError res = pco_simple_compress_into(input, num_elems, PCO_TYPE_F64, 8,
-                                               cbuf, bound, &compressed_len);
+  enum PcoError res = pco_standalone_simple_compress_into(input, num_elems,
+                                                         PCO_TYPE_F64, &config,
+                                                         cbuf, bound,
+                                                         &compressed_len);
   if (res != PcoSuccess) {
-    printf("FAIL: pco_simple_compress_into error %d\n", res);
+    printf("FAIL: pco_standalone_simple_compress_into error %d\n", res);
     free(cbuf);
     return 1;
   }
@@ -40,10 +46,10 @@ static int test_caller_alloc_api(void) {
   if (!dbuf) { printf("FAIL: malloc\n"); free(cbuf); return 1; }
 
   size_t decompressed_n = 0;
-  res = pco_simple_decompress_into(cbuf, compressed_len, PCO_TYPE_F64,
-                                   dbuf, num_elems, &decompressed_n);
+  res = pco_standalone_simple_decompress_into(cbuf, compressed_len, PCO_TYPE_F64,
+                                              dbuf, num_elems, &decompressed_n);
   if (res != PcoSuccess) {
-    printf("FAIL: pco_simple_decompress_into error %d\n", res);
+    printf("FAIL: pco_standalone_simple_decompress_into error %d\n", res);
     retcode = 1;
     goto cleanup;
   }

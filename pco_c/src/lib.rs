@@ -7,7 +7,7 @@ use libc::{c_uchar, c_uint, c_void, size_t};
 use crate::PcoError::PcoInvalidType;
 use pco::data_types::{Number, NumberType};
 use pco::standalone::guarantee;
-use pco::{match_number_enum, ChunkConfig};
+use pco::{match_number_enum, ChunkConfig, PagingSpec};
 
 #[repr(C)]
 pub enum PcoError {
@@ -18,46 +18,76 @@ pub enum PcoError {
   PcoDecompressionError,
 }
 
+/// Configuration for compression, passed by the caller.
+///
+/// Only `compression_level` and `paging_spec` are supported for now; other
+/// fields can be added later without breaking the ABI.
+#[repr(C)]
+pub struct PcoChunkConfig {
+  /// Compression level 0–12 (default 8).
+  pub compression_level: c_uint,
+  /// Maximum number of elements per page.
+  /// Set to 0 to use the library default (2^18 = 262144).
+  pub max_page_n: size_t,
+}
+
+impl Default for PcoChunkConfig {
+  fn default() -> Self {
+    Self {
+      compression_level: 8,
+      max_page_n: 0,
+    }
+  }
+}
+
+impl PcoChunkConfig {
+  fn to_chunk_config(&self) -> ChunkConfig {
+    let paging_spec = if self.max_page_n == 0 {
+      PagingSpec::default()
+    } else {
+      PagingSpec::EqualPagesUpTo(self.max_page_n)
+    };
+    ChunkConfig::default()
+      .with_compression_level(self.compression_level as usize)
+      .with_paging_spec(paging_spec)
+      .with_enable_8_bit(true)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Caller-allocates API (thread-safe, no Rust heap ownership)
 //
 // Pattern:
-//   1. Call pco_compress_bound(n, dtype) to learn the maximum output size.
+//   1. Call pco_standalone_guarantee_file_size(n, dtype) to learn the maximum
+//      output size.
 //   2. Allocate that many bytes yourself.
-//   3. Call pco_simple_compress_into(...) to fill your buffer.
+//   3. Call pco_standalone_simple_compress_into(...) to fill your buffer.
 //   4. For decompression, allocate n * sizeof(dtype) bytes for the output,
-//      then call pco_simple_decompress_into(...).
+//      then call pco_standalone_simple_decompress_into(...).
 //
 // These functions are safe to call concurrently from multiple threads without
 // any locking because they hold no shared mutable state.
 // ---------------------------------------------------------------------------
 
-fn _compress_bound<T: Number>(n: size_t) -> size_t {
-  // header_size() is the exact standalone header bound.
-  // For the data: size_of::<T>() per element covers the raw case (incompressible
-  // data), plus 1 byte per element for encoding overhead, plus 1 KiB for chunk
-  // and footer metadata.
-  guarantee::header_size() + n * (std::mem::size_of::<T>() + 1) + 1024
+fn _guarantee_file_size<T: Number>(n: size_t, paging_spec: &PagingSpec) -> size_t {
+  guarantee::file_size::<T::L>(n, paging_spec).unwrap_or(0)
 }
 
 fn _compress_into<T: Number>(
   nums: *const c_void,
   n: size_t,
-  level: c_uint,
+  config: &ChunkConfig,
   dst: *mut c_void,
   dst_cap: size_t,
   n_written: *mut size_t,
 ) -> PcoError {
   let src = unsafe { std::slice::from_raw_parts(nums as *const T, n) };
-  let config = ChunkConfig::default()
-    .with_compression_level(level as usize)
-    .with_enable_8_bit(true);
   // &mut [u8] implements Write; simple_compress_into returns the remaining
   // (unwritten) portion of the slice so we can compute bytes written.
   let dst_bytes: &mut [u8] =
     unsafe { std::slice::from_raw_parts_mut(dst as *mut u8, dst_cap) };
   let original_len = dst_bytes.len();
-  match pco::standalone::simple_compress_into::<T, _>(src, &config, dst_bytes) {
+  match pco::standalone::simple_compress_into::<T, _>(src, config, dst_bytes) {
     Err(_) => PcoError::PcoCompressionError,
     Ok(remaining) => {
       unsafe { *n_written = original_len - remaining.len() };
@@ -90,18 +120,23 @@ fn _decompress_into<T: Number>(
   }
 }
 
-/// Return an upper bound on the number of bytes required to compress `n`
-/// elements of `dtype`.  Returns 0 for an invalid `dtype`.
+/// Return the maximum possible byte size of a standalone file for `n`
+/// elements of `dtype`.  Returns 0 for an invalid `dtype` or invalid
+/// paging spec.
 ///
 /// This function is thread-safe and performs no heap allocation.
 #[no_mangle]
-pub extern "C" fn pco_compress_bound(n: size_t, dtype: c_uchar) -> size_t {
+pub extern "C" fn pco_standalone_guarantee_file_size(
+  n: size_t,
+  dtype: c_uchar,
+) -> size_t {
   let Some(dtype_enum) = NumberType::from_descriminant(dtype) else {
     return 0;
   };
+  let paging_spec = PagingSpec::default();
   match_number_enum!(
     dtype_enum,
-    NumberType<T> => { _compress_bound::<T>(n) }
+    NumberType<T> => { _guarantee_file_size::<T>(n, &paging_spec) }
   )
 }
 
@@ -112,11 +147,11 @@ pub extern "C" fn pco_compress_bound(n: size_t, dtype: c_uchar) -> size_t {
 /// Thread-safe: the function is stateless and operates entirely on the
 /// caller-supplied buffers.
 #[no_mangle]
-pub extern "C" fn pco_simple_compress_into(
+pub extern "C" fn pco_standalone_simple_compress_into(
   nums: *const c_void,
   n: size_t,
   dtype: c_uchar,
-  level: c_uint,
+  config: *const PcoChunkConfig,
   dst: *mut c_void,
   dst_cap: size_t,
   n_written: *mut size_t,
@@ -124,10 +159,15 @@ pub extern "C" fn pco_simple_compress_into(
   let Some(dtype_enum) = NumberType::from_descriminant(dtype) else {
     return PcoInvalidType;
   };
+  let chunk_config = if config.is_null() {
+    PcoChunkConfig::default().to_chunk_config()
+  } else {
+    unsafe { &*config }.to_chunk_config()
+  };
   match_number_enum!(
     dtype_enum,
     NumberType<T> => {
-      _compress_into::<T>(nums, n, level, dst, dst_cap, n_written)
+      _compress_into::<T>(nums, n, &chunk_config, dst, dst_cap, n_written)
     }
   )
 }
@@ -139,7 +179,7 @@ pub extern "C" fn pco_simple_compress_into(
 /// Thread-safe: the function is stateless and operates entirely on the
 /// caller-supplied buffers.
 #[no_mangle]
-pub extern "C" fn pco_simple_decompress_into(
+pub extern "C" fn pco_standalone_simple_decompress_into(
   compressed: *const c_void,
   compressed_len: size_t,
   dtype: c_uchar,
