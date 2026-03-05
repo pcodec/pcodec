@@ -147,7 +147,7 @@ pub extern "C" fn pco_standalone_guarantee_file_size(
 /// Thread-safe: the function is stateless and operates entirely on the
 /// caller-supplied buffers.
 #[no_mangle]
-pub extern "C" fn pco_standalone_simple_compress_into(
+pub unsafe extern "C" fn pco_standalone_simple_compress_into(
   nums: *const c_void,
   n: size_t,
   dtype: c_uchar,
