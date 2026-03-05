@@ -84,8 +84,7 @@ fn _compress_into<T: Number>(
   let src = unsafe { std::slice::from_raw_parts(nums as *const T, n) };
   // &mut [u8] implements Write; simple_compress_into returns the remaining
   // (unwritten) portion of the slice so we can compute bytes written.
-  let dst_bytes: &mut [u8] =
-    unsafe { std::slice::from_raw_parts_mut(dst as *mut u8, dst_cap) };
+  let dst_bytes: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(dst as *mut u8, dst_cap) };
   let original_len = dst_bytes.len();
   match pco::standalone::simple_compress_into::<T, _>(src, config, dst_bytes) {
     Err(_) => PcoError::PcoCompressionError,
@@ -126,10 +125,7 @@ fn _decompress_into<T: Number>(
 ///
 /// This function is thread-safe and performs no heap allocation.
 #[no_mangle]
-pub extern "C" fn pco_standalone_guarantee_file_size(
-  n: size_t,
-  dtype: c_uchar,
-) -> size_t {
+pub extern "C" fn pco_standalone_guarantee_file_size(n: size_t, dtype: c_uchar) -> size_t {
   let Some(dtype_enum) = NumberType::from_descriminant(dtype) else {
     return 0;
   };
