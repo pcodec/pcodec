@@ -2,6 +2,7 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
 #include "cpcodec_generated.h"
 
 // cbindgen can only handle literal constants, which isn't helpful when these

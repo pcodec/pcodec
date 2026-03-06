@@ -1,60 +1,91 @@
 #include "../include/cpcodec.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-int is_empty(struct PcoFfiVec *vec) {
-  return vec->len == 0 && vec->ptr == NULL && vec->raw_box == NULL;
-}
+/* -------------------------------------------------------------------------
+ * Caller-allocates API tests (thread-safe)
+ * ------------------------------------------------------------------------- */
 
-int main() {
-  float input[] = {1.1f, 2.2f, 3.3f, 4.4f};
+static int test_caller_alloc_api(void) {
+  double input[] = {10.0, 20.0, 30.0, 40.0, 50.0, 60.0};
   int num_elems = sizeof(input) / sizeof(input[0]);
   int retcode = 0;
 
-  struct PcoFfiVec cvec;
-  enum PcoError res = pco_auto_compress(&input, num_elems, PCO_TYPE_F32, 8, &cvec);
-  if (res != PcoSuccess) {
-    printf("Error compressing: %d\n", res);
-    retcode = 1;
-    goto cleanup_none;
-  }
-  printf("Compressed %d floats to %d bytes\n", num_elems, cvec.len);
+  printf("\n=== Caller-allocates API (thread-safe) ===\n");
 
-  struct PcoFfiVec dvec;
-  res = pco_auto_decompress(cvec.ptr, cvec.len, PCO_TYPE_F32, &dvec);
-  if (res != PcoSuccess) {
-    printf("Error decompressing: %d\n", res);
-    pco_free_pcovec(&cvec);
-    retcode = 1;
-    goto cleanup_cvec;
+  /* --- Compression ---------------------------------------------------- */
+  size_t bound = pco_standalone_guarantee_file_size(num_elems, PCO_TYPE_F64);
+  if (bound == 0) {
+    printf("FAIL: pco_standalone_guarantee_file_size returned 0\n");
+    return 1;
   }
-  printf("Decompressed %d floats\n", dvec.len);
-  if (dvec.len != num_elems) {
-    printf("Sizes do not match!!!\n");
-    retcode = 1;
-    goto cleanup_all;
-  }
+  printf("File size guarantee for %d f64s: %zu bytes\n", num_elems, bound);
 
+  unsigned char *cbuf = (unsigned char *)malloc(bound);
+  if (!cbuf) { printf("FAIL: malloc\n"); return 1; }
+
+  struct PcoChunkConfig config;
+  config.compression_level = 8;
+  config.max_page_n = 0;  /* use library default */
+
+  size_t compressed_len = 0;
+  enum PcoError res = pco_standalone_simple_compress_into(input, num_elems,
+                                                         PCO_TYPE_F64, &config,
+                                                         cbuf, bound,
+                                                         &compressed_len);
+  if (res != PcoSuccess) {
+    printf("FAIL: pco_standalone_simple_compress_into error %d\n", res);
+    free(cbuf);
+    return 1;
+  }
+  printf("Compressed %d f64s to %zu bytes\n", num_elems, compressed_len);
+
+  /* --- Decompression -------------------------------------------------- */
+  double *dbuf = (double *)malloc(num_elems * sizeof(double));
+  if (!dbuf) { printf("FAIL: malloc\n"); free(cbuf); return 1; }
+
+  size_t decompressed_n = 0;
+  res = pco_standalone_simple_decompress_into(cbuf, compressed_len, PCO_TYPE_F64,
+                                              dbuf, num_elems, &decompressed_n);
+  if (res != PcoSuccess) {
+    printf("FAIL: pco_standalone_simple_decompress_into error %d\n", res);
+    retcode = 1;
+    goto cleanup;
+  }
+  printf("Decompressed %zu f64s\n", decompressed_n);
+
+  if ((int)decompressed_n != num_elems) {
+    printf("FAIL: size mismatch (got %zu, want %d)\n", decompressed_n, num_elems);
+    retcode = 1;
+    goto cleanup;
+  }
   for (int i = 0; i < num_elems; i++) {
-    if (input[i] != ((float *)dvec.ptr)[i]) {
-      printf("Values do not match!!!\n");
+    if (input[i] != dbuf[i]) {
+      printf("FAIL: value mismatch at index %d (%.17g vs %.17g)\n",
+             i, input[i], dbuf[i]);
       retcode = 1;
-      goto cleanup_all;
+      goto cleanup;
     }
   }
   printf("Values match\n");
 
-cleanup_all:
-  pco_free_pcovec(&dvec);
-  if (!is_empty(&dvec)) {
-    printf("Decompression vector not freed!!!\n");
-    retcode = 1;
-  }
-cleanup_cvec:
-  pco_free_pcovec(&cvec);
-  if (!is_empty(&cvec)) {
-    printf("Compression vector not freed!!!\n");
-    retcode = 1;
-  }
-cleanup_none:
+cleanup:
+  free(dbuf);
+  free(cbuf);
   return retcode;
+}
+
+/* -------------------------------------------------------------------------
+ * main
+ * ------------------------------------------------------------------------- */
+
+int main(void) {
+  int rc = 0;
+  rc |= test_caller_alloc_api();
+  if (rc == 0)
+    printf("\nAll tests passed.\n");
+  else
+    printf("\nSome tests FAILED.\n");
+  return rc;
 }
