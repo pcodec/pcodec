@@ -65,7 +65,7 @@ pub fn join_latents<T: Number>(
 ) -> PcoResult<()> {
   let dict = dict.downcast_ref::<T::L>().unwrap();
   let idxs = primary.downcast::<u32>().unwrap();
-  if idxs.iter().any(|idx| *idx > dict.len() as u32) {
+  if idxs.iter().any(|idx| *idx >= dict.len() as u32) {
     // in some cases it is possible to prove the indices are in range from
     // looking at the bins ahead of time, but just keeping this simple for now
     return Err(PcoError::corruption(format!(
@@ -78,4 +78,26 @@ pub fn join_latents<T: Number>(
     *num = T::from_latent_ordered(dict[*idx as usize]);
   }
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::dyn_slices::DynLatentSlice;
+  use crate::metadata::DynLatents;
+
+  #[test]
+  fn test_join_latents_oob_index_returns_err() {
+    // dict has 3 entries; valid indices are 0, 1, 2
+    let dict = DynLatents::new(vec![10_u32, 20_u32, 30_u32]);
+    // index 3 == dict.len() — the off-by-one: currently passes the `> dict.len()`
+    // guard and panics on dict[3]; after the fix it must return Err
+    let idxs = [0_u32, 1_u32, 3_u32];
+    let mut dst = vec![0_u32; 3];
+    let result = join_latents::<u32>(&dict, DynLatentSlice::new(&idxs), &mut dst);
+    assert!(
+      result.is_err(),
+      "expected Err for out-of-range dict index"
+    );
+  }
 }
