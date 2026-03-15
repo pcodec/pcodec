@@ -14,13 +14,14 @@ use crate::metadata::Bin;
 use better_io::BetterBufRead;
 use std::cmp::min;
 use std::io::Write;
+use std::mem::MaybeUninit;
 
 const FULL_BIN_BATCH_LEN: usize = 128;
 
 fn read_bin_batch<L: Latent, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   ans_size_log: Bitlen,
-  dst: &mut [Bin<L>],
+  dst: &mut [MaybeUninit<Bin<L>>],
 ) -> PcoResult<()> {
   let max_size: usize = dst.len() * (5 + L::BITS as usize) + OVERSHOOT_PADDING;
   reader_builder.with_reader(max_size, |reader| unsafe {
@@ -39,11 +40,11 @@ fn read_bin_batch<L: Latent, R: BetterBufRead>(
         )));
       }
 
-      *bin = Bin {
+      *bin = MaybeUninit::new(Bin {
         weight,
         lower,
         offset_bits,
-      };
+      });
     }
     Ok(())
   })?;
@@ -134,7 +135,7 @@ impl ChunkLatentVarMeta {
       latent_type,
       LatentType<L> => {
         let mut bins = Vec::with_capacity(n_bins);
-        unsafe { bins.set_len(n_bins) };
+        let spare_bins = bins.spare_capacity_mut();
         // we read in small batches because a latent variable could
         // theoretically contain up to about 300kB of bins
         for start in (0..n_bins).step_by(FULL_BIN_BATCH_LEN) {
@@ -142,10 +143,11 @@ impl ChunkLatentVarMeta {
           read_bin_batch::<L, R>(
             reader_builder,
             ans_size_log,
-            &mut bins[start..end],
+            &mut spare_bins[start..end],
           )?;
         }
 
+        unsafe { bins.set_len(n_bins) };
         DynBins::new(bins)
       }
     );
