@@ -38,25 +38,19 @@ pub(crate) fn join_latents<F: Float>(
 pub(crate) fn split_latents<F: Float>(page_nums: &[F], config: FloatMultConfig<F>) -> SplitLatents {
   let FloatMultConfig { base, inv_base } = config;
   let n = page_nums.len();
-  let uninit_vec = || unsafe {
-    let mut res = Vec::<F::L>::with_capacity(n);
-    res.set_len(n);
-    res
-  };
-  let mut primary = uninit_vec();
-  let mut adjustments = uninit_vec();
-  for (&num, (primary_dst, adj_dst)) in page_nums
-    .iter()
-    .zip(primary.iter_mut().zip(adjustments.iter_mut()))
-  {
+  let mut primary = Vec::with_capacity(n);
+  let mut adjustments = Vec::with_capacity(n);
+  for &num in page_nums {
     let mult = (num * inv_base).round();
-    *primary_dst = F::int_float_to_latent(mult);
-    *adj_dst = num
-      .to_latent_ordered()
-      .wrapping_sub((mult * base).to_latent_ordered())
-      // ULP adjustments are naturally signed quantities, so we toggle them so
-      // that 0 is in the middle of the range
-      .toggle_center();
+    primary.push(F::int_float_to_latent(mult));
+    adjustments.push(
+      num
+        .to_latent_ordered()
+        .wrapping_sub((mult * base).to_latent_ordered())
+        // ULP adjustments are naturally signed quantities, so we toggle them so
+        // that 0 is in the middle of the range
+        .toggle_center(),
+    );
   }
 
   SplitLatents {

@@ -41,30 +41,22 @@ pub(crate) fn join_latents<F: Float>(
 
 pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatents {
   let n = page_nums.len();
-  let uninit_vec = || unsafe {
-    let mut res = Vec::<F::L>::with_capacity(n);
-    res.set_len(n);
-    res
-  };
-  let mut primary = uninit_vec();
-  let mut secondary = uninit_vec();
+  let mut primary = Vec::with_capacity(n);
+  let mut secondary = Vec::with_capacity(n);
   let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
-  for (&num, (primary_dst, secondary_dst)) in page_nums
-    .iter()
-    .zip(primary.iter_mut().zip(secondary.iter_mut()))
-  {
+  for &num in page_nums {
     let num_ = num.to_latent_ordered();
-    *primary_dst = num_ >> k;
+    primary.push(num_ >> k);
     let lowest_k_bits = num_ & lowest_k_bits_max;
     // Motivation for the sign-dependent logic below:
-    // In the common case where `num` is exactly quantized, we want `*secondary_dst` to always be
+    // In the common case where `num` is exactly quantized, we want the secondary to always be
     // zero.  But when `num` is negative, `lowest_k_bits == lowest_k_bits_max`.  So we manually
     // flip it here, and un-flip it in `join_latents`.
-    *secondary_dst = if num.is_sign_positive_() {
+    secondary.push(if num.is_sign_positive_() {
       lowest_k_bits
     } else {
       lowest_k_bits_max - lowest_k_bits
-    };
+    });
   }
 
   SplitLatents {
