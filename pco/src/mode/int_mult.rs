@@ -21,15 +21,11 @@ pub fn split_latents<T: Number>(nums: &[T], base: T::L) -> SplitLatents {
   let n = nums.len();
   let mut mults = Vec::with_capacity(n);
   let mut adjs = Vec::with_capacity(n);
-  unsafe {
-    mults.set_len(n);
-    adjs.set_len(n);
-  }
-  for (&num, (mult_dst, adj_dst)) in nums.iter().zip(mults.iter_mut().zip(adjs.iter_mut())) {
+  for &num in nums {
     let u = num.to_latent_ordered();
     // Maybe one day we could do a libdivide approach for these
-    *mult_dst = u / base;
-    *adj_dst = u % base;
+    mults.push(u / base);
+    adjs.push(u % base);
   }
 
   SplitLatents {

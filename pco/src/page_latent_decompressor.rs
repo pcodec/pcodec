@@ -19,6 +19,7 @@ unsafe fn read_offsets<L: Latent, const READ_BYTES: usize>(
   latents: &mut [L],
   n: usize,
 ) {
+  debug_assert!(n >= 1, "read_offsets requires n >= 1");
   let base_bit_idx = reader.bit_idx();
   let src = reader.src;
   for i in 0..n {

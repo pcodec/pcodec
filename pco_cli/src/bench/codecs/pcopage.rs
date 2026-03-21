@@ -82,6 +82,9 @@ impl CodecInternal for PaginatedPcoConfig {
     src = &src[4..];
 
     let mut dst = Vec::with_capacity(n);
+    // Safety: set_len before pd.read() is technically the wrong ordering, but
+    // PageDecompressor::read() takes &mut [T]. Maybe we can fix this with a
+    // future API addition.
     unsafe {
       dst.set_len(n);
     }

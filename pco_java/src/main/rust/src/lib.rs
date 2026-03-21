@@ -1,4 +1,3 @@
-#![allow(clippy::uninit_vec)]
 #![deny(clippy::unused_unit)]
 #![deny(dead_code)]
 
@@ -15,6 +14,7 @@ use jni::JNIEnv;
 use pco::data_types::{Number, NumberType};
 use pco::match_number_enum;
 use pco::standalone::FileDecompressor;
+use std::slice;
 
 fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   // We need a function that creates a fake instance of the return type, due
@@ -56,10 +56,9 @@ fn simple_compress_inner(
       let j_src = JPrimitiveArray::from(j_src);
       let len = env.get_array_length(&j_src)? as usize;
       let mut nums = Vec::with_capacity(len);
-      unsafe {
-          nums.set_len(len);
-      }
-      T::get_region(env, &j_src, &mut nums)?;
+      let uninit_slice = unsafe { slice::from_raw_parts_mut(nums.as_mut_ptr(), len) };
+      T::get_region(env, &j_src, uninit_slice)?;
+      unsafe { nums.set_len(len); }
       // TODO is there a way to avoid copying here?
       pco::standalone::simple_compress(&nums, &chunk_config)?
   });

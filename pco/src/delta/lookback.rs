@@ -1,4 +1,4 @@
-use std::mem::{self, MaybeUninit};
+use std::mem::MaybeUninit;
 use std::{array, cmp};
 
 use crate::constants::{Bitlen, DeltaLookback};
@@ -43,6 +43,9 @@ fn hash_lookup(
     let buckets = [bucket.wrapping_sub(1), bucket, bucket.wrapping_add(1)];
     let hashes = buckets.map(hash_fn);
     for h in hashes {
+      // SAFETY: `h = hash_fn(...) & hash_mask < hash_table_n`, and
+      // `offset` is a multiple of `hash_table_n` with at most
+      // `COARSENESSES.len() - 1` increments, so `offset + h < idx_hash_table.len()`.
       let lookback_to_last_instance = unsafe { i - *idx_hash_table.get_unchecked(offset + h) };
       proposed_lookbacks[proposal_idx] = if lookback_to_last_instance <= window_n {
         lookback_to_last_instance
@@ -52,6 +55,7 @@ fn hash_lookup(
       proposal_idx += 1;
     }
     let h = hashes[1];
+    // SAFETY: same bounds argument as the read above.
     unsafe {
       *idx_hash_table.get_unchecked_mut(offset + h) = i;
     }
@@ -70,6 +74,11 @@ fn find_best_lookback<L: Latent>(
   let mut best_goodness = 0;
   let mut best_lookback: usize = 0;
   for &lookback in proposed_lookbacks {
+    // SAFETY: each `lookback` comes from `proposed_lookbacks`, whose entries
+    // are initialised to `(k+1).min(state_n) >= 1` and subsequently updated
+    // only to values in `[1, window_n]`.  `window_n <= lookback_counts.len()`,
+    // so `lookback - 1 < lookback_counts.len()`.  `i >= state_n >= lookback`,
+    // so `i - lookback` doesn't underflow and stays in `[0, latents.len())`.
     let (lookback_count, other) = unsafe {
       (
         *lookback_counts.get_unchecked(lookback - 1),
@@ -108,7 +117,8 @@ pub fn choose_lookbacks<L: Latent>(
   );
 
   let mut lookback_counts = vec![1_u32; window_n.min(latents.len())];
-  let mut lookbacks = vec![MaybeUninit::uninit(); latents.len() - state_n];
+  let mut lookbacks = Vec::with_capacity(latents.len() - state_n);
+  let uninit_lookbacks = lookbacks.spare_capacity_mut();
   let mut idx_hash_table = vec![0_usize; COARSENESSES.len() * hash_table_n];
   let mut proposed_lookbacks = array::from_fn::<_, PROPOSED_LOOKBACKS, _>(|i| (i + 1).min(state_n));
   let mut best_lookback = 1;
@@ -140,11 +150,12 @@ pub fn choose_lookbacks<L: Latent>(
     proposed_lookbacks[BRUTE_LOOKBACKS + (repeating_lookback_idx) % REPEATING_LOOKBACKS] =
       new_best_lookback;
     best_lookback = new_best_lookback;
-    lookbacks[i - state_n] = MaybeUninit::new(best_lookback as DeltaLookback);
+    uninit_lookbacks[i - state_n] = MaybeUninit::new(best_lookback as DeltaLookback);
     lookback_counts[best_lookback - 1] += 1;
   }
 
-  unsafe { mem::transmute::<Vec<MaybeUninit<DeltaLookback>>, Vec<DeltaLookback>>(lookbacks) }
+  unsafe { lookbacks.set_len(latents.len() - state_n) };
+  lookbacks
 }
 
 // All encode in place functions leave junk data (`state_n` latents in this

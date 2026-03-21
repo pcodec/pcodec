@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::io::{Read, Write};
+use std::{mem, slice};
 
 use clap::Parser;
 
@@ -35,12 +36,10 @@ impl CodecInternal for SnappyConfig {
     let mut res = Vec::<T>::with_capacity(len);
     let mut rdr = snap::read::FrameDecoder::new(&bytes[4..]);
     unsafe {
+      let byte_len = len * mem::size_of::<T>();
+      let bytes_out = slice::from_raw_parts_mut(res.as_mut_ptr() as *mut u8, byte_len);
+      rdr.read_exact(bytes_out).unwrap();
       res.set_len(len);
-      rdr
-        .read_exact(utils::num_slice_to_bytes_mut(
-          res.as_mut_slice(),
-        ))
-        .unwrap();
     }
     res
   }
