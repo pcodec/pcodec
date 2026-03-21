@@ -81,13 +81,8 @@ impl CodecInternal for PaginatedPcoConfig {
     let n_chunks = u32::from_le_bytes(src[0..4].try_into().unwrap()) as usize;
     src = &src[4..];
 
-    let mut dst = Vec::with_capacity(n);
-    // Safety: set_len before pd.read() is technically the wrong ordering, but
-    // PageDecompressor::read() takes &mut [T]. Maybe we can fix this with a
-    // future API addition.
-    unsafe {
-      dst.set_len(n);
-    }
+    let mut res = Vec::with_capacity(n);
+    let dst = res.spare_capacity_mut();
 
     let (fd, rest) = FileDecompressor::new(src).unwrap();
     src = rest;
@@ -109,6 +104,6 @@ impl CodecInternal for PaginatedPcoConfig {
       }
     }
 
-    dst
+    res
   }
 }

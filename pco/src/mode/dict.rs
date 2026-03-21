@@ -1,5 +1,6 @@
 use std::cmp;
 use std::collections::HashMap;
+use std::mem::MaybeUninit;
 
 use crate::data_types::{Latent, ModeAndLatents, Number, SplitLatents};
 use crate::dyn_slices::DynLatentSlice;
@@ -61,7 +62,7 @@ pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLa
 pub fn join_latents<T: Number>(
   dict: &DynLatents,
   primary: DynLatentSlice,
-  dst: &mut [T],
+  dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<()> {
   let dict = dict.downcast_ref::<T::L>().unwrap();
   let idxs = primary.downcast::<u32>().unwrap();
@@ -75,7 +76,7 @@ pub fn join_latents<T: Number>(
   }
 
   for (idx, num) in idxs.iter().zip(dst.iter_mut()) {
-    *num = T::from_latent_ordered(dict[*idx as usize]);
+    num.write(T::from_latent_ordered(dict[*idx as usize]));
   }
   Ok(())
 }
@@ -93,7 +94,7 @@ mod tests {
     // index 3 == dict.len() — the off-by-one: currently passes the `> dict.len()`
     // guard and panics on dict[3]; after the fix it must return Err
     let idxs = [0_u32, 1_u32, 3_u32];
-    let mut dst = vec![0_u32; 3];
+    let mut dst = [MaybeUninit::<u32>::uninit(); 3];
     let result = join_latents::<u32>(&dict, DynLatentSlice::new(&idxs), &mut dst);
     assert!(
       result.is_err(),

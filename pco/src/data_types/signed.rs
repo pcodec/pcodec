@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::constants::Bitlen;
 use crate::data_types::{unsigned, ModeAndLatents, Number, NumberPriv};
 use crate::describers::LatentDescriber;
@@ -46,7 +48,7 @@ macro_rules! impl_signed {
         mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
+        dst: &mut [MaybeUninit<Self>],
       ) -> PcoResult<()> {
         unsigned::join_latents(mode, primary, secondary, dst)
       }

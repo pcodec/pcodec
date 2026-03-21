@@ -27,6 +27,7 @@ pub struct ChunkLatentCompressorScratch<L: Latent> {
 // encode_ans_in_reverse) — a significant refactor of a hot path.
 unsafe fn uninit_vec<T>(n: usize) -> Vec<T> {
   let mut res = Vec::with_capacity(n);
+  #[allow(clippy::uninit_vec)]
   res.set_len(n);
   res
 }

@@ -1,5 +1,3 @@
-#![allow(clippy::uninit_vec)]
-
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs;
