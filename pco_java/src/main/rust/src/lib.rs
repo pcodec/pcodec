@@ -8,13 +8,13 @@ mod traits;
 
 use crate::result::{ExceptionKind, Result};
 use crate::traits::JavaConversions;
-use std::slice;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JValueGen};
 use jni::sys::*;
 use jni::JNIEnv;
 use pco::data_types::{Number, NumberType};
 use pco::match_number_enum;
 use pco::standalone::FileDecompressor;
+use std::slice;
 
 fn handle_result(env: &mut JNIEnv, result: Result<jobject>) -> jobject {
   // We need a function that creates a fake instance of the return type, due
