@@ -24,7 +24,9 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.8.1
       - name: Install cross
-        run: cargo install cross --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
       - name: Test
         run: cargo test --all-features
       - name: Tests on aarch64
@@ -38,9 +40,9 @@ jobs:
         run: |
           rustup override set nightly
           rustup component add clippy rustfmt
+      - name: Ensure formatted
+        run: cargo fmt --check
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.8.1
       - name: Clippy
         run: cargo clippy --no-deps --all-features
-      - name: Ensure formatted
-        run: cargo fmt --check
