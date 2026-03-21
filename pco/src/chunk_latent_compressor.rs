@@ -20,6 +20,11 @@ pub struct ChunkLatentCompressorScratch<L: Latent> {
   symbols: ScratchArray<Symbol>,
 }
 
+// Safety: set_len before fill is technically UB, but all T here are non-Drop
+// integer/float types so no destructor runs on garbage if a panic occurs.
+// Fixing correctly would require threading &mut [MaybeUninit<T>] through
+// dissect_batch and its callees (dissect_bins, set_offsets,
+// encode_ans_in_reverse) — a significant refactor of a hot path.
 unsafe fn uninit_vec<T>(n: usize) -> Vec<T> {
   let mut res = Vec::with_capacity(n);
   res.set_len(n);

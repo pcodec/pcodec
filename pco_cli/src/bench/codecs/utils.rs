@@ -10,11 +10,3 @@ pub unsafe fn num_slice_to_bytes<T: PcoNumber>(slice: &[T]) -> &[u8] {
     byte_len,
   )
 }
-
-pub unsafe fn num_slice_to_bytes_mut<T: PcoNumber>(slice: &mut [T]) -> &mut [u8] {
-  let byte_len = mem::size_of_val(slice);
-  &mut *std::ptr::slice_from_raw_parts_mut(
-    mem::transmute::<*mut T, *mut u8>(slice.as_mut_ptr()),
-    byte_len,
-  )
-}

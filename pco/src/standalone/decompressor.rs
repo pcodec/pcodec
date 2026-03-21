@@ -304,6 +304,11 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     let initial_len = dst.len();
     let remaining = self.n - self.n_processed;
     dst.reserve(remaining);
+    // Safety: set_len before read() is technically the wrong ordering, but
+    // read() takes &mut [T], and T: Number is non-Drop, so no destructor runs
+    // on uninitialized elements if a panic occurs between set_len and the fill.
+    // Maybe eventually we can accept &mut [MaybeUninit<T>] in the public API as
+    // well.
     unsafe {
       dst.set_len(initial_len + remaining);
     }

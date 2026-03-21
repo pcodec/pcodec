@@ -5,6 +5,7 @@ use brotli::BrotliCompress;
 use clap::Parser;
 use std::convert::TryInto;
 use std::default::Default;
+use std::{mem, slice};
 
 #[derive(Clone, Debug, Parser)]
 pub struct BrotliConfig {
@@ -43,12 +44,10 @@ impl CodecInternal for BrotliConfig {
     let len = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
     let mut res = Vec::<T>::with_capacity(len);
     unsafe {
+      let byte_len = len * mem::size_of::<T>();
+      let mut bytes_out = slice::from_raw_parts_mut(res.as_mut_ptr() as *mut u8, byte_len);
+      brotli::BrotliDecompress(&mut &bytes[4..], &mut bytes_out).unwrap();
       res.set_len(len);
-      brotli::BrotliDecompress(
-        &mut &bytes[4..],
-        &mut utils::num_slice_to_bytes_mut(res.as_mut_slice()),
-      )
-      .unwrap();
     }
     res
   }

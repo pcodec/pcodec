@@ -1,4 +1,3 @@
-#![allow(clippy::uninit_vec)]
 #![deny(clippy::unused_unit)]
 #![deny(dead_code)]
 
@@ -9,6 +8,7 @@ mod traits;
 
 use crate::result::{ExceptionKind, Result};
 use crate::traits::JavaConversions;
+use std::slice;
 use jni::objects::{JClass, JObject, JPrimitiveArray, JValueGen};
 use jni::sys::*;
 use jni::JNIEnv;
@@ -56,10 +56,9 @@ fn simple_compress_inner(
       let j_src = JPrimitiveArray::from(j_src);
       let len = env.get_array_length(&j_src)? as usize;
       let mut nums = Vec::with_capacity(len);
-      unsafe {
-          nums.set_len(len);
-      }
-      T::get_region(env, &j_src, &mut nums)?;
+      let uninit_slice = unsafe { slice::from_raw_parts_mut(nums.as_mut_ptr(), len) };
+      T::get_region(env, &j_src, uninit_slice)?;
+      unsafe { nums.set_len(len); }
       // TODO is there a way to avoid copying here?
       pco::standalone::simple_compress(&nums, &chunk_config)?
   });

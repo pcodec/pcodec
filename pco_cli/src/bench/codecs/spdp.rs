@@ -1,5 +1,6 @@
 use std::cmp::{max, min};
 use std::convert::TryInto;
+use std::{mem, slice};
 
 use clap::Parser;
 
@@ -63,10 +64,9 @@ impl CodecInternal for SpdpConfig {
     // decompressed buffer to avoid segfaults. I haven't looked at their source
     // code enough to know exactly how much is necessary.
     let mut dst = Vec::with_capacity(2 * total_count + 9);
-    let mut dst_bytes = unsafe {
-      dst.set_len(total_count);
-      utils::num_slice_to_bytes_mut(&mut dst)
-    };
+    let total_byte_len = total_count * mem::size_of::<T>();
+    let mut dst_bytes =
+      unsafe { slice::from_raw_parts_mut(dst.as_mut_ptr() as *mut u8, total_byte_len) };
 
     while !src.is_empty() {
       let dst_batch_length = u32::from_le_bytes(src[..4].try_into().unwrap()) as usize;
@@ -87,6 +87,7 @@ impl CodecInternal for SpdpConfig {
       src = &src[csize..];
       dst_bytes = &mut dst_bytes[dst_batch_length..];
     }
+    unsafe { dst.set_len(total_count) };
     dst
   }
 }

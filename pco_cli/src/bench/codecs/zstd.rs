@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::{mem, slice};
 
 use clap::Parser;
 
@@ -38,12 +39,10 @@ impl CodecInternal for ZstdConfig {
     let len = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
     let mut res = Vec::<T>::with_capacity(len);
     unsafe {
+      let byte_len = len * mem::size_of::<T>();
+      let bytes_out = slice::from_raw_parts_mut(res.as_mut_ptr() as *mut u8, byte_len);
+      zstd::stream::copy_decode(&bytes[4..], bytes_out).unwrap();
       res.set_len(len);
-      zstd::stream::copy_decode(
-        &bytes[4..],
-        utils::num_slice_to_bytes_mut(res.as_mut_slice()),
-      )
-      .unwrap();
     }
     res
   }
