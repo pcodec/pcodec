@@ -1,5 +1,3 @@
-use std::mem;
-
 use clap::Parser;
 
 use crate::bench::codecs::CodecInternal;
@@ -35,7 +33,7 @@ impl CodecInternal for SprintzConfig {
     let mut res = Vec::new();
     res.extend((len as u32).to_le_bytes());
 
-    let buf_size = sprintz_sys::compress_buf_size(len * size_of::<T>());
+    let buf_size = sprintz_sys::compress_buf_size(size_of_val(nums));
     res.reserve(buf_size);
     let pos = res.len();
     let clen = unsafe {
