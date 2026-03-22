@@ -98,6 +98,14 @@ fn default_codec<C: CodecInternal>() -> C {
   <C as FromArgMatches>::from_arg_matches_mut(&mut default_arg_matches).unwrap()
 }
 
+fn strip_capacity<T>(v: Vec<T>) -> Vec<T> {
+  // If we let codecs return and operate on an arbitrary vec, they could cheat
+  // by using data in the uninitialized capacity.
+  let mut res = Vec::with_capacity(v.len());
+  res.extend(v);
+  res
+}
+
 impl<C: CodecInternal> CodecSurface for C {
   fn name(&self) -> &'static str {
     self.name()
@@ -149,7 +157,7 @@ impl<C: CodecInternal> CodecSurface for C {
     let dtype = num_vec.dtype();
 
     // compress
-    let compressed = self.compress_dynamic(num_vec);
+    let compressed = strip_capacity(self.compress_dynamic(num_vec));
 
     // write to disk
     if let Some(dir) = opt.save_dir.as_ref() {
