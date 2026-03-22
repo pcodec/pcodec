@@ -2301,6 +2301,7 @@ dependencies = [
  "serde",
  "snap",
  "spdp_sys",
+ "sprintz_sys",
  "tabled",
  "tokio",
  "toml",
@@ -2990,6 +2991,15 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "sprintz_sys"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91340700f0ed24ffc87a165526c423c00c258a4c5cdff506a33653e0de6372cd"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

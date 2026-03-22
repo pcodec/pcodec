@@ -32,6 +32,8 @@ mod qco;
 mod snappy;
 #[cfg(feature = "full_bench")]
 mod spdp;
+#[cfg(all(feature = "full_bench", target_arch = "x86_64"))]
+mod sprintz;
 #[cfg(feature = "full_bench")]
 mod turbo_pfor;
 pub mod utils;
@@ -262,6 +264,8 @@ impl FromStr for CodecConfig {
       "snap" | "snappy" => SnappyConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "spdp" => spdp::SpdpConfig::from_kv_args(&clap_kv_args),
+      #[cfg(all(feature = "full_bench", target_arch = "x86_64"))]
+      "sprintz" => sprintz::SprintzConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
       "tpfor" | "turbopfor" => turbo_pfor::TurboPforConfig::from_kv_args(&clap_kv_args),
       #[cfg(feature = "full_bench")]
