@@ -32,7 +32,7 @@ mod qco;
 mod snappy;
 #[cfg(feature = "full_bench")]
 mod spdp;
-// #[cfg(all(feature = "full_bench", target_arch = "x86_64"))]
+#[cfg(all(feature = "full_bench", target_arch = "x86_64"))]
 mod sprintz;
 #[cfg(feature = "full_bench")]
 mod turbo_pfor;

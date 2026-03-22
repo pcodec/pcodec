@@ -40,7 +40,7 @@ impl CodecInternal for SprintzConfig {
       let dst = res.as_mut_ptr().add(pos);
       match (size_of::<T>(), &self.filter) {
         (1, Filter::Delta) => {
-          sprintz_sys::sprintz_c_compress_delta_8b(nums.as_ptr() as _, len, dst, 1)
+          sprintz_sys::sprintz_c_compress_delta_8b(nums.as_ptr() as _, len, dst as _, 1)
         }
         (1, Filter::Xff) => {
           sprintz_sys::sprintz_c_compress_xff_8b(nums.as_ptr() as _, len, dst as _, 1)
