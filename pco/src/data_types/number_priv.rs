@@ -2,6 +2,8 @@ use std::fmt::{Debug, Display};
 
 use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::ModeAndLatents;
+use std::mem::MaybeUninit;
+
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::Mode;
@@ -42,6 +44,6 @@ pub trait NumberPriv: Copy + Debug + Display + Default + PartialEq + Send + Sync
     mode: &Mode,
     primary: DynLatentSlice,
     secondary: Option<DynLatentSlice>,
-    dst: &mut [Self],
+    dst: &mut [MaybeUninit<Self>],
   ) -> PcoResult<()>;
 }

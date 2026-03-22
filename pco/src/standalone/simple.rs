@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::io::Write;
+use std::mem::MaybeUninit;
 
 use crate::chunk_config::ChunkConfig;
 use crate::data_types::{Number, NumberType};
@@ -8,7 +9,7 @@ use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
-use crate::{PagingSpec, FULL_BATCH_N};
+use crate::{PagingSpec, WritableDst, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and a configuration and writes compressed bytes
 /// to the destination.
@@ -97,10 +98,15 @@ pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResu
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
-pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoResult<Progress> {
+pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
+  src: &[u8],
+  dst: &mut D,
+) -> PcoResult<Progress> {
   let (file_decompressor, mut src) = FileDecompressor::new(src)?;
 
-  let mut incomplete_batch_buffer = vec![T::default(); FULL_BATCH_N];
+  let mut dst = dst.as_maybe_uninit_slice_mut();
+  // MaybeUninit<T>: Copy always, so this array init is fine even for non-Copy T.
+  let mut incomplete_batch_buffer = [MaybeUninit::<T>::uninit(); FULL_BATCH_N];
   let mut progress = Progress::default();
   loop {
     let maybe_cd = file_decompressor.chunk_decompressor(src)?;
@@ -126,7 +132,7 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoRe
     // If we're near the end of dst, we do one possibly incomplete batch
     // of numbers and copy them over.
     if !dst.is_empty() {
-      let new_progress = chunk_decompressor.read(&mut incomplete_batch_buffer)?;
+      let new_progress = chunk_decompressor.read(&mut incomplete_batch_buffer[..])?;
       let n_processed = min(dst.len(), new_progress.n_processed);
       dst[..n_processed].copy_from_slice(&incomplete_batch_buffer[..n_processed]);
       dst = &mut dst[n_processed..];
