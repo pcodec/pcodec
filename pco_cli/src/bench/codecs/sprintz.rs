@@ -5,10 +5,16 @@ use clap::Parser;
 use crate::bench::codecs::CodecInternal;
 use crate::dtypes::PcoNumber;
 
+#[derive(Clone, Debug, clap::ValueEnum)]
+enum Filter {
+  Delta,
+  Xff,
+}
+
 #[derive(Clone, Debug, Parser)]
 pub struct SprintzConfig {
-  #[arg(long, default_value = "false")]
-  xff: bool,
+  #[arg(long, default_value = "delta")]
+  filter: Filter,
 }
 
 impl CodecInternal for SprintzConfig {
@@ -17,7 +23,11 @@ impl CodecInternal for SprintzConfig {
   }
 
   fn get_confs(&self) -> Vec<(&'static str, String)> {
-    vec![("xff", self.xff.to_string())]
+    let filter = match self.filter {
+      Filter::Delta => "delta",
+      Filter::Xff => "xff",
+    };
+    vec![("filter", filter.to_string())]
   }
 
   fn compress<T: PcoNumber>(&self, nums: &[T]) -> Vec<u8> {
@@ -30,23 +40,11 @@ impl CodecInternal for SprintzConfig {
     let pos = res.len();
     let clen = unsafe {
       let dest = res.as_mut_ptr().add(pos);
-      match mem::size_of::<T>() {
-        1 => {
-          let src = nums.as_ptr() as *const u8;
-          if self.xff {
-            sprintz_sys::sprintz_c_compress_xff_8b(src, len as u32, dest as *mut i8, 1)
-          } else {
-            sprintz_sys::sprintz_c_compress_delta_8b(src, len as u32, dest as *mut i8, 1)
-          }
-        }
-        2 => {
-          let src = nums.as_ptr() as *const u16;
-          if self.xff {
-            sprintz_sys::sprintz_c_compress_xff_16b(src, len as u32, dest as *mut i16, 1)
-          } else {
-            sprintz_sys::sprintz_c_compress_delta_16b(src, len as u32, dest as *mut i16, 1)
-          }
-        }
+      match (mem::size_of::<T>(), &self.filter) {
+        (1, Filter::Delta) => sprintz_sys::sprintz_c_compress_delta_8b(nums.as_ptr() as _, len as u32, dest as _, 1),
+        (1, Filter::Xff)   => sprintz_sys::sprintz_c_compress_xff_8b  (nums.as_ptr() as _, len as u32, dest as _, 1),
+        (2, Filter::Delta) => sprintz_sys::sprintz_c_compress_delta_16b(nums.as_ptr() as _, len as u32, dest as _, 1),
+        (2, Filter::Xff)   => sprintz_sys::sprintz_c_compress_xff_16b  (nums.as_ptr() as _, len as u32, dest as _, 1),
         _ => panic!("sprintz only supports 1- and 2-byte types"),
       }
     };
@@ -62,23 +60,11 @@ impl CodecInternal for SprintzConfig {
     let mut out = Vec::<T>::with_capacity(len + 64);
     let dlen = unsafe {
       let dest = out.as_mut_ptr();
-      match mem::size_of::<T>() {
-        1 => {
-          let src = compressed.as_ptr() as *const i8;
-          if self.xff {
-            sprintz_sys::sprintz_c_decompress_xff_8b(src, dest as *mut u8)
-          } else {
-            sprintz_sys::sprintz_c_decompress_delta_8b(src, dest as *mut u8)
-          }
-        }
-        2 => {
-          let src = compressed.as_ptr() as *const i16;
-          if self.xff {
-            sprintz_sys::sprintz_c_decompress_xff_16b(src, dest as *mut u16)
-          } else {
-            sprintz_sys::sprintz_c_decompress_delta_16b(src, dest as *mut u16)
-          }
-        }
+      match (mem::size_of::<T>(), &self.filter) {
+        (1, Filter::Delta) => sprintz_sys::sprintz_c_decompress_delta_8b(compressed.as_ptr() as _, dest as _),
+        (1, Filter::Xff)   => sprintz_sys::sprintz_c_decompress_xff_8b  (compressed.as_ptr() as _, dest as _),
+        (2, Filter::Delta) => sprintz_sys::sprintz_c_decompress_delta_16b(compressed.as_ptr() as _, dest as _),
+        (2, Filter::Xff)   => sprintz_sys::sprintz_c_decompress_xff_16b  (compressed.as_ptr() as _, dest as _),
         _ => panic!("sprintz only supports 1- and 2-byte types"),
       }
     };
