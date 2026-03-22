@@ -39,6 +39,7 @@ rayon = { workspace = true, optional = true }
 rust-openzl = {workspace = true, optional = true }
 snap = { workspace = true }
 spdp_sys = { workspace = true, optional = true }
+sprintz_sys = { workspace = true, optional = true }
 toml = { workspace = true }
 tabled = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -49,4 +50,4 @@ zstd = { workspace = true }
 
 [features]
 audio = ["hound"]
-full_bench = ["blosc2-src", "brotli", "once_cell", "q_compress", "rayon", "rust-openzl", "spdp_sys", "tokio", "turbo_pfor_sys", "vortex"]
+full_bench = ["blosc2-src", "brotli", "once_cell", "q_compress", "rayon", "rust-openzl", "spdp_sys", "sprintz_sys", "tokio", "turbo_pfor_sys", "vortex"]
