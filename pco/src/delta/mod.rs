@@ -126,6 +126,7 @@ pub fn decode_in_place<L: Latent>(
   state_pos: &mut usize,
   state: &mut [L],
   latents: &mut [L],
+  conv1_scratch: &mut [L::Conv],
 ) -> PcoResult<()> {
   match delta_encoding {
     LatentVarDeltaEncoding::NoOp => Ok(()),
@@ -150,7 +151,7 @@ pub fn decode_in_place<L: Latent>(
       }
     }
     LatentVarDeltaEncoding::Conv1(config) => {
-      conv1::decode_in_place(config, state, latents);
+      conv1::decode_in_place(config, state, latents, conv1_scratch);
       Ok(())
     }
   }

@@ -246,6 +246,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
     self.read_batch_pre_delta(reader, pre_delta_len, cld);
     let dst = &mut cld.scratch.latents[..n_remaining_in_page.min(FULL_BATCH_N)];
+    let conv1_scratch = &mut cld.scratch.conv1_scratch;
 
     delta::decode_in_place(
       &cld.delta_encoding,
@@ -253,6 +254,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       &mut self.delta_state_pos,
       &mut self.delta_state,
       dst,
+      conv1_scratch,
     )
   }
 }

@@ -185,6 +185,122 @@ fn predict_into<L: Latent>(
   }
 }
 
+// const N: usize = 4;
+// #[inline(never)]
+// fn decode_residuals_u16x4_simd(
+//   weights: [i32; N],
+//   bias: i32,
+//   quantization: Bitlen,
+//   residuals: &mut [u16],
+// ) {
+//   assert!(residuals.len() >= N);
+//   let mut s0 = bias
+//     .wrapping_add(weights[3].wrapping_mul(residuals[0] as i32))
+//     .wrapping_add(weights[2].wrapping_mul(residuals[1] as i32))
+//     .wrapping_add(weights[1].wrapping_mul(residuals[2] as i32));
+//   let mut s1 = bias
+//     .wrapping_add(weights[3].wrapping_mul(residuals[1] as i32))
+//     .wrapping_add(weights[2].wrapping_mul(residuals[2] as i32));
+//   let mut s2 = bias.wrapping_add(weights[3].wrapping_mul(residuals[2] as i32));
+
+//   let [w0, w1, w2, w3] = weights;
+//   let mut x = residuals[N - 1] as i32;
+
+//   for i in N..residuals.len() {
+//     let y = residuals[i].wrapping_add((s0.wrapping_add(x.wrapping_mul(w0)) >> quantization) as u16);
+//     // println!("x: {x}, y: {y}, s0: {s0}, s1: {s1}");
+//     s0 = s1.wrapping_add(x.wrapping_mul(w1));
+//     s1 = s2.wrapping_add(x.wrapping_mul(w2));
+//     s2 = bias.wrapping_add(x.wrapping_mul(w3));
+//     residuals[i] = y;
+//     x = y as i32;
+//     // if i == 10 {
+//     //   panic!();
+//     // }
+//   }
+// }
+
+// const N: usize = 4;
+// #[inline(never)]
+// fn decode_residuals_u16x4_simd(
+//   weights: [i32; N],
+//   bias: i32,
+//   quantization: Bitlen,
+//   residuals: &mut [u16],
+//   scratch: &mut [i32],
+// ) {
+//   let n = residuals.len() + N;
+//   let scratch = &mut scratch[..n];
+//   scratch.fill(bias);
+
+//   for i in 0..N {
+//     let x = residuals[i] as i32;
+//     scratch[i] = x;
+//     for j in N - i - 1..N {
+//       scratch[i + j + 1] = scratch[i + j + 1].wrapping_add(x.wrapping_mul(weights[j]));
+//     }
+//   }
+
+//   let mut x = scratch[N - 1] >> quantization;
+//   residuals[N] = x as u16;
+//   unsafe {
+//     for i in N..scratch.len() - N {
+//       let y = scratch
+//         .get_unchecked(i + 1)
+//         .wrapping_add(x.wrapping_mul(weights[0]))
+//         >> quantization;
+//       *scratch.get_unchecked_mut(i + 1) = y;
+//       *scratch.get_unchecked_mut(i + 2) = scratch
+//         .get_unchecked(i + 2)
+//         .wrapping_add(x.wrapping_mul(weights[1]));
+//       *scratch.get_unchecked_mut(i + 3) = scratch
+//         .get_unchecked(i + 3)
+//         .wrapping_add(x.wrapping_mul(weights[2]));
+//       *scratch.get_unchecked_mut(i + 4) = scratch
+//         .get_unchecked(i + 4)
+//         .wrapping_add(x.wrapping_mul(weights[3]));
+//       // *scratch.get_unchecked_mut(i + 5) = scratch
+//       //   .get_unchecked(i + 5)
+//       //   .wrapping_add(x.wrapping_mul(weights[4]));
+//       x = y;
+//     }
+//   }
+
+//   for (x_i32, x_u16) in scratch.iter().zip(residuals.iter_mut()) {
+//     *x_u16 = *x_i32 as u16;
+//   }
+// }
+
+fn decode_residuals_u16x4_simd(
+  weights: [i32; 4],
+  bias: i32,
+  quantization: Bitlen,
+  residuals: &mut [u16],
+) {
+  let [w0, w1, w2, w3] = weights;
+  let [mut s0, mut s1, mut s2, mut s3] = [
+    residuals[0] as i32,
+    residuals[1] as i32,
+    residuals[2] as i32,
+    residuals[3] as i32,
+  ];
+  for i in 4..residuals.len() {
+    let y = residuals[i].wrapping_add(
+      ((bias
+        .wrapping_add(w0.wrapping_mul(s0))
+        .wrapping_add(w1.wrapping_mul(s1))
+        .wrapping_add(w2.wrapping_mul(s2))
+        .wrapping_add(w3.wrapping_mul(s3)))
+        >> quantization) as u16,
+    );
+    s0 = s1;
+    s1 = s2;
+    s2 = s3;
+    s3 = y as i32;
+    residuals[i] = y;
+  }
+}
+
 fn decode_residuals<L: Latent>(
   weights: &[L::Conv],
   bias: L::Conv,
@@ -407,7 +523,12 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
   initial_state
 }
 
-pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
+pub fn decode_in_place<L: Latent>(
+  config: &DeltaConv1Config,
+  state: &mut [L],
+  latents: &mut [L],
+  conv1_scratch: &mut [L::Conv],
+) {
   let weights = &config.weights::<L::Conv>();
   let bias = config.bias::<L::Conv>();
   let order = weights.len();
@@ -418,12 +539,38 @@ pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], la
   residuals[..order].copy_from_slice(&state[..order]);
   residuals[order..order + latents.len()].copy_from_slice(latents);
 
-  decode_residuals(
-    weights,
-    bias,
-    config.quantization,
-    &mut residuals,
-  );
+  if order == 4 && L::Conv::BITS == 32 {
+    unsafe {
+      // In this branch L::Conv::BITS == 32, so L::Conv is i32.
+      let scratch_i32 = std::slice::from_raw_parts_mut(
+        conv1_scratch.as_mut_ptr() as *mut i32,
+        conv1_scratch.len(),
+      );
+      decode_residuals_u16x4_simd(
+        weights
+          .iter()
+          .map(|&w| w.to_f64() as i32)
+          // .rev()
+          .collect::<Vec<_>>()
+          .try_into()
+          .unwrap(),
+        bias.to_f64() as i32,
+        config.quantization,
+        std::slice::from_raw_parts_mut(
+          residuals.as_mut_ptr() as *mut u16,
+          residuals.len(),
+        ),
+        // scratch_i32,
+      );
+    }
+  } else {
+    decode_residuals(
+      weights,
+      bias,
+      config.quantization,
+      &mut residuals,
+    );
+  }
   latents.copy_from_slice(&residuals[..latents.len()]);
   state.copy_from_slice(&residuals[latents.len()..]);
 }
