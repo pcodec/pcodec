@@ -1,4 +1,5 @@
 use crate::constants::{Bitlen, MAX_CONV1_DELTA_QUANTIZATION};
+use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::signed::Signed;
 use crate::data_types::Latent;
 use crate::metadata::DeltaConv1Config;
@@ -185,73 +186,49 @@ fn predict_into<L: Latent>(
   }
 }
 
-const SPECIALIZED_ORDER: usize = 4;
-#[inline(never)]
-fn decode_residuals_u16x4(
-  mut weights: [i32; SPECIALIZED_ORDER],
-  bias: i32,
+fn decode_residuals_order_6<L: Latent>(
+  weights: &[L::Conv],
+  bias: L::Conv,
   quantization: Bitlen,
-  residuals: &mut [u16],
+  state: &mut [L],
+  latents: &mut [L],
 ) {
-  // Here at step i we add a single term to obtain the current prediction, add
-  // its residual, and then apply this prediction's contribution to the next 4
-  // predictions.
-  weights.reverse();
-  assert!(residuals.len() >= SPECIALIZED_ORDER);
-  let mut s0 = bias
-    .wrapping_add(weights[3].wrapping_mul(residuals[0] as i32))
-    .wrapping_add(weights[2].wrapping_mul(residuals[1] as i32))
-    .wrapping_add(weights[1].wrapping_mul(residuals[2] as i32));
-  let mut s1 = bias
-    .wrapping_add(weights[3].wrapping_mul(residuals[1] as i32))
-    .wrapping_add(weights[2].wrapping_mul(residuals[2] as i32));
-  let mut s2 = bias.wrapping_add(weights[3].wrapping_mul(residuals[2] as i32));
-
-  let [w0, w1, w2, w3] = weights;
-  let mut x = residuals[SPECIALIZED_ORDER - 1] as i32;
-
-  for i in SPECIALIZED_ORDER..residuals.len() {
-    let y = residuals[i].wrapping_add((s0.wrapping_add(x.wrapping_mul(w0)) >> quantization) as u16);
-
-    s0 = s1.wrapping_add(x.wrapping_mul(w1));
-    s1 = s2.wrapping_add(x.wrapping_mul(w2));
-    s2 = bias.wrapping_add(x.wrapping_mul(w3));
-    residuals[i] = y;
-    x = y as i32;
+  // Here at step i we compute the prediction by adding all 4 terms from
+  // previous decoded latents.
+  assert!(weights.len() == 6);
+  assert!(state.len() == 6);
+  let w0 = weights[0];
+  let w1 = weights[1];
+  let w2 = weights[2];
+  let w3 = weights[3];
+  let w4 = weights[4];
+  let w5 = weights[5];
+  let mut s0 = state[0].to_conv();
+  let mut s1 = state[1].to_conv();
+  let mut s2 = state[2].to_conv();
+  let mut s3 = state[3].to_conv();
+  let mut s4 = state[4].to_conv();
+  let mut s5 = state[5].to_conv();
+  let bias = bias + ((L::MID.to_conv()) << quantization);
+  for i in 0..latents.len() {
+    let y = latents[i].wrapping_add(L::from_conv(
+      (bias + w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3 + w4 * s4 + w5 * s5) >> quantization,
+    ));
+    latents[i] = L::from_conv(s0);
+    s0 = s1;
+    s1 = s2;
+    s2 = s3;
+    s3 = s4;
+    s4 = s5;
+    s5 = y.to_conv();
   }
+  state[0] = L::from_conv(s0);
+  state[1] = L::from_conv(s1);
+  state[2] = L::from_conv(s2);
+  state[3] = L::from_conv(s3);
+  state[4] = L::from_conv(s4);
+  state[5] = L::from_conv(s5);
 }
-
-// fn decode_residuals_u16x4(
-//   weights: [i32; 4],
-//   bias: i32,
-//   quantization: Bitlen,
-//   residuals: &mut [u16],
-// ) {
-//   // Here at step i we compute the prediction by adding all 4 terms from
-//   // previous decoded latents.
-//   let [w0, w1, w2, w3] = weights;
-//   let [mut s0, mut s1, mut s2, mut s3] = [
-//     residuals[0] as i32,
-//     residuals[1] as i32,
-//     residuals[2] as i32,
-//     residuals[3] as i32,
-//   ];
-//   for i in 4..residuals.len() {
-//     let y = residuals[i].wrapping_add(
-//       ((bias
-//         .wrapping_add(w0.wrapping_mul(s0))
-//         .wrapping_add(w1.wrapping_mul(s1))
-//         .wrapping_add(w2.wrapping_mul(s2))
-//         .wrapping_add(w3.wrapping_mul(s3)))
-//         >> quantization) as u16,
-//     );
-//     s0 = s1;
-//     s1 = s2;
-//     s2 = s3;
-//     s3 = y as i32;
-//     residuals[i] = y;
-//   }
-// }
 
 fn decode_residuals<L: Latent>(
   weights: &[L::Conv],
@@ -486,38 +463,47 @@ pub fn decode_in_place<L: Latent>(
   let order = weights.len();
   assert_eq!(order, state.len());
 
-  delta::toggle_center_in_place(latents);
-  let mut residuals = vec![L::ZERO; latents.len() + order];
-  residuals[..order].copy_from_slice(&state[..order]);
-  residuals[order..order + latents.len()].copy_from_slice(latents);
-
-  if order == 4 && L::Conv::BITS == 32 {
-    unsafe {
-      decode_residuals_u16x4(
-        weights
-          .iter()
-          .map(|&w| w.to_f64() as i32)
-          .collect::<Vec<_>>()
-          .try_into()
-          .unwrap(),
-        bias.to_f64() as i32,
-        config.quantization,
-        std::slice::from_raw_parts_mut(
-          residuals.as_mut_ptr() as *mut u16,
-          residuals.len(),
-        ),
-      );
-    }
+  if order == 6 {
+    decode_residuals_order_6(
+      weights,
+      bias,
+      config.quantization,
+      state,
+      latents,
+    );
+  } else if order == 6 && L::Conv::BITS == 32 {
+    // unsafe {
+    //   decode_residuals_u16x6(
+    //     weights
+    //       .iter()
+    //       .map(|&w| w.to_f64() as i32)
+    //       .collect::<Vec<_>>()
+    //       .try_into()
+    //       .unwrap(),
+    //     bias.to_f64() as i32,
+    //     config.quantization,
+    //     std::slice::from_raw_parts_mut(state.as_mut_ptr() as *mut u16, state.len()),
+    //     std::slice::from_raw_parts_mut(
+    //       latents.as_mut_ptr() as *mut u16,
+    //       latents.len(),
+    //     ),
+    //   );
+    // }
   } else {
+    delta::toggle_center_in_place(latents);
+    let mut residuals = vec![L::ZERO; latents.len() + order];
+    residuals[..order].copy_from_slice(&state[..order]);
+    residuals[order..order + latents.len()].copy_from_slice(latents);
+
     decode_residuals(
       weights,
       bias,
       config.quantization,
       &mut residuals,
     );
+    latents.copy_from_slice(&residuals[..latents.len()]);
+    state.copy_from_slice(&residuals[latents.len()..]);
   }
-  latents.copy_from_slice(&residuals[..latents.len()]);
-  state.copy_from_slice(&residuals[latents.len()..]);
 }
 
 #[cfg(test)]

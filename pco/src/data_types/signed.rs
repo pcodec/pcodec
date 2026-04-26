@@ -8,7 +8,15 @@ use crate::metadata::{ChunkMeta, Mode};
 use crate::{describers, ChunkConfig};
 use std::ops::*;
 
-pub trait Signed: AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> {
+pub trait Signed:
+  AddAssign
+  + Add<Output = Self>
+  + Copy
+  + Ord
+  + Shl<Bitlen, Output = Self>
+  + Shr<Bitlen, Output = Self>
+  + Mul<Output = Self>
+{
   const ZERO: Self;
   const MAX: Self;
   const BITS: Bitlen;
