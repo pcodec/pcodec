@@ -1,6 +1,5 @@
 use crate::ans::{self, Spec};
 use crate::constants::Bitlen;
-use crate::data_types::signed::Signed;
 use crate::data_types::Latent;
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
@@ -10,25 +9,11 @@ use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
 use crate::scratch_array::ScratchArray;
 use crate::{read_write_uint, FULL_BATCH_N};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChunkLatentDecompressorScratch<L: Latent> {
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
   pub latents: ScratchArray<L>,
-  // FULL_BATCH_N + 8: the decode_residuals_u16x4_simd scratch needs
-  // (residuals.len() + 4) elements, where residuals includes the 4-element
-  // state prefix, so the worst case is FULL_BATCH_N + 4 + 4 = FULL_BATCH_N + 8.
-  pub conv1_scratch: [L::Conv; FULL_BATCH_N + 10],
-}
-
-impl<L: Latent> std::fmt::Debug for ChunkLatentDecompressorScratch<L> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.debug_struct("ChunkLatentDecompressorScratch")
-      .field("offset_bits_csum", &self.offset_bits_csum)
-      .field("offset_bits", &self.offset_bits)
-      .field("latents", &self.latents)
-      .finish_non_exhaustive()
-  }
 }
 
 #[derive(Clone, Debug)]
@@ -85,7 +70,6 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
         offset_bits_csum,
         offset_bits,
         latents,
-        conv1_scratch: [<L::Conv as Signed>::ZERO; FULL_BATCH_N + 10],
       },
     }))
   }

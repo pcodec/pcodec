@@ -1,5 +1,4 @@
 use crate::constants::{Bitlen, MAX_CONV1_DELTA_QUANTIZATION};
-use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::signed::Signed;
 use crate::data_types::Latent;
 use crate::metadata::DeltaConv1Config;
@@ -452,12 +451,7 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
   initial_state
 }
 
-pub fn decode_in_place<L: Latent>(
-  config: &DeltaConv1Config,
-  state: &mut [L],
-  latents: &mut [L],
-  conv1_scratch: &mut [L::Conv],
-) {
+pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
   let weights = &config.weights::<L::Conv>();
   let bias = config.bias::<L::Conv>();
   let order = weights.len();
@@ -471,24 +465,6 @@ pub fn decode_in_place<L: Latent>(
       state,
       latents,
     );
-  } else if order == 6 && L::Conv::BITS == 32 {
-    // unsafe {
-    //   decode_residuals_u16x6(
-    //     weights
-    //       .iter()
-    //       .map(|&w| w.to_f64() as i32)
-    //       .collect::<Vec<_>>()
-    //       .try_into()
-    //       .unwrap(),
-    //     bias.to_f64() as i32,
-    //     config.quantization,
-    //     std::slice::from_raw_parts_mut(state.as_mut_ptr() as *mut u16, state.len()),
-    //     std::slice::from_raw_parts_mut(
-    //       latents.as_mut_ptr() as *mut u16,
-    //       latents.len(),
-    //     ),
-    //   );
-    // }
   } else {
     delta::toggle_center_in_place(latents);
     let mut residuals = vec![L::ZERO; latents.len() + order];
