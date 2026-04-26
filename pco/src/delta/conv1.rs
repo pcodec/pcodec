@@ -2,7 +2,7 @@ use crate::constants::{Bitlen, MAX_CONV1_DELTA_QUANTIZATION};
 use crate::data_types::signed::Signed;
 use crate::data_types::Latent;
 use crate::metadata::DeltaConv1Config;
-use crate::{delta, sort_utils};
+use crate::sort_utils;
 
 // We haven't yet studied whether f32 can be used in all cases without numerical
 // stability issues; accumulating the xtx and xty matrives is especially tricky.
@@ -208,7 +208,6 @@ fn decode_residuals_order_6<L: Latent>(
   let mut s3 = state[3].to_conv();
   let mut s4 = state[4].to_conv();
   let mut s5 = state[5].to_conv();
-  let bias = bias + ((L::MID.to_conv()) << quantization);
   for i in 0..latents.len() {
     let y = latents[i].wrapping_add(L::from_conv(
       (bias + w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3 + w4 * s4 + w5 * s5) >> quantization,
@@ -453,30 +452,20 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
 
 pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
   let weights = &config.weights::<L::Conv>();
-  let bias = config.bias::<L::Conv>();
+  // we fold centering into the bias term so we don't need to do an extra pass to toggle_center
+  let quantization = config.quantization;
+  let bias = config.bias::<L::Conv>() + ((L::MID.to_conv()) << quantization);
   let order = weights.len();
   assert_eq!(order, state.len());
 
   if order == 6 {
-    decode_residuals_order_6(
-      weights,
-      bias,
-      config.quantization,
-      state,
-      latents,
-    );
+    decode_residuals_order_6(weights, bias, quantization, state, latents);
   } else {
-    delta::toggle_center_in_place(latents);
     let mut residuals = vec![L::ZERO; latents.len() + order];
     residuals[..order].copy_from_slice(&state[..order]);
     residuals[order..order + latents.len()].copy_from_slice(latents);
 
-    decode_residuals(
-      weights,
-      bias,
-      config.quantization,
-      &mut residuals,
-    );
+    decode_residuals(weights, bias, quantization, &mut residuals);
     latents.copy_from_slice(&residuals[..latents.len()]);
     state.copy_from_slice(&residuals[latents.len()..]);
   }
