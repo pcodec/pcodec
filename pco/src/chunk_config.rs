@@ -30,8 +30,7 @@ pub enum ModeSpec {
   TryFloatMult(f64),
   /// Tries using `FloatQuant` mode with `k` bits of quantization.
   ///
-  /// This can be helpful when the last `k` bits of the numbers are usually the
-  /// same.
+  /// This can be helpful when most numbers have the same final `k` bits.
   /// Only applies to floating-point types.
   TryFloatQuant(Bitlen),
   /// Tries using `IntMult` mode with a given `base`.

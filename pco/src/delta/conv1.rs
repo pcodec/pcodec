@@ -452,8 +452,8 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
 
 pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
   let weights = &config.weights::<L::Conv>();
-  // we fold centering into the bias term so we don't need to do an extra pass to toggle_center
   let quantization = config.quantization;
+  // we fold centering into the bias term so we don't need to do an extra pass to toggle_center
   let bias = config.bias::<L::Conv>() + ((L::MID.to_conv()) << quantization);
   let order = weights.len();
   assert_eq!(order, state.len());
