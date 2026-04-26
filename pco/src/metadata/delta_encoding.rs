@@ -81,42 +81,30 @@ impl LatentVarDeltaEncoding {
 /// How Pco did
 /// [delta encoding](https://en.wikipedia.org/wiki/Delta_encoding) on a chunk.
 ///
-/// Delta encoding optionally takes differences between nearby numbers,
-/// greatly reducing the entropy of the data distribution in some cases.
+/// Delta encoding optionally predicts numbers based on previously decoded
+/// numbers, greatly reducing the entropy of the data distribution in some
+/// cases.
 /// This stage of processing happens after applying the
 /// [`Mode`][crate::metadata::Mode] during compression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DeltaEncoding {
   /// No delta encoding; the values are encoded as-is.
-  ///
-  /// This is best if your data is in random order.
   NoOp,
   /// Encodes the differences between consecutive values (or differences
   /// between those, etc.).
-  ///
-  /// This is best if your numbers have high variance overall, but adjacent
-  /// numbers are close in value, e.g. an arithmetic sequence.
   Consecutive {
     order: usize,
     secondary_uses_delta: bool,
   },
   /// Encodes an extra "lookback" latent variable and the differences
   /// `x[i] - x[i - lookback[i]]` between values.
-  ///
-  /// This is best if your numbers have complex repeating patterns
-  /// beyond just adjacent elements.
-  /// It is in spirit similar to LZ77 compression, but only stores lookbacks
-  /// (AKA match offsets) and no match lengths.
   Lookback {
     config: DeltaLookbackConfig,
     secondary_uses_delta: bool,
   },
   /// Encodes the difference between each value and a convolution of the
   /// preceding few elements.
-  ///
-  /// This is best if your numbers have local trends that aren't captured by
-  /// simply taking differences.
   Conv1(DeltaConv1Config),
 }
 
