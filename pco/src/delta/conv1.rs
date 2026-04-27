@@ -2,7 +2,7 @@ use crate::constants::{Bitlen, MAX_CONV1_DELTA_QUANTIZATION};
 use crate::data_types::signed::Signed;
 use crate::data_types::Latent;
 use crate::metadata::DeltaConv1Config;
-use crate::sort_utils;
+use crate::{delta, sort_utils};
 
 // We haven't yet studied whether f32 can be used in all cases without numerical
 // stability issues; accumulating the xtx and xty matrives is especially tricky.
@@ -185,7 +185,7 @@ fn predict_into<L: Latent>(
   }
 }
 
-fn decode_residuals_order_6<L: Latent>(
+fn decode_in_place_order_6<L: Latent>(
   weights: &[L::Conv],
   bias: L::Conv,
   quantization: Bitlen,
@@ -210,7 +210,8 @@ fn decode_residuals_order_6<L: Latent>(
   let mut s5 = state[5].to_conv();
   for i in 0..latents.len() {
     let y = latents[i].wrapping_add(L::from_conv(
-      (bias + w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3 + w4 * s4 + w5 * s5) >> quantization,
+      (bias + w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3 + w4 * s4 + w5 * s5).max(L::Conv::ZERO)
+        >> quantization,
     ));
     latents[i] = L::from_conv(s0);
     s0 = s1;
@@ -453,13 +454,13 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
 pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
   let weights = &config.weights::<L::Conv>();
   let quantization = config.quantization;
-  // we fold centering into the bias term so we don't need to do an extra pass to toggle_center
-  let bias = config.bias::<L::Conv>() + ((L::MID.to_conv()) << quantization);
+  let bias = config.bias::<L::Conv>();
   let order = weights.len();
   assert_eq!(order, state.len());
+  delta::toggle_center_in_place(latents);
 
   if order == 6 {
-    decode_residuals_order_6(weights, bias, quantization, state, latents);
+    decode_in_place_order_6(weights, bias, quantization, state, latents);
   } else {
     let mut residuals = vec![L::ZERO; latents.len() + order];
     residuals[..order].copy_from_slice(&state[..order]);

@@ -292,6 +292,14 @@ impl ChunkConfig {
             MAX_CONV1_DELTA_ORDER, order,
           )));
         }
+        if !matches!(
+          latent_type,
+          LatentType::U8 | LatentType::U16 | LatentType::U32
+        ) {
+          return Err(PcoError::invalid_argument(
+            "Conv1 delta encoding is only supported for types with 32 or fewer bits",
+          ));
+        }
       }
     }
 
