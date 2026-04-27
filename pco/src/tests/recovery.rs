@@ -495,19 +495,14 @@ fn test_conv1_degenerate() -> PcoResult<()> {
     Ok(())
   }
 
-  // check::<u16>(vec![3], "short")?;
-  // check::<u32>(vec![0; 100], "zeros")?;
-  // let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
-  // let mut nums = Vec::new();
-  // for _ in 0..1000 {
-  //   nums.push(rng.gen_range(0..1000));
-  // }
-  // check::<u32>(nums, "no trend")?;
-
+  check::<u16>(vec![3], "short")?;
+  check::<u32>(vec![0; 100], "zeros")?;
+  let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
   let mut nums = Vec::new();
-  for i in 0..1000 {
-    nums.push((995 * 995_u32).saturating_sub(i * i));
+  for _ in 0..1000 {
+    nums.push(rng.gen_range(0..1000));
   }
-  check::<u32>(nums, "negative trend")?;
+  check::<u32>(nums, "no trend")?;
+
   Ok(())
 }
