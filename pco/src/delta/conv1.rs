@@ -9,6 +9,7 @@ use crate::{delta, sort_utils};
 type Real = f64;
 
 const ENCODE_BATCH_SIZE: usize = 512;
+const L2_REGULARIZATION: Real = 1.0;
 
 // poor man's nalgebra so we don't need a whole new dep
 #[derive(Clone, Debug)]
@@ -66,6 +67,7 @@ impl Matrix {
         let mut s = 0.0;
         for k in 0..j {
           let value = self.get(j, k);
+          // we use mul_adds to accumulate fewer floating point truncation errors
           s = value.mul_add(value, s);
         }
         let diag_value = safe_sqrt(self.get(j, j) - s);
@@ -332,10 +334,11 @@ fn build_autocov_mats(v: &[Real], order: usize) -> (Matrix, Matrix) {
     let sum = last_sum + (v[n - 1] - v[order - 1]);
     xty.set(order, 0, sum);
 
-    // add a bit of regularization to avoid numerical instability issues in the
-    // Cholesky decomposition
+    // Add a bit of regularization to avoid numerical instability issues in the
+    // Cholesky decomposition. All the values are integers so even 1.0 is
+    // probably a small term.
     for i in 0..order + 1 {
-      xtx.set(i, i, xtx.get(i, i) + 1.0);
+      xtx.set(i, i, xtx.get(i, i) + L2_REGULARIZATION);
     }
   }
 
@@ -508,9 +511,9 @@ mod tests {
     assert_eq!(
       xtx.data,
       vec![
-        6.0, -5.0, 2.0, //
-        -5.0, 30.0, 6.0, //
-        2.0, 6.0, 3.0, //
+        7.0, -5.0, 2.0, //
+        -5.0, 31.0, 6.0, //
+        2.0, 6.0, 4.0, //
       ]
     );
 
