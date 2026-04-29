@@ -59,8 +59,8 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
     delta_specs.push(DeltaSpec::TryConv1(6)); // because there's a specialized path for it
   }
 
-  for delta_spec in delta_specs {
-    for mode_spec in [ModeSpec::Classic, ModeSpec::Auto] {
+  for mode_spec in [ModeSpec::Classic, ModeSpec::Auto] {
+    for delta_spec in &delta_specs {
       let config = ChunkConfig {
         compression_level,
         delta_spec: delta_spec.clone(),
@@ -68,7 +68,6 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
         enable_8_bit: true,
         ..Default::default()
       };
-      // let (compressed, meta) = compress_w_meta(nums, &config)?;
       let compressed = simple_compress(nums, &config)?;
       let decompressed = simple_decompress(&compressed)?;
       assert_nums_eq(
@@ -503,6 +502,34 @@ fn test_conv1_degenerate() -> PcoResult<()> {
     nums.push(rng.gen_range(0..1000));
   }
   check::<u32>(nums, "no trend")?;
+
+  Ok(())
+}
+
+#[test]
+fn test_conv1_actually_applied() -> PcoResult<()> {
+  let mut nums = Vec::new();
+  for i in 0_u32..1000 {
+    nums.push((998 * 998_u32).saturating_sub(i * i));
+  }
+
+  for order in [3, 6] {
+    let (compressed, meta) = compress_w_meta(
+      &nums,
+      &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(order)),
+    )?;
+    let conv1_config = match &meta.delta_encoding {
+      DeltaEncoding::Conv1(config) => config,
+      _ => panic!("expected conv1 to be applied"),
+    };
+    assert!(conv1_config.weights::<i64>().len() == order);
+    let decompressed = simple_decompress::<u32>(&compressed)?;
+    assert_nums_eq(
+      &decompressed,
+      &nums,
+      &format!("conv1 actually applied order {}", order),
+    )?;
+  }
 
   Ok(())
 }

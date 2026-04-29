@@ -66,7 +66,7 @@ impl Matrix {
         let mut s = 0.0;
         for k in 0..j {
           let value = self.get(j, k);
-          s += value * value;
+          s = value.mul_add(value, s);
         }
         let diag_value = safe_sqrt(self.get(j, j) - s);
         self.set(j, j, diag_value);
@@ -80,7 +80,7 @@ impl Matrix {
         for i in j + 1..h {
           let mut s = 0.0;
           for k in 0..j {
-            s += self.get(i, k) * self.get(j, k);
+            s = self.get(i, k).mul_add(self.get(j, k), s);
           }
           self.set(i, j, scale * (self.get(i, j) - s));
         }
@@ -209,7 +209,7 @@ fn decode_in_place_order_6<L: Latent>(
   let mut s4 = state[4].to_conv();
   let mut s5 = state[5].to_conv();
   for i in 0..latents.len() {
-    let y = latents[i].wrapping_add(L::from_conv(
+    let y = latents[i].wrapping_add(L::MID).wrapping_add(L::from_conv(
       (bias + w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3 + w4 * s4 + w5 * s5).max(L::Conv::ZERO)
         >> quantization,
     ));
@@ -331,7 +331,14 @@ fn build_autocov_mats(v: &[Real], order: usize) -> (Matrix, Matrix) {
     let last_sum = xtx.get(order, order - 1);
     let sum = last_sum + (v[n - 1] - v[order - 1]);
     xty.set(order, 0, sum);
+
+    // add a bit of regularization to avoid numerical instability issues in the
+    // Cholesky decomposition
+    for i in 0..order + 1 {
+      xtx.set(i, i, xtx.get(i, i) + 1.0);
+    }
   }
+
   (xtx, xty)
 }
 
@@ -457,11 +464,11 @@ pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], la
   let bias = config.bias::<L::Conv>();
   let order = weights.len();
   assert_eq!(order, state.len());
-  delta::toggle_center_in_place(latents);
 
   if order == 6 {
     decode_in_place_order_6(weights, bias, quantization, state, latents);
   } else {
+    delta::toggle_center_in_place(latents);
     let mut residuals = vec![L::ZERO; latents.len() + order];
     residuals[..order].copy_from_slice(&state[..order]);
     residuals[order..order + latents.len()].copy_from_slice(latents);
