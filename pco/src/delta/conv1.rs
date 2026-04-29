@@ -9,7 +9,7 @@ use crate::{delta, sort_utils};
 type Real = f64;
 
 const ENCODE_BATCH_SIZE: usize = 512;
-const L2_REGULARIZATION: Real = 1.0;
+const L2_REGULARIZATION: Real = 0.1;
 
 // poor man's nalgebra so we don't need a whole new dep
 #[derive(Clone, Debug)]
@@ -286,7 +286,7 @@ fn build_initial_autocov_dots(v: &[Real], order: usize) -> Vec<Real> {
 }
 
 #[inline(never)]
-fn build_autocov_mats(v: &[Real], order: usize) -> (Matrix, Matrix) {
+fn build_autocov_mats(v: &[Real], order: usize, regularization: Real) -> (Matrix, Matrix) {
   // Here we take advantage of the structure of the problem to build the x^Tx
   // and x^Ty matrices with rolling dot products.
   // This is O(n * order + order^2) instead of the naive O(n * order^2)
@@ -338,7 +338,7 @@ fn build_autocov_mats(v: &[Real], order: usize) -> (Matrix, Matrix) {
     // Cholesky decomposition. All the values are integers so even 1.0 is
     // probably a small term.
     for i in 0..order + 1 {
-      xtx.set(i, i, xtx.get(i, i) + L2_REGULARIZATION);
+      xtx.set(i, i, xtx.get(i, i) + regularization);
     }
   }
 
@@ -354,7 +354,7 @@ fn autocorr_least_squares(v: &[Real], order: usize) -> Matrix {
   // * build the xT^x and x^Ty matrices using rolling dot products, avoiding
   //   duplicate computation
   // * use the Cholesky decomposition and forward/back substitution
-  let (xtx, xty) = build_autocov_mats(v, order);
+  let (xtx, xty) = build_autocov_mats(v, order, L2_REGULARIZATION);
   let cholesky = xtx.into_cholesky();
   let half_solved = cholesky.forward_sub_into(xty);
   cholesky.transposed_backward_sub_into(half_solved)
@@ -504,16 +504,16 @@ mod tests {
   fn build_autocorr_mats() {
     let x = [1.0, 2.0, -1.0, 5.0, -3.0];
     let order = 2;
-    let (xtx, xty) = build_autocov_mats(&x, order);
+    let (xtx, xty) = build_autocov_mats(&x, order, 0.7);
 
     assert_eq!(xtx.h, 3);
     assert_eq!(xtx.w, 3);
     assert_eq!(
       xtx.data,
       vec![
-        7.0, -5.0, 2.0, //
-        -5.0, 31.0, 6.0, //
-        2.0, 6.0, 4.0, //
+        6.7, -5.0, 2.0, //
+        -5.0, 30.7, 6.0, //
+        2.0, 6.0, 3.7, //
       ]
     );
 
