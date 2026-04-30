@@ -17,21 +17,26 @@ pub enum ModeSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad mode in adversarial cases.
-  /// At present, this will never consider `Dict` mode.
+  /// At present, this does not consider `Dict` mode.
   #[default]
   Auto,
   /// Only uses `Classic` mode.
   Classic,
   /// Tries using `FloatMult` mode with a given `base`.
   ///
+  /// This can be helpful when most numbers are approximately equal modulo
+  /// `base`.
   /// Only applies to floating-point types.
   TryFloatMult(f64),
   /// Tries using `FloatQuant` mode with `k` bits of quantization.
   ///
+  /// This can be helpful when most numbers have the same final `k` bits.
   /// Only applies to floating-point types.
   TryFloatQuant(Bitlen),
   /// Tries using `IntMult` mode with a given `base`.
   ///
+  /// This can be helpful when most numbers are approximately equal modulo
+  /// `base`.
   /// Only applies to integer types.
   TryIntMult(u64),
   /// Tries using `Dict` mode.
@@ -56,13 +61,12 @@ pub enum ModeSpec {
 #[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub enum DeltaSpec {
-  // TODO in the future: make Auto consider Conv1, assuming we can make it
-  // performant enough.
   /// Automatically detects a good delta encoding.
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad delta encoding in adversarial cases.
-  /// At present, this will never consider `Conv1` delta encoding.
+  /// At present, this does not consider `Conv1` delta encoding due to
+  /// decompression performance costs.
   #[default]
   Auto,
   /// Never uses delta encoding.
@@ -72,6 +76,8 @@ pub enum DeltaSpec {
   NoOp,
   /// Tries taking nth order consecutive deltas.
   ///
+  /// This is best if your numbers have high variance overall, but adjacent
+  /// numbers are close in value, e.g. an arithmetic sequence.
   /// Supports a delta encoding order up to 7.
   /// For instance, 1st order is just regular delta encoding, 2nd is
   /// deltas-of-deltas, etc.
@@ -79,12 +85,22 @@ pub enum DeltaSpec {
   TryConsecutive(usize),
   /// Tries delta encoding according to an extra latent variable of "lookback".
   ///
+  /// This is best if your numbers have complex repeating patterns
+  /// beyond just adjacent elements.
+  /// It is in spirit similar to LZ77 compression, but only stores lookbacks
+  /// (AKA match offsets) and no match lengths.
   /// This can improve compression ratio when there are nontrivial patterns in
   /// your numbers, but reduces compression speed substantially.
   TryLookback,
   /// Tries delta encoding by subtracting a convolution of the previous `order`
   /// elements.
   ///
+  /// This is best if your numbers have local trends that aren't captured by
+  /// simply taking differences, and you are willing to accept noticeably
+  /// reduced decompression speeds.
+  /// We highly recommend using order 6 if possible, since pco v1.0.2 and later
+  /// have a relatively fast decoding implementation for it (but still
+  /// substantially slower than other methods).
   /// Supports order up to 32.
   /// In practice, the weights for the convolution are chosen via linear
   /// regression.
@@ -187,12 +203,14 @@ pub struct ChunkConfig {
   pub compression_level: usize,
   /// Specifies how the mode should be determined.
   ///
-  /// See [`Mode`](crate::metadata::Mode) to understand what modes are.
+  /// See [`Mode`](crate::metadata::Mode) to understand what modes are, and see
+  /// [`ModeSpec`](ModeSpec) for how to configure it.
   pub mode_spec: ModeSpec,
   /// Specifies how delta encoding should be chosen.
   ///
   /// See [`DeltaEncoding`](crate::metadata::DeltaEncoding) to understand what
-  /// delta encoding is.
+  /// delta encoding is, and see [`DeltaSpec`](crate::metadata::DeltaSpec) for
+  /// how to configure it.
   pub delta_spec: DeltaSpec,
   /// Specifies how the chunk should be split into pages (default: equal pages
   /// up to 2^18 numbers each).
@@ -273,6 +291,14 @@ impl ChunkConfig {
             "conv1 delta order may not exceed {} (was {})",
             MAX_CONV1_DELTA_ORDER, order,
           )));
+        }
+        if !matches!(
+          latent_type,
+          LatentType::U8 | LatentType::U16 | LatentType::U32
+        ) {
+          return Err(PcoError::invalid_argument(
+            "Conv1 delta encoding is only supported for types with 32 or fewer bits",
+          ));
         }
       }
     }
