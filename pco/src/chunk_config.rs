@@ -100,7 +100,7 @@ pub enum DeltaSpec {
   /// reduced decompression speeds.
   /// We highly recommend using order 6 if possible, since pco v1.0.2 and later
   /// have a relatively fast decoding implementation for it (but still
-  /// substantially slower than other methods).
+  /// substantially slower than other delta encodings).
   /// Supports order up to 32.
   /// In practice, the weights for the convolution are chosen via linear
   /// regression.

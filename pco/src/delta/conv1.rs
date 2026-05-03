@@ -343,7 +343,6 @@ fn build_autocov_mats(v: &[Real], order: usize, regularization: Real) -> (Matrix
       xtx.set(i, i, xtx.get(i, i) + regularization);
     }
   }
-
   (xtx, xty)
 }
 
@@ -470,11 +469,10 @@ pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], la
   let order = weights.len();
   assert_eq!(order, state.len());
 
+  delta::toggle_center_in_place(latents);
   if order == 6 {
-    delta::toggle_center_in_place(latents);
     decode_in_place_order_6(weights, bias, quantization, state, latents);
   } else {
-    delta::toggle_center_in_place(latents);
     let mut residuals = vec![L::ZERO; latents.len() + order];
     residuals[..order].copy_from_slice(&state[..order]);
     residuals[order..order + latents.len()].copy_from_slice(latents);

@@ -16,7 +16,6 @@ pub trait Signed:
   + Debug
   + Display
   + Ord
-  + Shl<Bitlen, Output = Self>
   + Shr<Bitlen, Output = Self>
   + Mul<Output = Self>
 {
