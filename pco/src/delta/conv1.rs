@@ -206,7 +206,6 @@ fn decode_in_place_order_6<L: Latent>(
   assert!(state.len() == ORDER);
 
   let weights_rev = [
-    // weights[7], weights[6],
     weights[5], weights[4], weights[3], weights[2], weights[1], weights[0],
   ];
   let mut next_state = [bias; ORDER];
