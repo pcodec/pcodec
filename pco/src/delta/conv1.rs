@@ -187,162 +187,6 @@ fn predict_into<L: Latent>(
   }
 }
 
-// fn decode_in_place_order_6<L: Latent>(
-//   weights: &[L::Conv],
-//   bias: L::Conv,
-//   quantization: Bitlen,
-//   state: &mut [L],
-//   latents: &mut [L],
-// ) {
-//   // Here at step i we compute the prediction by adding all 4 terms from
-//   // previous decoded latents.
-//   assert!(weights.len() == 6);
-//   assert!(state.len() == 6);
-//   let w0 = weights[0];
-//   let w1 = weights[1];
-//   let w2 = weights[2];
-//   let w3 = weights[3];
-//   let w4 = weights[4];
-//   let w5 = weights[5];
-//   let mut s0 = state[0].to_conv();
-//   let mut s1 = state[1].to_conv();
-//   let mut s2 = state[2].to_conv();
-//   let mut s3 = state[3].to_conv();
-//   let mut s4 = state[4].to_conv();
-//   let mut s5 = state[5].to_conv();
-//   for i in 0..latents.len() {
-//     let y = latents[i].wrapping_add(L::MID).wrapping_add(L::from_conv(
-//       (bias + w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3 + w4 * s4 + w5 * s5).max(L::Conv::ZERO)
-//         >> quantization,
-//     ));
-//     latents[i] = L::from_conv(s0);
-//     s0 = s1;
-//     s1 = s2;
-//     s2 = s3;
-//     s3 = s4;
-//     s4 = s5;
-//     s5 = y.to_conv();
-//   }
-//   state[0] = L::from_conv(s0);
-//   state[1] = L::from_conv(s1);
-//   state[2] = L::from_conv(s2);
-//   state[3] = L::from_conv(s3);
-//   state[4] = L::from_conv(s4);
-//   state[5] = L::from_conv(s5);
-// }
-
-// const ORDER: usize = 8;
-// unsafe fn decode_in_place_order_8<L: Latent>(
-//   weights: &[L::Conv],
-//   bias: L::Conv,
-//   quantization: Bitlen,
-//   state: &mut [L],
-//   latents: &mut [L],
-// ) {
-//   // Here at step i we compute the prediction by adding all 4 terms from
-//   // previous decoded latents.
-//   assert!(weights.len() == ORDER);
-//   assert!(state.len() == ORDER);
-//   let w = [
-//     weights[7], weights[6], weights[5], weights[4], weights[3], weights[2], weights[1], weights[0],
-//   ];
-//   let mut state_conv = [bias; 3 * ORDER];
-//   for i in 0..ORDER {
-//     state_conv[i] = state[i].to_conv();
-//   }
-
-//   for i in 0..ORDER {
-//     for j in ORDER - 1 - i..ORDER {
-//       state_conv[i + j + 1] += w[j] * state_conv[i];
-//     }
-//   }
-
-//   for base_i in (0..latents.len()).step_by(ORDER) {
-//     for j in 0..ORDER {
-//       let y =
-//         L::from_conv((*state_conv.get_unchecked(ORDER + j)).max(L::Conv::ZERO) >> quantization)
-//           .wrapping_add(*latents.get_unchecked(base_i + j))
-//           .wrapping_add(L::MID); // TODO toggle here?
-//       let y_conv = y.to_conv();
-//       *state_conv.get_unchecked_mut(ORDER + j) = y_conv;
-
-//       for k in 0..ORDER {
-//         *state_conv.get_unchecked_mut(ORDER + j + k + 1) += w[k] * y_conv;
-//       }
-//     }
-//     for j in 0..ORDER {
-//       *latents.get_unchecked_mut(base_i + j) = L::from_conv(*state_conv.get_unchecked(j));
-//       *state_conv.get_unchecked_mut(j) = *state_conv.get_unchecked(ORDER + j);
-//     }
-//     for j in 0..ORDER {
-//       *state_conv.get_unchecked_mut(ORDER + j) = *state_conv.get_unchecked(2 * ORDER + j);
-//     }
-//     state_conv[2 * ORDER..3 * ORDER].fill(bias);
-//   }
-
-//   for i in 0..ORDER {
-//     state[i] = L::from_conv(state_conv[i]);
-//   }
-// }
-
-// const ORDER: usize = 8;
-// #[inline(never)]
-// fn decode_in_place_order_8<L: Latent>(
-//   weights: &[L::Conv],
-//   bias: L::Conv,
-//   quantization: Bitlen,
-//   state: &mut [L],
-//   latents: &mut [L],
-// ) {
-//   // Here at step i we compute the prediction by adding all 4 terms from
-//   // previous decoded latents.
-//   assert!(weights.len() == ORDER);
-//   assert!(state.len() == ORDER);
-//   let w = [
-//     weights[7], weights[6], weights[5], weights[4], weights[3], weights[2], weights[1], weights[0],
-//   ];
-//   let mut state_conv = [bias; 3 * ORDER];
-//   for i in 0..ORDER {
-//     state_conv[i] = state[i].to_conv();
-//   }
-
-//   for i in 0..ORDER {
-//     for j in ORDER - 1 - i..ORDER {
-//       state_conv[i + j + 1] += w[j] * state_conv[i];
-//     }
-//   }
-
-//   assert!(latents.len() % ORDER == 0);
-//   for base_i in (0..latents.len()).step_by(ORDER) {
-//     for j in 0..ORDER {
-//       let y = L::from_conv(state_conv[ORDER + j].max(L::Conv::ZERO) >> quantization)
-//         .wrapping_add(latents[base_i + j]);
-//       // .wrapping_add(L::MID); // TODO toggle here?
-//       let y_conv = y.to_conv();
-//       state_conv[ORDER + j] = y_conv;
-
-//       for k in 0..ORDER {
-//         state_conv[ORDER + j + k + 1] += w[k] * y_conv;
-//       }
-//     }
-//     for j in 0..ORDER {
-//       unsafe {
-//         *latents.get_unchecked_mut(base_i + j) = L::from_conv(state_conv[j]);
-//       }
-//       state_conv[j] = state_conv[ORDER + j];
-//     }
-//     for j in 0..ORDER {
-//       state_conv[ORDER + j] = state_conv[2 * ORDER + j];
-//     }
-//     state_conv[2 * ORDER..3 * ORDER].fill(bias);
-//   }
-
-//   for i in 0..ORDER {
-//     state[i] = L::from_conv(state_conv[i]);
-//   }
-// }
-
-const ORDER: usize = 6;
 #[inline(never)]
 fn decode_in_place_order_6<L: Latent>(
   weights: &[L::Conv],
@@ -351,25 +195,30 @@ fn decode_in_place_order_6<L: Latent>(
   state: &mut [L],
   latents: &mut [L],
 ) {
-  // Here at step i we compute the prediction by adding all 4 terms from
-  // previous decoded latents.
+  // Here at each step we add the contribution from the current, just-decoded
+  // latent to the next several partially-decoded predictions. In theory this
+  // should make it easier for the compiler to decouple dependencies or even use
+  // SIMD. In practice this algorithm seems to be similar in speed to the more
+  // obvious one on ARM and only slightly faster on x64. Neither architecture is
+  // very inclined to use SIMD here.
+  const ORDER: usize = 6;
   assert!(weights.len() == ORDER);
   assert!(state.len() == ORDER);
-  let w = [
+
+  let weights_rev = [
     // weights[7], weights[6],
     weights[5], weights[4], weights[3], weights[2], weights[1], weights[0],
   ];
-  let mut next_state_conv = [bias; ORDER];
+  let mut next_state = [bias; ORDER];
 
   for i in 0..ORDER {
     for j in ORDER - 1 - i..ORDER {
-      next_state_conv[i + j + 1 - ORDER] += w[j] * state[i].to_conv();
+      next_state[i + j + 1 - ORDER] += weights_rev[j] * state[i].to_conv();
     }
   }
 
   for i in 0..latents.len() {
-    let y =
-      L::from_conv(next_state_conv[0].max(L::Conv::ZERO) >> quantization).wrapping_add(latents[i]);
+    let y = L::from_conv(next_state[0].max(L::Conv::ZERO) >> quantization).wrapping_add(latents[i]);
     latents[i] = state[0];
     for k in 0..ORDER - 1 {
       state[k] = state[k + 1];
@@ -378,9 +227,9 @@ fn decode_in_place_order_6<L: Latent>(
 
     let y_conv = y.to_conv();
     for k in 0..ORDER - 1 {
-      next_state_conv[k] = next_state_conv[k + 1] + w[k] * y_conv;
+      next_state[k] = next_state[k + 1] + weights_rev[k] * y_conv;
     }
-    next_state_conv[ORDER - 1] = bias + w[ORDER - 1] * y_conv;
+    next_state[ORDER - 1] = bias + weights_rev[ORDER - 1] * y_conv;
   }
 }
 
