@@ -217,9 +217,9 @@ fn decode_in_place_order_6<L: Latent>(
     }
   }
 
-  for i in 0..latents.len() {
-    let y = L::from_conv(next_state[0].max(L::Conv::ZERO) >> quantization).wrapping_add(latents[i]);
-    latents[i] = state[0];
+  for l in latents.iter_mut() {
+    let y = L::from_conv(next_state[0].max(L::Conv::ZERO) >> quantization).wrapping_add(*l);
+    *l = state[0];
     for k in 0..ORDER - 1 {
       state[k] = state[k + 1];
     }
