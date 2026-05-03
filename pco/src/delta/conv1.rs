@@ -187,52 +187,6 @@ fn predict_into<L: Latent>(
   }
 }
 
-#[inline(never)]
-fn decode_in_place_order_6<L: Latent>(
-  weights: &[L::Conv],
-  bias: L::Conv,
-  quantization: Bitlen,
-  state: &mut [L],
-  latents: &mut [L],
-) {
-  // Here at each step we add the contribution from the current, just-decoded
-  // latent to the next several partially-decoded predictions. In theory this
-  // should make it easier for the compiler to decouple dependencies or even use
-  // SIMD. In practice this algorithm seems to be similar in speed to the more
-  // obvious one on ARM and only slightly faster on x64. Neither architecture is
-  // very inclined to use SIMD here.
-  const ORDER: usize = 6;
-  assert!(weights.len() == ORDER);
-  assert!(state.len() == ORDER);
-
-  let weights_rev = [
-    // weights[7], weights[6],
-    weights[5], weights[4], weights[3], weights[2], weights[1], weights[0],
-  ];
-  let mut next_state = [bias; ORDER];
-
-  for i in 0..ORDER {
-    for j in ORDER - 1 - i..ORDER {
-      next_state[i + j + 1 - ORDER] += weights_rev[j] * state[i].to_conv();
-    }
-  }
-
-  for i in 0..latents.len() {
-    let y = L::from_conv(next_state[0].max(L::Conv::ZERO) >> quantization).wrapping_add(latents[i]);
-    latents[i] = state[0];
-    for k in 0..ORDER - 1 {
-      state[k] = state[k + 1];
-    }
-    state[ORDER - 1] = y;
-
-    let y_conv = y.to_conv();
-    for k in 0..ORDER - 1 {
-      next_state[k] = next_state[k + 1] + weights_rev[k] * y_conv;
-    }
-    next_state[ORDER - 1] = bias + weights_rev[ORDER - 1] * y_conv;
-  }
-}
-
 fn decode_residuals<L: Latent>(
   weights: &[L::Conv],
   bias: L::Conv,
@@ -470,17 +424,13 @@ pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], la
   assert_eq!(order, state.len());
 
   delta::toggle_center_in_place(latents);
-  if order == 6 {
-    decode_in_place_order_6(weights, bias, quantization, state, latents);
-  } else {
-    let mut residuals = vec![L::ZERO; latents.len() + order];
-    residuals[..order].copy_from_slice(&state[..order]);
-    residuals[order..order + latents.len()].copy_from_slice(latents);
+  let mut residuals = vec![L::ZERO; latents.len() + order];
+  residuals[..order].copy_from_slice(&state[..order]);
+  residuals[order..order + latents.len()].copy_from_slice(latents);
 
-    decode_residuals(weights, bias, quantization, &mut residuals);
-    latents.copy_from_slice(&residuals[..latents.len()]);
-    state.copy_from_slice(&residuals[latents.len()..]);
-  }
+  decode_residuals(weights, bias, quantization, &mut residuals);
+  latents.copy_from_slice(&residuals[..latents.len()]);
+  state.copy_from_slice(&residuals[latents.len()..]);
 }
 
 #[cfg(test)]
