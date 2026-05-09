@@ -56,6 +56,7 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
   ];
   if T::L::BITS <= 32 {
     delta_specs.push(DeltaSpec::TryConv1(2));
+    delta_specs.push(DeltaSpec::TryConv1(6)); // because there's a specialized path for it
   }
 
   for mode_spec in [ModeSpec::Classic, ModeSpec::Auto] {
@@ -512,7 +513,7 @@ fn test_conv1_actually_applied() -> PcoResult<()> {
     nums.push((998 * 998_u32).saturating_sub(i * i));
   }
 
-  for order in [3] {
+  for order in [3, 6] {
     let (compressed, meta) = compress_w_meta(
       &nums,
       &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(order)),
