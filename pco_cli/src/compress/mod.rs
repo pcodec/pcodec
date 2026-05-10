@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use crate::input::{InputColumnOpt, InputFileOpt};
+use crate::parse;
 use crate::{arrow_handlers, chunk_config_opt, input, utils};
 
 pub mod handler;
@@ -20,6 +21,11 @@ pub struct CompressOpt {
   pub input_column: InputColumnOpt,
   #[command(flatten)]
   pub chunk_config: chunk_config_opt::ChunkConfigOpt,
+  /// Enables compression of 8-bit integer types.
+  /// By default, such types are ignored because they are often not Pco's
+  /// intended use case.
+  #[arg(long)]
+  enable_8_bit: bool,
 
   /// Output .pco path to write to.
   pub path: PathBuf,
