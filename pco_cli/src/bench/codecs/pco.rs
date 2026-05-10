@@ -42,7 +42,9 @@ impl CodecInternal for ChunkConfigOpt {
   }
 
   fn compress<T: PcoNumber>(&self, nums: &[T]) -> Vec<u8> {
-    let chunk_config = self.clone().into_chunk_config(true);
+    let chunk_config = self.clone().into_chunk_config(
+      true, // enable 8 bit because we already filtered down to selected dtypes
+    );
     pco::standalone::simple_compress(nums, &chunk_config).expect("invalid config")
   }
 

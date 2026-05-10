@@ -8,6 +8,7 @@ use pco::data_types::{Number, NumberType};
 
 use crate::num_vec::NumVec;
 
+// newtype so that clap doesn't try to parse the vec elems individually
 #[derive(Clone, Debug)]
 pub struct ArrowDataTypes(pub Vec<ArrowDataType>);
 
