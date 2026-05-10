@@ -20,6 +20,7 @@ use pco::data_types::NumberType;
 use pco::match_number_enum;
 
 use crate::bench::codecs::CodecConfig;
+use crate::dtypes::ArrowDataTypes;
 use crate::input::{Format, InputColumnOpt, InputFileOpt};
 use crate::{arrow_handlers, dtypes, input, parse, utils};
 
@@ -66,10 +67,12 @@ pub struct BenchOpt {
   /// By default all datasets are run.
   #[arg(long, short, default_values_t = Vec::<String>::new(), value_delimiter = ',')]
   pub datasets: Vec<String>,
-  /// Filter down to datasets or columns matching this Arrow data type,
-  /// e.g. i32 or micros.
-  #[arg(long, default_values_t = Vec::<DataType>::new(), value_parser = parse::arrow_dtype, value_delimiter = ',')]
-  pub dtypes: Vec<DataType>,
+  /// Filter down to datasets or columns matching only these numerical arrow
+  /// data types, e.g. "i32,f32,millis" or "all_including_8_bit".
+  /// By default, all data types except 8-bit types are included, since 8-bit
+  /// types are often not Pco's intended use case.
+  #[arg(long, default_value = "all_except_8_bit", value_parser = parse::arrow_dtypes)]
+  pub dtypes: ArrowDataTypes,
   /// Number of iterations to run each codec x dataset combination for
   /// better estimation of durations.
   /// The median duration is kept.
@@ -127,9 +130,8 @@ pub struct IterOpt {
 
 impl BenchOpt {
   pub fn includes_dataset(&self, dtype: &DataType, name: &str) -> bool {
-    if dtypes::from_arrow(dtype).is_err()
-      || (!self.dtypes.is_empty() && !self.dtypes.contains(dtype))
-    {
+    let dtypes = &self.dtypes.0;
+    if dtypes::from_arrow(dtype).is_err() || (!dtypes.is_empty() && !dtypes.contains(dtype)) {
       return false;
     }
 

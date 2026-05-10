@@ -8,6 +8,10 @@ use pco::data_types::{Number, NumberType};
 
 use crate::num_vec::NumVec;
 
+// newtype so that clap doesn't try to parse the vec elems individually
+#[derive(Clone, Debug)]
+pub struct ArrowDataTypes(pub Vec<ArrowDataType>);
+
 pub trait Parquetable: Sized {
   const PARQUET_DTYPE_STR: &'static str;
   const TRANSMUTABLE: bool = true;
@@ -420,5 +424,72 @@ pub fn to_arrow(dtype: NumberType) -> ArrowDataType {
       "number type {:?} not yet supported in pco_cli",
       other
     ),
+  }
+}
+
+pub fn all_arrow() -> ArrowDataTypes {
+  ArrowDataTypes(vec![
+    ArrowDataType::Float16,
+    ArrowDataType::Float32,
+    ArrowDataType::Float64,
+    ArrowDataType::Int8,
+    ArrowDataType::Int16,
+    ArrowDataType::Int32,
+    ArrowDataType::Int64,
+    ArrowDataType::UInt8,
+    ArrowDataType::UInt16,
+    ArrowDataType::UInt32,
+    ArrowDataType::UInt64,
+    ArrowDataType::Timestamp(arrow_dtypes::TimeUnit::Second, None),
+    ArrowDataType::Timestamp(arrow_dtypes::TimeUnit::Millisecond, None),
+    ArrowDataType::Timestamp(arrow_dtypes::TimeUnit::Microsecond, None),
+    ArrowDataType::Timestamp(arrow_dtypes::TimeUnit::Nanosecond, None),
+    ArrowDataType::Date32,
+    ArrowDataType::Date64,
+  ])
+}
+
+pub fn all_arrow_except_8_bit() -> ArrowDataTypes {
+  ArrowDataTypes(
+    all_arrow()
+      .0
+      .into_iter()
+      .filter(|dtype| *dtype != ArrowDataType::Int8 && *dtype != ArrowDataType::UInt8)
+      .collect(),
+  )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_all_pco_dtypes_are_arrowable() {
+    for i in 0..=255 {
+      match pco::data_types::NumberType::from_descriminant(i) {
+        Some(dtype) => {
+          let arrow_dtype = to_arrow(dtype);
+          assert_eq!(from_arrow(&arrow_dtype).unwrap(), dtype);
+        }
+        None => continue,
+      }
+    }
+  }
+
+  #[test]
+  fn test_all_pco_dtypes_except_8_bit_in_default_list() {
+    let arrow_dtypes_except_8_bit = all_arrow_except_8_bit().0;
+    for i in 0..=255 {
+      match pco::data_types::NumberType::from_descriminant(i) {
+        Some(dtype) => {
+          if dtype == NumberType::U8 || dtype == NumberType::I8 {
+            continue;
+          }
+          let arrow_dtype = to_arrow(dtype);
+          assert!(arrow_dtypes_except_8_bit.contains(&arrow_dtype));
+        }
+        None => continue,
+      }
+    }
   }
 }
