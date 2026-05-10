@@ -5,7 +5,6 @@ use anyhow::Result;
 use arrow::datatypes::Schema;
 
 use pco::standalone::FileCompressor;
-use pco::ChunkConfig;
 
 use crate::arrow_handlers::ArrowHandlerImpl;
 use crate::compress::CompressOpt;

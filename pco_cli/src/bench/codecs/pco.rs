@@ -1,4 +1,4 @@
-use pco::{ChunkConfig, DeltaSpec, ModeSpec};
+use pco::{DeltaSpec, ModeSpec};
 
 use crate::bench::codecs::CodecInternal;
 use crate::chunk_config_opt::ChunkConfigOpt;

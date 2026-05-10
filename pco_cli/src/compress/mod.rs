@@ -4,7 +4,6 @@ use anyhow::Result;
 use clap::Parser;
 
 use crate::input::{InputColumnOpt, InputFileOpt};
-use crate::parse;
 use crate::{arrow_handlers, chunk_config_opt, input, utils};
 
 pub mod handler;
