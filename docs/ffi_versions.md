@@ -23,6 +23,7 @@ from somewhere in between `a.b.c` whatever Rust version follows that.
 | 0.3.6                   | 0.4.8              |
 | 1.0.0                   | 1.0.0              |
 | 1.0.1                   | 1.0.1              |
+| 1.0.2                   | 1.0.2              |
 
 # Java / JVM versions
 
