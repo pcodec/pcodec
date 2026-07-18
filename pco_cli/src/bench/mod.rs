@@ -130,8 +130,8 @@ pub struct IterOpt {
 
 impl BenchOpt {
   pub fn includes_dataset(&self, dtype: &DataType, name: &str) -> bool {
-    let dtypes = &self.dtypes.0;
-    if dtypes::from_arrow(dtype).is_err() || (!dtypes.is_empty() && !dtypes.contains(dtype)) {
+    let dtypes = &self.dtypes;
+    if dtypes::from_arrow(dtype).is_err() || (!dtypes.0.is_empty() && !dtypes.contains(dtype)) {
       return false;
     }
 

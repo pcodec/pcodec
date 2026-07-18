@@ -12,6 +12,17 @@ use crate::num_vec::NumVec;
 #[derive(Clone, Debug)]
 pub struct ArrowDataTypes(pub Vec<ArrowDataType>);
 
+impl ArrowDataTypes {
+  // Ignores timestamp timezone, since that carries no bearing on how pco
+  // encodes the underlying i64 and users can't spell every tz on the CLI.
+  pub fn contains(&self, dtype: &ArrowDataType) -> bool {
+    self.0.iter().any(|d| match (d, dtype) {
+      (ArrowDataType::Timestamp(a, _), ArrowDataType::Timestamp(b, _)) => a == b,
+      _ => d == dtype,
+    })
+  }
+}
+
 pub trait Parquetable: Sized {
   const PARQUET_DTYPE_STR: &'static str;
   const TRANSMUTABLE: bool = true;
