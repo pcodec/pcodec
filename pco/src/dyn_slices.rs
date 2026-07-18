@@ -1,9 +1,11 @@
+use std::mem::MaybeUninit;
 use std::ops::Range;
 
 use crate::data_types::{Latent, Number};
 use crate::macros::{define_latent_enum, define_number_enum, match_number_enum};
 
 type Arr<T> = [T];
+type UninitArr<T> = [MaybeUninit<T>];
 
 define_latent_enum!(
   #[derive()]
@@ -13,6 +15,11 @@ define_latent_enum!(
 define_number_enum!(
   #[derive()]
   pub DynNumberSlice(&Arr)
+);
+
+define_number_enum!(
+  #[derive()]
+  pub DynNumberSliceMut(&mut UninitArr)
 );
 
 impl<'a> DynNumberSlice<'a> {
@@ -34,11 +41,6 @@ impl<'a> DynNumberSlice<'a> {
     )
   }
 }
-
-define_number_enum!(
-  #[derive()]
-  pub DynNumberSliceMut(&mut Arr)
-);
 
 impl<'a> DynNumberSliceMut<'a> {
   pub fn len(&self) -> usize {

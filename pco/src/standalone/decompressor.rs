@@ -10,6 +10,7 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
+use crate::WritableDst;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -283,10 +284,10 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   ///
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
-  pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+  pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
     let progress = self.page_state.read(
       &mut self.inner_cd.inner,
-      DynNumberSliceMut::new(dst),
+      DynNumberSliceMut::new(dst.as_maybe_uninit_slice_mut()),
     )?;
 
     self.n_processed += progress.n_processed;
@@ -304,16 +305,12 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     let initial_len = dst.len();
     let remaining = self.n - self.n_processed;
     dst.reserve(remaining);
-    // Safety: set_len before read() is technically the wrong ordering, but
-    // read() takes &mut [T], and T: Number is non-Drop, so no destructor runs
-    // on uninitialized elements if a panic occurs between set_len and the fill.
-    // Maybe eventually we can accept &mut [MaybeUninit<T>] in the public API as
-    // well.
+    let progress = self.read(&mut dst.spare_capacity_mut()[..remaining])?;
+    debug_assert!(progress.finished);
+    // Safety: read() just initialized all `remaining` elements.
     unsafe {
       dst.set_len(initial_len + remaining);
     }
-    let progress = self.read(&mut dst[initial_len..])?;
-    debug_assert!(progress.finished);
     Ok(())
   }
 }

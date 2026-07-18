@@ -8,7 +8,6 @@
 //! available. For instance, during decompression Pco will try to fill the entire `&mut [T]`
 //! passed in, returning an insufficient data error if the `&[u8]` passed in is not long enough.
 
-#![allow(clippy::uninit_vec)]
 #![allow(clippy::manual_non_exhaustive)] // sometimes we want to ban explicit construction within the crate too
 #![deny(clippy::unused_unit)]
 #![deny(dead_code)]
@@ -20,6 +19,7 @@ struct ReadmeDoctest;
 pub use chunk_config::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
 pub use constants::{DEFAULT_COMPRESSION_LEVEL, DEFAULT_MAX_PAGE_N, FULL_BATCH_N};
 pub use progress::Progress;
+pub use writable_dst::WritableDst;
 
 pub mod data_types;
 /// for inspecting certain types of Pco metadata
@@ -54,6 +54,7 @@ mod read_write_uint;
 mod sampling;
 mod scratch_array;
 mod sort_utils;
+mod writable_dst;
 
 #[cfg(test)]
 mod tests;

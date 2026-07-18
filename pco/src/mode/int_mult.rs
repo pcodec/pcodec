@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::mem;
+use std::mem::MaybeUninit;
 
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::latent_priv::LatentPriv;
@@ -39,13 +40,15 @@ pub(crate) fn join_latents<T: Number>(
   dyn_base: DynLatent,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [T],
+  dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<()> {
   let base = *dyn_base.downcast_ref::<T::L>().unwrap();
   let primary = primary.downcast::<T::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<T::L>().unwrap();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
+    dst.write(T::from_latent_ordered(
+      (mult * base).wrapping_add(adj),
+    ));
   }
 
   Ok(())
@@ -257,7 +260,7 @@ mod tests {
     let latents = split_latents(&nums, base);
     let mut primary = latents.primary.downcast::<u32>().unwrap();
     let mut secondary = latents.secondary.unwrap().downcast::<u32>().unwrap();
-    let mut dst = vec![0; nums.len()];
+    let mut dst = [MaybeUninit::<u32>::uninit(); 3];
     assert_eq!(&primary, &vec![2_u32, 0, 1]);
     assert_eq!(&secondary, &vec![0_u32, 1, 1]);
 
@@ -270,6 +273,7 @@ mod tests {
     )
     .unwrap();
 
+    let dst: Vec<u32> = dst.iter().map(|x| unsafe { x.assume_init() }).collect();
     assert_eq!(dst, nums);
   }
 
