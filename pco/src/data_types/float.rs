@@ -94,7 +94,11 @@ fn choose_mode_and_split_latents<F: Float>(
         split_fn: Box::new(|nums| classic::split_latents(nums)),
       });
 
-      if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
+      if let Some(sample) = sampling::choose_mode_sample(
+        nums,
+        chunk_config.compression_level,
+        filter_sample,
+      ) {
         bids.extend(float_mult::compute_bid(&sample));
         bids.extend(float_quant::compute_bid(&sample));
       }

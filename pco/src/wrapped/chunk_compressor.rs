@@ -24,7 +24,7 @@ use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar, PerLatentVarBu
 use crate::metadata::{Bin, ChunkMeta, DeltaEncoding, Mode};
 use crate::mode::classic;
 use crate::wrapped::guarantee;
-use crate::{ans, bin_optimization, delta, ChunkConfig, PagingSpec, FULL_BATCH_N};
+use crate::{ans, bin_optimization, delta, sampling, ChunkConfig, PagingSpec, FULL_BATCH_N};
 use std::any;
 use std::cmp::min;
 use std::io::Write;
@@ -32,8 +32,6 @@ use std::io::Write;
 // if it looks like the average page of size n will use k bits, hint that it
 // will be PAGE_SIZE_OVERESTIMATION * k bits.
 const PAGE_SIZE_OVERESTIMATION: f64 = 1.2;
-const N_PER_EXTRA_DELTA_GROUP: usize = 10000;
-const DELTA_GROUP_SIZE: usize = 200;
 const LOOKBACK_REQUIRED_BYTE_SAVINGS_PER_N: f32 = 0.25;
 
 // returns table size log
@@ -288,36 +286,6 @@ fn new_candidate(
   Ok((chunk_compressor, bin_countss))
 }
 
-fn choose_delta_sample(
-  primary_latents: &DynLatents,
-  group_size: usize,
-  n_extra_groups: usize,
-) -> DynLatents {
-  let n = primary_latents.len();
-  let nominal_sample_size = (n_extra_groups + 1) * group_size;
-  let group_padding = if n_extra_groups == 0 {
-    0
-  } else {
-    n.saturating_sub(nominal_sample_size) / n_extra_groups
-  };
-
-  let mut i = group_size;
-
-  match_latent_enum!(
-    primary_latents,
-    DynLatents<L>(primary_latents) => {
-      let mut sample = Vec::<L>::with_capacity(nominal_sample_size);
-      sample.extend(primary_latents.iter().take(group_size));
-      for _ in 0..n_extra_groups {
-        i += group_padding;
-        sample.extend(primary_latents.iter().skip(i).take(group_size));
-        i += group_size;
-      }
-      DynLatents::new(sample)
-    }
-  )
-}
-
 fn calculate_compressed_sample_size(
   sample: &DynLatents,
   unoptimized_bins_log: Bitlen,
@@ -341,14 +309,10 @@ fn calculate_compressed_sample_size(
 #[inline(never)]
 fn choose_auto_delta_encoding(
   primary_latents: &DynLatents,
+  compression_level: usize,
   unoptimized_bins_log: Bitlen,
 ) -> PcoResult<DeltaEncoding> {
-  let n = primary_latents.len();
-  let sample = choose_delta_sample(
-    primary_latents,
-    DELTA_GROUP_SIZE,
-    1 + n / N_PER_EXTRA_DELTA_GROUP,
-  );
+  let sample = sampling::choose_delta_sample(primary_latents, compression_level);
   let sample_n = sample.len();
 
   let mut best_encoding = DeltaEncoding::NoOp;
@@ -412,7 +376,11 @@ fn choose_delta_encoding(
 ) -> PcoResult<DeltaEncoding> {
   let n = latents.primary.len();
   let delta_encoding = match config.delta_spec {
-    DeltaSpec::Auto => choose_auto_delta_encoding(&latents.primary, unoptimized_bins_log)?,
+    DeltaSpec::Auto => choose_auto_delta_encoding(
+      &latents.primary,
+      config.compression_level,
+      unoptimized_bins_log,
+    )?,
     DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) | DeltaSpec::TryConv1(0) => DeltaEncoding::NoOp,
     DeltaSpec::TryConsecutive(order) => DeltaEncoding::Consecutive {
       order,
@@ -736,43 +704,5 @@ impl ChunkCompressor {
     writer.finish_byte();
     writer.flush()?;
     Ok(writer.into_inner())
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_choose_delta_sample() {
-    let latents = DynLatents::new(vec![0_u32, 1]);
-    assert_eq!(
-      choose_delta_sample(&latents, 100, 0)
-        .downcast::<u32>()
-        .unwrap(),
-      vec![0, 1]
-    );
-    assert_eq!(
-      choose_delta_sample(&latents, 100, 1)
-        .downcast::<u32>()
-        .unwrap(),
-      vec![0, 1]
-    );
-
-    let latents = DynLatents::new((0..300).collect::<Vec<u32>>());
-    let sample = choose_delta_sample(&latents, 100, 1)
-      .downcast::<u32>()
-      .unwrap();
-    assert_eq!(sample.len(), 200);
-    assert_eq!(&sample[..3], &[0, 1, 2]);
-    assert_eq!(&sample[197..], &[297, 298, 299]);
-
-    let latents = DynLatents::new((0..8).collect::<Vec<u32>>());
-    assert_eq!(
-      choose_delta_sample(&latents, 2, 2)
-        .downcast::<u32>()
-        .unwrap(),
-      vec![0, 1, 3, 4, 6, 7]
-    );
   }
 }

@@ -210,8 +210,10 @@ pub fn choose_candidate_base<L: Latent>(sample: &mut [L]) -> Option<(L, f64)> {
   most_prominent_gcd(&triple_gcds, sample.len() / 3)
 }
 
-pub fn choose_base<T: Number>(nums: &[T]) -> Option<T::L> {
-  let mut sample = sampling::choose_sample(nums, |num| Some(num.to_latent_ordered()))?;
+pub fn choose_base<T: Number>(nums: &[T], compression_level: usize) -> Option<T::L> {
+  let mut sample = sampling::choose_mode_sample(nums, compression_level, |num| {
+    Some(num.to_latent_ordered())
+  })?;
   let (candidate, bits_saved_per_adj) = choose_candidate_base(&mut sample)?;
 
   if sampling::est_bits_saved_per_num(&sample, |x| PrimaryLatentAndSavings {

@@ -15,7 +15,7 @@ pub fn choose_mode_and_split_latents<T: Number>(
 ) -> PcoResult<ModeAndLatents> {
   match config.mode_spec {
     ModeSpec::Auto => {
-      if let Some(base) = int_mult::choose_base(nums) {
+      if let Some(base) = int_mult::choose_base(nums, config.compression_level) {
         let mode = Mode::int_mult(base);
         let latents = int_mult::split_latents(nums, base);
         Ok((mode, latents))
