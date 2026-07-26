@@ -312,7 +312,9 @@ fn choose_auto_delta_encoding(
   compression_level: usize,
   unoptimized_bins_log: Bitlen,
 ) -> PcoResult<DeltaEncoding> {
-  let sample = sampling::choose_delta_sample(primary_latents, compression_level);
+  let Some(sample) = sampling::choose_delta_sample(primary_latents, compression_level) else {
+    return Ok(DeltaEncoding::NoOp);
+  };
   let sample_n = sample.len();
 
   let mut best_encoding = DeltaEncoding::NoOp;

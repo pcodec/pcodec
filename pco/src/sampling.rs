@@ -14,7 +14,8 @@ const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64
 // how many times over to try collecting samples without replacement before
 // giving up
 const SAMPLING_PERSISTENCE: usize = 4;
-const DELTA_GROUP_SIZE: usize = 200;
+const DELTA_MAX_GROUPS: usize = 16;
+const DELTA_TARGET_GROUP_SIZE: usize = 200;
 
 fn sample_ratio(compression_level: usize) -> usize {
   // we use approximately n/sample_ratio nums for the sample
@@ -36,7 +37,7 @@ fn sample_ratio(compression_level: usize) -> usize {
   }
 }
 
-fn calc_mode_sample_n(n: usize, compression_level: usize) -> Option<usize> {
+fn calc_sample_n(n: usize, compression_level: usize) -> Option<usize> {
   if n >= MIN_SAMPLE {
     Some(MIN_SAMPLE + (n - MIN_SAMPLE) / sample_ratio(compression_level))
   } else {
@@ -58,7 +59,8 @@ fn choose_delta_sample_inner(
     DynLatents<L>(primary_latents) => {
       let mut sample = Vec::<L>::with_capacity(nominal_sample_size);
       for group_i in 0..n_groups {
-        sample.extend(primary_latents.iter().skip(group_i * group_step).take(group_size));
+        let group_start = group_i * group_step;
+        sample.extend(&primary_latents[group_start..group_start + group_size]);
       }
       DynLatents::new(sample)
     }
@@ -67,10 +69,20 @@ fn choose_delta_sample_inner(
 pub(crate) fn choose_delta_sample(
   primary_latents: &DynLatents,
   compression_level: usize,
-) -> DynLatents {
+) -> Option<DynLatents> {
+  // We select some large contiguous groups of latents so that delta encodings
+  // can work both sample from a varienty of places from the chunk while
+  // minimizing the number of unnatural jumps.
   let n = primary_latents.len();
-  let n_groups = 1 + n / (sample_ratio(compression_level) * DELTA_GROUP_SIZE);
-  choose_delta_sample_inner(primary_latents, DELTA_GROUP_SIZE, n_groups)
+  let target_sample_size = calc_sample_n(n, compression_level)?;
+  let n_groups = ((target_sample_size as f32 / DELTA_TARGET_GROUP_SIZE as f32).ceil() as usize)
+    .min(DELTA_MAX_GROUPS);
+  let group_size = target_sample_size / n_groups;
+  Some(choose_delta_sample_inner(
+    primary_latents,
+    group_size,
+    n_groups,
+  ))
 }
 
 #[inline(never)]
@@ -84,7 +96,7 @@ pub fn choose_mode_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   // bitpacked vector representing whether each one is used yet and just keep
   // resampling.
   // Maybe this is a bad idea, but it works for now.
-  let target_sample_size = calc_mode_sample_n(nums.len(), compression_level)?;
+  let target_sample_size = calc_sample_n(nums.len(), compression_level)?;
 
   let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
   let mut visited = vec![0_u8; nums.len().div_ceil(8)];
@@ -163,11 +175,11 @@ mod tests {
 
   #[test]
   fn test_sample_n() {
-    assert_eq!(calc_mode_sample_n(9, 8), None);
-    assert_eq!(calc_mode_sample_n(10, 8), Some(10));
-    assert_eq!(calc_mode_sample_n(100, 8), Some(12));
-    assert_eq!(calc_mode_sample_n(1000010, 8), Some(25010));
-    assert_eq!(calc_mode_sample_n(1000010, 0), Some(10010));
+    assert_eq!(calc_sample_n(9, 8), None);
+    assert_eq!(calc_sample_n(10, 8), Some(10));
+    assert_eq!(calc_sample_n(100, 8), Some(12));
+    assert_eq!(calc_sample_n(1000010, 8), Some(25010));
+    assert_eq!(calc_sample_n(1000010, 0), Some(10010));
   }
 
   #[test]
