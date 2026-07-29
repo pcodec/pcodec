@@ -1,8 +1,27 @@
 typedef enum PcoError {
   PcoSuccess,
   PcoInvalidType,
+  /**
+   * Generic compression failure, e.g. an IO error from the destination.
+   */
   PcoCompressionError,
+  /**
+   * Generic decompression failure of a kind not covered below.
+   */
   PcoDecompressionError,
+  /**
+   * The parameters provided were invalid, e.g. an unsupported compression
+   * level.
+   */
+  PcoInvalidArgumentError,
+  /**
+   * The provided data is inconsistent or violates the pco format.
+   */
+  PcoCorruptionError,
+  /**
+   * The provided data ended before decompression finished.
+   */
+  PcoInsufficientDataError,
 } PcoError;
 
 /**
@@ -13,7 +32,7 @@ typedef enum PcoError {
  */
 typedef struct PcoChunkConfig {
   /**
-   * Compression level 0-12 (default 8).
+   * Compression level 0–12 (default 8).
    */
   unsigned int compression_level;
   /**
@@ -47,6 +66,43 @@ enum PcoError pco_standalone_simple_compress_into(const void *nums,
                                                   void *dst,
                                                   size_t dst_cap,
                                                   size_t *n_written);
+
+/**
+ * Inspect a standalone file's header without decompressing it.
+ *
+ * On success, `*dtype` is set to the file's uniform number type byte (or 0
+ * if the file does not declare a uniform type) and `*n_hint` is set to the
+ * file's count hint: the total number of elements in the file if it was
+ * recorded at compression time, or 0 if unknown.  Files written by
+ * `pco_standalone_simple_compress_into` always record an exact count hint.
+ *
+ * Thread-safe: the function is stateless and operates entirely on the
+ * caller-supplied buffers.
+ */
+enum PcoError pco_standalone_file_info(const void *compressed,
+                                       size_t compressed_len,
+                                       unsigned char *dtype,
+                                       size_t *n_hint);
+
+/**
+ * Decompress `compressed_len` bytes from `compressed` into the caller-owned
+ * buffer `dst` (capacity `dst_cap` *elements* of `dtype`), decompressing as
+ * many elements as fit.
+ *
+ * Unlike `pco_standalone_simple_decompress_into`, an undersized `dst` is not
+ * an error: on success `*n_written` is the number of elements written and
+ * `*finished` is 1 if the entire file was decompressed, 0 if elements remain.
+ *
+ * Thread-safe: the function is stateless and operates entirely on the
+ * caller-supplied buffers.
+ */
+enum PcoError pco_standalone_simple_decompress_partial_into(const void *compressed,
+                                                            size_t compressed_len,
+                                                            unsigned char dtype,
+                                                            void *dst,
+                                                            size_t dst_cap,
+                                                            size_t *n_written,
+                                                            unsigned char *finished);
 
 /**
  * Decompress `compressed_len` bytes from `compressed` into the caller-owned
