@@ -55,5 +55,8 @@ mod sampling;
 mod scratch_array;
 mod sort_utils;
 
+#[cfg(kani)]
+mod kani_proofs;
+
 #[cfg(test)]
 mod tests;
