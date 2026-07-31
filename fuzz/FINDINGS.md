@@ -52,3 +52,60 @@ any consumer aborts on corrupt input, and release silently computes on data
 that violates a stated invariant.
 
 Fix direction: make it a real `PcoError::corruption` check.
+
+## 4. `mult * base` overflows in `int_mult::join_latents`
+
+`pco/src/mode/int_mult.rs:48` multiplies two latents read from the wire with a
+plain `*`, while the adjacent addition on the same line is already
+`wrapping_add`. Overflow panics under overflow-checks; in a stock release build
+it wraps, which is what the neighbouring `wrapping_add` shows was intended.
+
+Fix direction: `wrapping_mul` (needs adding to the `LatentPriv` trait).
+
+## 5. Unbounded window buffer from `window_n_log` (confirmed Kani lead)
+
+`pco/src/metadata/delta_encoding.rs:155` reads
+`window_n_log = 1 + read_bitlen(5)`, i.e. **1..=32**, and validates only
+`state_n_log <= window_n_log`. `delta/lookback.rs:192` then allocates
+`max(1 << window_n_log, 256) * 2` latents.
+
+The encoder never emits more than `LOOKBACK_MAX_WINDOW_N_LOG = 15`
+(`delta/mod.rs:16`) -- the decoder accepts more than the encoder can produce.
+
+From a valid **165-byte** lookback file:
+
+| window_n_log | window buffer (i64) |
+| --- | --- |
+| 15 (encoder max) | 512 KiB |
+| 24 | 256 MiB |
+| 28 | 4 GiB  <- what the fuzzer hit |
+| 32 (format max) | 64 GiB |
+
+Affects release builds. Fix direction: reject `window_n_log` above the
+encoder's max on read.
+
+## Build-mode matrix
+
+`cargo fuzz` defaults to opt-level 3 **plus** debug-assertions and
+overflow-checks -- not a stock release build. Each finding was re-checked in
+both, via `repro/` and by replaying artifacts under `cargo fuzz run -O`:
+
+| # | stock release | debug-assertions / overflow-checks |
+| --- | --- | --- |
+| 1 n_hint | **abort / panic** | abort / panic |
+| 2 FloatQuant k | clean `InvalidArgument` | **panic** |
+| 3 FloatQuant debug_assert | check absent, arithmetic wraps | **panic** |
+| 4 int_mult multiply | wraps (intended) | **panic** |
+| 5 window_n_log | **multi-GB allocation** | multi-GB allocation |
+
+So 1 and 5 are the ones that hit shipping builds; 2, 3 and 4 abort any consumer
+that builds with overflow checks on, and in release leave arithmetic running on
+data that violates a stated invariant.
+
+## Post-fix status
+
+All five fixed locally (see git log). Full pco suite still green (128 + 5).
+Then, with no crash found:
+
+* `decompress_corrupt`, opt3 + debug-assertions: **1 029 368 runs / 301 s**
+* `decompress_corrupt`, stock release (`-O`): **801 490 runs / 301 s**

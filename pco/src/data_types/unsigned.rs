@@ -108,6 +108,11 @@ macro_rules! impl_latent {
       }
 
       #[inline]
+      fn wrapping_mul(self, other: Self) -> Self {
+        self.wrapping_mul(other)
+      }
+
+      #[inline]
       fn wrapping_sub(self, other: Self) -> Self {
         self.wrapping_sub(other)
       }

@@ -154,6 +154,16 @@ impl DeltaEncoding {
       2 => {
         let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG);
         let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG);
+        // The window buffer is allocated as max(1 << window_n_log, 256) * 2
+        // latents, so an unbounded value here is an allocation the input does
+        // not justify. The encoder never emits more than this.
+        if window_n_log > crate::delta::LOOKBACK_MAX_WINDOW_N_LOG {
+          return Err(PcoError::corruption(format!(
+            "LZ delta encoding window size log of {} exceeds max of {}",
+            window_n_log,
+            crate::delta::LOOKBACK_MAX_WINDOW_N_LOG,
+          )));
+        }
         if state_n_log > window_n_log {
           return Err(PcoError::corruption(format!(
             "LZ delta encoding state size log exceeded window size log: {} vs {}",
