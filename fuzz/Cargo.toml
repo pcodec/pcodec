@@ -12,6 +12,7 @@ libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
 half = "2.0.0"
 pco = { path = "../pco" }
+cpcodec = { path = "../pco_c" }
 
 [[bin]]
 name = "decompress_arbitrary"
@@ -30,6 +31,20 @@ bench = false
 [[bin]]
 name = "decompress_corrupt"
 path = "fuzz_targets/decompress_corrupt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "c_api_roundtrip"
+path = "fuzz_targets/c_api_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "c_api_decompress"
+path = "fuzz_targets/c_api_decompress.rs"
 test = false
 doc = false
 bench = false

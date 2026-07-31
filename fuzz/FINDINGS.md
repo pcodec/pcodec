@@ -109,3 +109,81 @@ Then, with no crash found:
 
 * `decompress_corrupt`, opt3 + debug-assertions: **1 029 368 runs / 301 s**
 * `decompress_corrupt`, stock release (`-O`): **801 490 runs / 301 s**
+
+# The C API (`pco_c`)
+
+Second pass, over the FFI surface. The C API is where memory safety stops being
+Rust's problem: three functions, all of them writing through pointers the caller
+owns, and the only thing exercising them was one happy-path C file (six f64s,
+default config).
+
+Targets `c_api_roundtrip` and `c_api_decompress`. Both put 64 bytes of `0xA5`
+either side of every caller buffer, which is what turns a write past the end
+into a visible failure without a sanitizer. `c_api_decompress` compresses real
+numbers through the C API first and then corrupts the file, because
+unstructured bytes barely reach the decoder: 202 coverage edges before that
+change, 3897 after.
+
+Neither target found an out-of-bounds write. What they found:
+
+## 6. `guarantee_file_size` ignored the config it was sizing for
+
+The header documents a sequence: ask `pco_standalone_guarantee_file_size` how
+big the output can get, allocate that, then `pco_standalone_simple_compress_into`.
+But the guarantee took only `(n, dtype)` and computed with `PagingSpec::default()`,
+while compression honoured the caller's `max_page_n` -- one chunk per page, each
+with its own overhead. 21 i64s with `max_page_n = 1`: the bound says 340 bytes,
+the file is 347. A caller following the documented sequence exactly gets
+`PcoCompressionError`, with no API to learn the size that would have worked.
+
+Fixed additively rather than by changing the existing symbol's signature (which
+would break compiled consumers silently): new
+`pco_standalone_guarantee_file_size_with_config`, and the old one now documents
+itself as assuming the default spec.
+
+## 7. An empty input skipped config validation entirely
+
+`simple_compress(&[], config)` returned `Ok` for a config the same function
+rejects with one element in it -- `compression_level = 1 577 058 303`, say.
+Validation lives in `ChunkCompressor::new`, and an empty input produces no
+chunks, so nothing ever looked at the config. The doc comment says "will return
+an error if the compressor config is invalid"; it did not.
+
+This is `pco`, not `pco_c` -- a Rust caller sees it too. It matters more through
+the C API, where testing a config against an empty array is the natural way to
+ask "is this config OK?" and the answer was a false yes.
+
+Fixed by validating once up front in `simple_compress_into` and
+`simple_compress_dyn`.
+
+## 8. `pco_standalone_simple_decompress_into` was a safe `fn`
+
+It dereferences four caller-supplied pointers and was declared
+`pub extern "C" fn`, not `pub unsafe extern "C" fn` -- unlike its compression
+twin two functions above it. A safe signature claims that no arguments can make
+the function misbehave, which is exactly false here. Rust-side only; the C ABI
+and the generated header are unchanged.
+
+## Not defects, but worth knowing
+
+* `_decompress_into` decodes into a `Vec` first and only then compares the
+  count against `dst_cap`. A caller with a 10-element destination can still be
+  made to materialise the whole file. Bounded by the input's real size since
+  finding #1 was fixed, but the shape is "decode everything, then check".
+* An out-of-range `compression_level` comes back as `PcoCompressionError`,
+  indistinguishable from a genuine compression failure. There is a
+  `PcoInvalidType` for a bad dtype but no equivalent for a bad config.
+
+## Post-fix status (C API)
+
+* `c_api_roundtrip`: **617 924 runs / 201 s**, no crash
+* `c_api_decompress`: **690 292 runs / 201 s**, no crash, 3897 edges
+
+`cargo test -p cpcodec` covers findings 6 and 8 plus the too-small-destination
+path; `pco_c/test/run_test.sh` covers 6 from the C side; finding 7 is
+`pco/src/standalone/simple.rs::test_invalid_config_rejected_when_empty`.
+
+## Still untouched
+
+`pco_python` and `pco_java`. Both wrap the same decoder, and neither can be
+driven from a Rust fuzz target without standing up the respective runtime.

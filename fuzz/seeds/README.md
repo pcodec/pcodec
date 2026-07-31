@@ -9,20 +9,20 @@ twice.
 One reproducible `tar.zst` per target rather than loose files, to keep the tree
 (and any diff of it) readable:
 
-| target | files | uncompressed | archive |
+| target | files | archive | edges |
 | --- | --- | --- | --- |
-| `decompress_arbitrary` | 23 | ~96 KB | 949 B |
-| `decompress_corrupt` | 1377 | ~1.1 MB | 78 KB |
-| `roundtrip` | 55 | ~224 KB | 2.3 KB |
+| `decompress_arbitrary` | 23 | 949 B | 489 |
+| `decompress_corrupt` | 1377 | 78 KB | 3485 |
+| `roundtrip` | 55 | 2.3 KB | 2857 |
+| `c_api_roundtrip` | 2999 | 144 KB | 8650 |
+| `c_api_decompress` | 978 | 53 KB | 3896 |
 
 ## Use
 
 ```sh
 cd fuzz
 mkdir -p corpus
-for t in decompress_arbitrary decompress_corrupt roundtrip; do
-  tar -C corpus -xf "seeds/$t.tar.zst"
-done
+for f in seeds/*.tar.zst; do tar -C corpus -xf "$f"; done
 cargo fuzz run decompress_corrupt          # picks up corpus/decompress_corrupt
 ```
 
@@ -43,13 +43,12 @@ re-archiving an unchanged corpus produces no diff.
 
 ## Provenance
 
-Minimized (`cargo fuzz cmin`) from a session of the runs recorded in
-`../FINDINGS.md`, i.e. cargo-fuzz's default build mode (opt-level 3 **plus**
-debug-assertions and overflow-checks). Coverage after minimization, as reported
-by the merge step: 489 edges for `decompress_arbitrary`, 3485 for
-`decompress_corrupt`, 2857 for `roundtrip`.
+Minimized (`cargo fuzz cmin`) from the runs recorded in `../FINDINGS.md`, i.e.
+cargo-fuzz's default build mode (opt-level 3 **plus** debug-assertions and
+overflow-checks). The edge counts in the table are what the merge step reported
+after minimization.
 
-The gap between the first and the second is the point of `decompress_corrupt`:
+The gap between the first two rows is the point of `decompress_corrupt`:
 `decompress_arbitrary` feeds unstructured bytes and almost never gets past the
 magic header, while `decompress_corrupt` builds a valid file and then mutates
 it, so nearly all of its inputs reach real decode paths. Seeds are therefore
