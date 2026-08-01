@@ -20,7 +20,7 @@ jobs:
           # locking this to a version compatible with pyo3+maturin
           python-version: "3.14.6"
       - name: Override Rust Version
-        run: rustup override set "$(cat .github/rust-version)"
+        run: rustup override set "$(cat .github/rust-test-version)"
       # TODO: there has to be a cleaner way to do this and also add caching
       - name: "create venv"
         run: python -m venv .venv
