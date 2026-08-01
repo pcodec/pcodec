@@ -32,6 +32,8 @@ jobs:
         run: cargo install cross
       - name: Build target dylibs
         run: cross build --release -p pco_java --target "${{ matrix.target }}"
+        env:
+          RUSTFLAGS: -C lto=true -C embed-bitcode=true -Zdylib-lto
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
@@ -59,6 +61,8 @@ jobs:
         run: rustup target add "${{ matrix.target }}"
       - name: Build target dylibs
         run: cargo build --release -p pco_java --target "${{ matrix.target }}"
+        env:
+          RUSTFLAGS: -C lto=true -C embed-bitcode=true -Zdylib-lto
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
@@ -84,6 +88,8 @@ jobs:
         run: rustup target add "${{ matrix.target }}"
       - name: Build target dylibs
         run: cargo build --release -p pco_java --target "${{ matrix.target }}"
+        env:
+          RUSTFLAGS: -C lto=true -C embed-bitcode=true -Zdylib-lto
       - name: Upload dynamic lib
         uses: actions/upload-artifact@v4
         with:
