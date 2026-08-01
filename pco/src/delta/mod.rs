@@ -13,7 +13,7 @@ use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{DeltaEncoding, DeltaLookbackConfig};
 use std::ops::Range;
 
-const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
+pub(crate) const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
 const LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
 
 pub type DeltaState = DynLatents;

@@ -4,7 +4,7 @@ use crate::data_types::float::Float;
 use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::SplitLatents;
 use crate::dyn_slices::DynLatentSlice;
-use crate::errors::PcoResult;
+use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 use std::cmp;
@@ -23,10 +23,12 @@ pub(crate) fn join_latents<F: Float>(
   let sign_cutoff = F::L::MID >> k;
   let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
   for ((&y, &m), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    debug_assert!(
-      m >> k == F::L::ZERO,
-      "Invalid input to FloatQuant: m must be a k-bit integer"
-    );
+    // `m` comes off the wire, so this is a corruption check, not an assertion.
+    if m >> k != F::L::ZERO {
+      return Err(PcoError::corruption(
+        "invalid FloatQuant secondary latent: m must be a k-bit integer",
+      ));
+    }
     let is_pos_as_float = y >= sign_cutoff;
     let lowest_k_bits = if is_pos_as_float {
       m

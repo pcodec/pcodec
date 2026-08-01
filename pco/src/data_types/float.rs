@@ -114,10 +114,20 @@ fn choose_mode_and_split_latents<F: Float>(
       let latents = float_mult::split_latents(nums, float_mult_config);
       Ok((mode, latents))
     }
-    ModeSpec::TryFloatQuant(k) => Ok((
-      Mode::FloatQuant(k),
-      float_quant::split_latents(nums, k),
-    )),
+    ModeSpec::TryFloatQuant(k) => {
+      // Must be checked before splitting: split_latents shifts by `k`.
+      if k >= F::L::BITS {
+        return Err(PcoError::invalid_argument(format!(
+          "float quantization k of {} must be less than the type's {} bits",
+          k,
+          F::L::BITS,
+        )));
+      }
+      Ok((
+        Mode::FloatQuant(k),
+        float_quant::split_latents(nums, k),
+      ))
+    }
     ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
       "unable to use int mult mode on floats",
     )),
