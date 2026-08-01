@@ -10,6 +10,7 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
+use std::cmp;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -248,17 +249,21 @@ impl FileDecompressor {
   /// analagous file compressor method because the user always knows the dtype
   /// during compression.
   pub fn simple_decompress<T: Number>(&self, mut src: &[u8]) -> PcoResult<Vec<T>> {
-    // `n_hint` is attacker-controlled and unrelated to how much data is
-    // actually present, so it may only be used as a hint up to a bound the
-    // input can actually justify. Every number costs at least one bit.
-    let cap = std::cmp::min(self.n_hint(), src.len().saturating_mul(8));
-    let mut res = Vec::with_capacity(cap);
+    let mut res = Vec::with_capacity(n_hint_prealloc(self.n_hint()));
     while let DecompressorItem::Chunk(mut chunk_decompressor) = self.chunk_decompressor(src)? {
       chunk_decompressor.decompress_remaining_extend(&mut res)?;
       src = chunk_decompressor.into_src();
     }
     Ok(res)
   }
+}
+
+/// How many numbers to preallocate for a file that declares `n_hint`.
+///
+/// `n_hint` is untrusted and unrelated to how much data is actually present,
+/// so we only use it as a hint up to a fixed cap.
+pub(crate) fn n_hint_prealloc(n_hint: usize) -> usize {
+  cmp::min(n_hint, MAX_N_HINT_PREALLOC)
 }
 
 /// Holds metadata about a chunk and supports decompression.

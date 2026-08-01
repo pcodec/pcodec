@@ -9,8 +9,11 @@
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::data_types::Number;
 use crate::errors::PcoResult;
+use crate::standalone::constants::MAX_N_HINT_PREALLOC;
+use crate::standalone::decompressor::n_hint_prealloc;
 use crate::standalone::{simple_compress, simple_decompress, FileCompressor};
 use crate::ModeSpec;
+use std::cmp;
 
 /// The mutations tried at each byte offset: every single-bit flip, plus the
 /// two saturating values. Cheaper than all 256 values and hits the same
@@ -98,10 +101,35 @@ fn test_single_byte_corruption_never_panics_floats() -> PcoResult<()> {
   Ok(())
 }
 
-/// `n_hint` is a hint, not a promise. A tiny file may declare an enormous one,
-/// so it must never be used as an allocation size on its own.
+/// `n_hint` is a hint, not a promise: a 26-byte file may legally declare
+/// `usize::MAX` (`standalone/guarantee.rs` writes exactly that), so it must be
+/// clamped before it reaches `Vec::with_capacity`.
+///
+/// This checks the clamp arithmetic rather than decompressing such a file,
+/// since the point of the clamp is that the allocation never happens.
 #[test]
-fn test_absurd_n_hint_is_not_an_allocation() -> PcoResult<()> {
+fn test_absurd_n_hint_is_clamped() {
+  for n_hint in [0, 1 << 20, 1 << 40, usize::MAX] {
+    let capped = n_hint_prealloc(n_hint);
+    assert!(
+      capped <= MAX_N_HINT_PREALLOC,
+      "n_hint={} was not clamped ({})",
+      n_hint,
+      capped
+    );
+    assert_eq!(
+      capped,
+      cmp::min(n_hint, MAX_N_HINT_PREALLOC),
+      "n_hint={} should be preserved when small enough",
+      n_hint
+    );
+  }
+}
+
+/// The clamp must not disturb ordinary round trips, including for files whose
+/// `n_hint` is absurd.
+#[test]
+fn test_absurd_n_hint_still_round_trips() -> PcoResult<()> {
   for n_hint in [1 << 20, 1 << 40, usize::MAX] {
     let mut file = Vec::new();
     let fc = FileCompressor::default().with_n_hint(n_hint);

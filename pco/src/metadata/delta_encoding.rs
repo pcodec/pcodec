@@ -155,13 +155,12 @@ impl DeltaEncoding {
         let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG);
         let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG);
         // The window buffer is allocated as max(1 << window_n_log, 256) * 2
-        // latents, so an unbounded value here is an allocation the input does
-        // not justify. The encoder never emits more than this.
-        if window_n_log > crate::delta::LOOKBACK_MAX_WINDOW_N_LOG {
+        // latents, so an unbounded value here is an allocation the file has
+        // not earned.
+        if window_n_log > MAX_DELTA_LOOKBACK_WINDOW_N_LOG {
           return Err(PcoError::corruption(format!(
             "LZ delta encoding window size log of {} exceeds max of {}",
-            window_n_log,
-            crate::delta::LOOKBACK_MAX_WINDOW_N_LOG,
+            window_n_log, MAX_DELTA_LOOKBACK_WINDOW_N_LOG,
           )));
         }
         if state_n_log > window_n_log {
@@ -316,14 +315,16 @@ mod tests {
   // The window buffer is sized `max(1 << window_n_log, 256) * 2` latents, so
   // an out-of-range `window_n_log` off the wire is an allocation the file has
   // not earned (`window_n_log = 32` is 64 GiB for i64). The 5 bits on the wire
-  // admit up to 32; the encoder never emits more than
-  // LOOKBACK_MAX_WINDOW_N_LOG, so reads above that must be rejected.
+  // admit up to 32, so reads above MAX_DELTA_LOOKBACK_WINDOW_N_LOG must be
+  // rejected.
   #[test]
   fn test_oversized_lookback_window_is_rejected() {
     for window_n_log in [
-      crate::delta::LOOKBACK_MAX_WINDOW_N_LOG,
-      crate::delta::LOOKBACK_MAX_WINDOW_N_LOG + 1,
-      24,
+      1,
+      15,
+      MAX_DELTA_LOOKBACK_WINDOW_N_LOG,
+      MAX_DELTA_LOOKBACK_WINDOW_N_LOG + 1,
+      31,
       32,
     ] {
       let encoding = DeltaEncoding::Lookback {
@@ -343,7 +344,7 @@ mod tests {
       let mut reader = BitReader::new(&bytes, bytes.len(), 0);
       let res = unsafe { DeltaEncoding::read_from(&mut reader, &FormatVersion::max_supported()) };
 
-      if window_n_log <= crate::delta::LOOKBACK_MAX_WINDOW_N_LOG {
+      if window_n_log <= MAX_DELTA_LOOKBACK_WINDOW_N_LOG {
         assert_eq!(
           res.unwrap(),
           encoding,

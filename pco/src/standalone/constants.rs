@@ -7,6 +7,9 @@ pub const BITS_TO_ENCODE_N_ENTRIES: Bitlen = 24;
 pub const BITS_TO_ENCODE_STANDALONE_VERSION: Bitlen = 8;
 pub const BITS_TO_ENCODE_VARINT_POWER: Bitlen = 6;
 pub const CURRENT_STANDALONE_VERSION: usize = 3;
+// `n_hint` is untrusted, so we only preallocate this many numbers for it,
+// which is plenty to be performant even for outputs of several GB.
+pub const MAX_N_HINT_PREALLOC: usize = 1 << 30;
 
 // padding
 pub const STANDALONE_CHUNK_PREAMBLE_PADDING: usize =

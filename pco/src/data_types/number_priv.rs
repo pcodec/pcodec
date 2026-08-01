@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
+use crate::compression_intermediates::Bid;
 use crate::data_types::latent_priv::LatentPriv;
-use crate::data_types::ModeAndLatents;
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::Mode;
@@ -23,18 +23,18 @@ pub trait NumberPriv: Copy + Debug + Display + Default + PartialEq + Send + Sync
   type L: LatentPriv;
 
   fn mode_is_valid(mode: &Mode) -> bool;
-  /// Breaks the numbers into latent variables for better compression.
+  /// Proposes the modes worth considering for these numbers.
   ///
-  /// Returns
-  /// * mode: the [`Mode`] that will be stored alongside the data
+  /// Each [`Bid`] carries
+  /// * mode: the [`Mode`] that would be stored alongside the data
   ///   for decompression
-  /// * latents: a primary and optionally secondary latent variable, each of
-  ///   which contains a latent per num in `nums`. Primary must be of the same
-  ///   latent type as T.
-  fn choose_mode_and_split_latents(
-    nums: &[Self],
-    config: &ChunkConfig,
-  ) -> PcoResult<ModeAndLatents>;
+  /// * split_fn: breaks the numbers into a primary and optionally secondary
+  ///   latent variable, each of which contains a latent per num in `nums`.
+  ///   Primary must be of the same latent type as T.
+  ///
+  /// The caller picks the winning bid and validates its mode before invoking
+  /// `split_fn`, so `split_fn` may assume the mode is valid for this type.
+  fn choose_mode_bids(nums: &[Self], config: &ChunkConfig) -> PcoResult<Vec<Bid<Self>>>;
 
   fn from_latent_ordered(l: Self::L) -> Self;
   fn to_latent_ordered(self) -> Self::L;
