@@ -10,6 +10,7 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
+use std::{cmp, mem};
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -61,6 +62,7 @@ unsafe fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberTy
 pub struct FileDecompressor {
   uniform_type: Option<NumberType>,
   n_hint: usize,
+  max_prealloc_bytes: usize,
   inner: wrapped::FileDecompressor,
 }
 
@@ -128,9 +130,22 @@ impl FileDecompressor {
         inner,
         uniform_type: uniform_number_type,
         n_hint,
+        max_prealloc_bytes: DEFAULT_MAX_PREALLOC_BYTES,
       },
       rest,
     ))
+  }
+
+  /// Lowers how much memory [`Self::simple_decompress`] may preallocate based
+  /// on the file's `n_hint`.
+  ///
+  /// `n_hint` is untrusted - a tiny file may legally declare `usize::MAX` - so
+  /// it is capped at `DEFAULT_MAX_PREALLOC_BYTES` by default. Use this if you
+  /// would rather pay for a few reallocations than let a file reserve memory
+  /// it has not earned.
+  pub fn with_max_prealloc(mut self, bytes: usize) -> Self {
+    self.max_prealloc_bytes = bytes;
+    self
   }
 
   pub fn format_version(&self) -> &FormatVersion {
@@ -248,7 +263,10 @@ impl FileDecompressor {
   /// analagous file compressor method because the user always knows the dtype
   /// during compression.
   pub fn simple_decompress<T: Number>(&self, mut src: &[u8]) -> PcoResult<Vec<T>> {
-    let mut res = Vec::with_capacity(self.n_hint());
+    // `n_hint` is untrusted and unrelated to how much data is actually
+    // present, so we only follow it up to a cap.
+    let max_prealloc = self.max_prealloc_bytes / mem::size_of::<T>();
+    let mut res = Vec::with_capacity(cmp::min(self.n_hint(), max_prealloc));
     while let DecompressorItem::Chunk(mut chunk_decompressor) = self.chunk_decompressor(src)? {
       chunk_decompressor.decompress_remaining_extend(&mut res)?;
       src = chunk_decompressor.into_src();

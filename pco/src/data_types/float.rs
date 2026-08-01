@@ -1,6 +1,5 @@
 use half::f16;
 
-use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
@@ -80,57 +79,56 @@ fn filter_sample<F: Float>(num: &F) -> Option<F> {
   None
 }
 
-fn choose_mode_and_split_latents<F: Float>(
-  nums: &[F],
-  chunk_config: &ChunkConfig,
-) -> PcoResult<ModeAndLatents> {
-  match chunk_config.mode_spec {
+fn choose_mode_bids<F: Float>(nums: &[F], chunk_config: &ChunkConfig) -> PcoResult<Vec<Bid<F>>> {
+  let bids = match chunk_config.mode_spec {
     ModeSpec::Auto => {
       // up to 3 bids: classic, float mult, float quant modes
-      let mut bids: Vec<Bid<F>> = vec![];
-      bids.push(Bid {
+      let mut bids: Vec<Bid<F>> = vec![Bid {
         mode: Mode::Classic,
         bits_saved_per_num: 0.0,
         split_fn: Box::new(|nums| classic::split_latents(nums)),
-      });
+      }];
 
       if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
         bids.extend(float_mult::compute_bid(&sample));
         bids.extend(float_quant::compute_bid(&sample));
       }
 
-      let winning_bid = choose_winning_bid(bids);
-      let latents = (winning_bid.split_fn)(nums);
-      Ok((winning_bid.mode, latents))
+      bids
     }
-    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
+    ModeSpec::Classic => vec![Bid {
+      mode: Mode::Classic,
+      bits_saved_per_num: 0.0,
+      split_fn: Box::new(|nums| classic::split_latents(nums)),
+    }],
     ModeSpec::TryFloatMult(base_f64) => {
       let base = F::from_f64(base_f64);
-      let mode = Mode::float_mult(base);
       let float_mult_config = FloatMultConfig {
         base,
         inv_base: base.inv(),
       };
-      let latents = float_mult::split_latents(nums, float_mult_config);
-      Ok((mode, latents))
+      vec![Bid {
+        mode: Mode::float_mult(base),
+        bits_saved_per_num: 0.0,
+        split_fn: Box::new(move |nums| float_mult::split_latents(nums, float_mult_config)),
+      }]
     }
-    ModeSpec::TryFloatQuant(k) => Ok((
-      Mode::FloatQuant(k),
-      float_quant::split_latents(nums, k),
-    )),
-    ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
-      "unable to use int mult mode on floats",
-    )),
-    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
-  }
-}
+    ModeSpec::TryFloatQuant(k) => vec![Bid {
+      mode: Mode::FloatQuant(k),
+      bits_saved_per_num: 0.0,
+      // Note that this is only invoked after the mode is validated; k is a
+      // shift width, so splitting with an out-of-range one is UB-adjacent.
+      split_fn: Box::new(move |nums| float_quant::split_latents(nums, k)),
+    }],
+    ModeSpec::TryIntMult(_) => {
+      return Err(PcoError::invalid_argument(
+        "unable to use int mult mode on floats",
+      ))
+    }
+    ModeSpec::TryDict => vec![dict::compute_bid(nums)],
+  };
 
-// one day we might reuse this for int modes
-fn choose_winning_bid<T: Number>(bids: Vec<Bid<T>>) -> Bid<T> {
-  bids
-    .into_iter()
-    .max_by(|bid0, bid1| bid0.bits_saved_per_num.total_cmp(&bid1.bits_saved_per_num))
-    .expect("bids must be nonempty")
+  Ok(bids)
 }
 
 macro_rules! impl_float {
@@ -386,11 +384,8 @@ macro_rules! impl_float_number {
           Mode::IntMult(_) => false,
         }
       }
-      fn choose_mode_and_split_latents(
-        nums: &[Self],
-        config: &ChunkConfig,
-      ) -> PcoResult<ModeAndLatents> {
-        choose_mode_and_split_latents(nums, config)
+      fn choose_mode_bids(nums: &[Self], config: &ChunkConfig) -> PcoResult<Vec<Bid<Self>>> {
+        choose_mode_bids(nums, config)
       }
 
       #[inline]
@@ -453,13 +448,19 @@ impl_float_number!(f16, u16, 1_u16 << 15, 9);
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::compression_intermediates::choose_winning_bid;
   use crate::metadata::{DynLatent, DynLatents};
+
+  fn choose_mode<F: Float>(nums: &[F]) -> Mode {
+    let bids = choose_mode_bids(nums, &ChunkConfig::default()).unwrap();
+    choose_winning_bid(bids).mode
+  }
 
   #[test]
   fn test_choose_mult_mode() {
     let base = 1.5;
     let nums = (0..1000).map(|i| (i as f64) * base).collect::<Vec<_>>();
-    let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
+    let mode = choose_mode(&nums);
     assert_eq!(mode, Mode::float_mult(base));
     assert!(f64::mode_is_valid(&mode))
   }
@@ -515,7 +516,7 @@ mod tests {
     let nums = (0..1000)
       .map(|i| f64::from_bits(lowest_num_bits + (i << k)))
       .collect::<Vec<_>>();
-    let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
+    let mode = choose_mode(&nums);
     assert_eq!(mode, Mode::FloatQuant(k));
   }
 

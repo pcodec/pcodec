@@ -2,7 +2,7 @@ use crate::bit_writer::BitWriter;
 use crate::chunk_config::DeltaSpec;
 use crate::chunk_latent_compressor::{ChunkLatentCompressor, DynChunkLatentCompressor};
 use crate::compression_intermediates::{
-  BinCompressionInfo, DissectedPage, PageInfo, PageInfoVar, TrainedBins,
+  choose_winning_bid, BinCompressionInfo, DissectedPage, PageInfo, PageInfoVar, TrainedBins,
 };
 use crate::constants::{
   Bitlen, Weight, LIMITED_UNOPTIMIZED_BINS_LOG, MAX_BATCH_LATENT_VAR_SIZE, MAX_COMPRESSION_LEVEL,
@@ -490,17 +490,18 @@ impl ChunkCompressor {
     let (mode, latents) = match_number_enum!(
       nums,
       DynNumberSlice<T>(nums) => {
-        let (mode, latents) = T::choose_mode_and_split_latents(nums, config)?;
-        if !T::mode_is_valid(&mode) {
+        let bid = choose_winning_bid(T::choose_mode_bids(nums, config)?);
+        if !T::mode_is_valid(&bid.mode) {
           return Err(PcoError::invalid_argument(format!(
             "The chosen mode of {:?} was invalid for type {}. \
             This is most likely due to an invalid argument, but if using Auto mode \
             spec, it could also be a bug in pco.",
-            mode,
+            bid.mode,
             any::type_name::<T>(),
           )));
         }
-        (mode, latents)
+        let latents = (bid.split_fn)(nums);
+        (bid.mode, latents)
       }
     );
 

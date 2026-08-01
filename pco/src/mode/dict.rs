@@ -1,12 +1,13 @@
 use std::cmp;
 use std::collections::HashMap;
 
-use crate::data_types::{Latent, ModeAndLatents, Number, SplitLatents};
+use crate::compression_intermediates::Bid;
+use crate::data_types::{Latent, Number, SplitLatents};
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{DynLatents, Mode};
 
-fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> PcoResult<ModeAndLatents> {
+fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> (Mode, SplitLatents) {
   let mut count_by_unique = HashMap::new();
   for &num in &classic_nums {
     *count_by_unique.entry(num).or_insert(0_u32) += 1;
@@ -41,21 +42,29 @@ fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> PcoResult<Mode
     .map(|num| *dict_idx_by_unique.get(&num.to_latent_ordered()).unwrap())
     .collect();
   let latents = DynLatents::U32(indices);
-  Ok((
+  (
     mode,
     SplitLatents {
       primary: latents,
       secondary: None,
     },
-  ))
+  )
 }
 
-pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLatents> {
+/// Unlike other modes, dict has to build its dictionary from all the numbers,
+/// which produces the latents as a byproduct. We keep them in the split_fn so
+/// that the bid interface stays uniform.
+pub fn compute_bid<T: Number>(nums: &[T]) -> Bid<T> {
   let classic_nums = nums
     .iter()
     .map(|&num| num.to_latent_ordered())
     .collect::<Vec<_>>();
-  configure_less_specialized(classic_nums)
+  let (mode, latents) = configure_less_specialized(classic_nums);
+  Bid {
+    mode,
+    bits_saved_per_num: 0.0,
+    split_fn: Box::new(move |_nums| latents),
+  }
 }
 
 pub fn join_latents<T: Number>(

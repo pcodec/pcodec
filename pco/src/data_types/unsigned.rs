@@ -1,40 +1,49 @@
-use super::ModeAndLatents;
+use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
 use crate::data_types::{Latent, LatentPriv, Number, NumberPriv};
 use crate::describers::LatentDescriber;
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, DynLatent, Mode};
+use crate::metadata::{ChunkMeta, Mode};
 use crate::mode::{classic, dict, int_mult};
 use crate::{describers, ChunkConfig, ModeSpec};
 
-pub fn choose_mode_and_split_latents<T: Number>(
-  nums: &[T],
-  config: &ChunkConfig,
-) -> PcoResult<ModeAndLatents> {
-  match config.mode_spec {
-    ModeSpec::Auto => {
-      if let Some(base) = int_mult::choose_base(nums) {
-        let mode = Mode::int_mult(base);
-        let latents = int_mult::split_latents(nums, base);
-        Ok((mode, latents))
-      } else {
-        Ok((Mode::Classic, classic::split_latents(nums)))
-      }
-    }
-    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
-    ModeSpec::TryFloatMult(_) | ModeSpec::TryFloatQuant(_) => Err(PcoError::invalid_argument(
-      "unable to use float mode for ints",
-    )),
-    ModeSpec::TryIntMult(base_u64) => {
-      let base = T::L::from_u64(base_u64);
-      let mode = Mode::IntMult(DynLatent::new(base));
-      let latents = int_mult::split_latents(nums, base);
-      Ok((mode, latents))
-    }
-    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
+fn classic_bid<T: Number>() -> Bid<T> {
+  Bid {
+    mode: Mode::Classic,
+    bits_saved_per_num: 0.0,
+    split_fn: Box::new(|nums| classic::split_latents(nums)),
   }
+}
+
+fn int_mult_bid<T: Number>(base: T::L) -> Bid<T> {
+  Bid {
+    mode: Mode::int_mult(base),
+    bits_saved_per_num: 0.0,
+    split_fn: Box::new(move |nums| int_mult::split_latents(nums, base)),
+  }
+}
+
+pub fn choose_mode_bids<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Vec<Bid<T>>> {
+  let bids = match config.mode_spec {
+    ModeSpec::Auto => match int_mult::choose_base(nums) {
+      // int mult is only bid when it's already known to be worthwhile, so we
+      // don't offer classic alongside it
+      Some(base) => vec![int_mult_bid(base)],
+      None => vec![classic_bid()],
+    },
+    ModeSpec::Classic => vec![classic_bid()],
+    ModeSpec::TryFloatMult(_) | ModeSpec::TryFloatQuant(_) => {
+      return Err(PcoError::invalid_argument(
+        "unable to use float mode for ints",
+      ))
+    }
+    ModeSpec::TryIntMult(base_u64) => vec![int_mult_bid(T::L::from_u64(base_u64))],
+    ModeSpec::TryDict => vec![dict::compute_bid(nums)],
+  };
+
+  Ok(bids)
 }
 
 pub fn join_latents<T: Number>(
@@ -108,6 +117,11 @@ macro_rules! impl_latent {
       }
 
       #[inline]
+      fn wrapping_mul(self, other: Self) -> Self {
+        self.wrapping_mul(other)
+      }
+
+      #[inline]
       fn wrapping_sub(self, other: Self) -> Self {
         self.wrapping_sub(other)
       }
@@ -133,11 +147,8 @@ macro_rules! impl_unsigned_number {
       fn mode_is_valid(mode: &Mode) -> bool {
         mode_is_valid::<Self::L>(mode)
       }
-      fn choose_mode_and_split_latents(
-        nums: &[Self],
-        config: &ChunkConfig,
-      ) -> PcoResult<ModeAndLatents> {
-        choose_mode_and_split_latents(nums, config)
+      fn choose_mode_bids(nums: &[Self], config: &ChunkConfig) -> PcoResult<Vec<Bid<Self>>> {
+        choose_mode_bids(nums, config)
       }
 
       #[inline]

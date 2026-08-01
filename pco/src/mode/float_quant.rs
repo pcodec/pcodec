@@ -23,17 +23,16 @@ pub(crate) fn join_latents<F: Float>(
   let sign_cutoff = F::L::MID >> k;
   let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
   for ((&y, &m), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    debug_assert!(
-      m >> k == F::L::ZERO,
-      "Invalid input to FloatQuant: m must be a k-bit integer"
-    );
     let is_pos_as_float = y >= sign_cutoff;
+    // `m` is untrusted, so it may exceed k bits, in which case this wraps and
+    // we decode to garbage (but never panic). Our own compressor only ever
+    // emits k-bit `m`s; see the debug assertion in `split_latents`.
     let lowest_k_bits = if is_pos_as_float {
       m
     } else {
-      lowest_k_bits_max - m
+      lowest_k_bits_max.wrapping_sub(m)
     };
-    *dst = F::from_latent_ordered((y << k) + lowest_k_bits);
+    *dst = F::from_latent_ordered((y << k).wrapping_add(lowest_k_bits));
   }
 
   Ok(())
@@ -52,11 +51,17 @@ pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatent
     // In the common case where `num` is exactly quantized, we want the secondary to always be
     // zero.  But when `num` is negative, `lowest_k_bits == lowest_k_bits_max`.  So we manually
     // flip it here, and un-flip it in `join_latents`.
-    secondary.push(if num.is_sign_positive_() {
+    let secondary_latent = if num.is_sign_positive_() {
       lowest_k_bits
     } else {
       lowest_k_bits_max - lowest_k_bits
-    });
+    };
+    // `join_latents` relies on this, so it's worth asserting that we uphold it
+    debug_assert!(
+      secondary_latent >> k == F::L::ZERO,
+      "Invalid FloatQuant secondary latent: m must be a k-bit integer"
+    );
+    secondary.push(secondary_latent);
   }
 
   SplitLatents {

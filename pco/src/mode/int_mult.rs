@@ -45,7 +45,9 @@ pub(crate) fn join_latents<T: Number>(
   let primary = primary.downcast::<T::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<T::L>().unwrap();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    *dst = T::from_latent_ordered((mult * base).wrapping_add(adj));
+    // Both operands come off the wire; the neighbouring add is already
+    // wrapping, so the multiply must be too.
+    *dst = T::from_latent_ordered(mult.wrapping_mul(base).wrapping_add(adj));
   }
 
   Ok(())
