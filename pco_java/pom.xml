@@ -143,9 +143,6 @@
                   <goal>build</goal>
                 </goals>
                 <configuration>
-                  <environmentVariables>
-                    <RUSTFLAGS>-C lto=true -C embed-bitcode=true</RUSTFLAGS>
-                  </environmentVariables>
                   <path>src/main/rust</path>
                   <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
                   <copyWithPlatformDir>true</copyWithPlatformDir>
