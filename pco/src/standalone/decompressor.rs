@@ -130,7 +130,7 @@ impl FileDecompressor {
         inner,
         uniform_type: uniform_number_type,
         n_hint,
-        max_prealloc_bytes: usize::MAX,
+        max_prealloc_bytes: DEFAULT_MAX_PREALLOC_BYTES,
       },
       rest,
     ))
@@ -140,7 +140,7 @@ impl FileDecompressor {
   /// on the file's `n_hint`.
   ///
   /// `n_hint` is untrusted - a tiny file may legally declare `usize::MAX` - so
-  /// it is always capped at `MAX_N_HINT_PREALLOC` numbers. Use this if you
+  /// it is capped at `DEFAULT_MAX_PREALLOC_BYTES` by default. Use this if you
   /// would rather pay for a few reallocations than let a file reserve memory
   /// it has not earned.
   pub fn with_max_prealloc(mut self, bytes: usize) -> Self {
@@ -265,10 +265,7 @@ impl FileDecompressor {
   pub fn simple_decompress<T: Number>(&self, mut src: &[u8]) -> PcoResult<Vec<T>> {
     // `n_hint` is untrusted and unrelated to how much data is actually
     // present, so we only follow it up to a cap.
-    let max_prealloc = cmp::min(
-      MAX_N_HINT_PREALLOC,
-      self.max_prealloc_bytes / mem::size_of::<T>(),
-    );
+    let max_prealloc = self.max_prealloc_bytes / mem::size_of::<T>();
     let mut res = Vec::with_capacity(cmp::min(self.n_hint(), max_prealloc));
     while let DecompressorItem::Chunk(mut chunk_decompressor) = self.chunk_decompressor(src)? {
       chunk_decompressor.decompress_remaining_extend(&mut res)?;
