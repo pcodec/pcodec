@@ -491,8 +491,6 @@ impl ChunkCompressor {
       nums,
       DynNumberSlice<T>(nums) => {
         let bid = choose_winning_bid(T::choose_mode_bids(nums, config)?);
-        // The mode must be validated before splitting: splitting can use the
-        // mode's parameters (e.g. FloatQuant's k) as shift widths.
         if !T::mode_is_valid(&bid.mode) {
           return Err(PcoError::invalid_argument(format!(
             "The chosen mode of {:?} was invalid for type {}. \

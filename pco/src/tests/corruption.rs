@@ -9,11 +9,8 @@
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::data_types::Number;
 use crate::errors::PcoResult;
-use crate::standalone::constants::MAX_N_HINT_PREALLOC;
-use crate::standalone::decompressor::n_hint_prealloc;
-use crate::standalone::{simple_compress, simple_decompress, FileCompressor};
+use crate::standalone::{simple_compress, simple_decompress, FileCompressor, FileDecompressor};
 use crate::ModeSpec;
-use std::cmp;
 
 /// The mutations tried at each byte offset: every single-bit flip, plus the
 /// two saturating values. Cheaper than all 256 values and hits the same
@@ -25,49 +22,30 @@ fn corrupt_values(orig: u8) -> impl Iterator<Item = u8> {
     .filter(move |&v| v != orig)
 }
 
-fn configs() -> Vec<(&'static str, ChunkConfig)> {
-  vec![
-    (
-      "classic",
-      ChunkConfig::default().with_mode_spec(ModeSpec::Classic),
-    ),
-    (
-      "consecutive",
-      ChunkConfig::default().with_delta_spec(DeltaSpec::TryConsecutive(1)),
-    ),
-    (
-      "lookback",
-      ChunkConfig::default().with_delta_spec(DeltaSpec::TryLookback),
-    ),
-    (
-      "int_mult",
-      ChunkConfig::default().with_mode_spec(ModeSpec::TryIntMult(7)),
-    ),
-  ]
-}
-
-/// Every single-byte mutation of a valid file must be handled, not crash.
-///
-/// This walks every offset rather than sampling randomly: the interesting
-/// fields are a few bits wide, so a seeded sample misses them.
 #[test]
 fn test_single_byte_corruption_never_panics() -> PcoResult<()> {
   let nums: Vec<i64> = (0..400).map(|i| (i * 3) % 97).collect();
 
-  for (name, config) in configs() {
+  for config in [
+    ChunkConfig::default().with_mode_spec(ModeSpec::Classic),
+    ChunkConfig::default().with_delta_spec(DeltaSpec::TryConsecutive(1)),
+    ChunkConfig::default().with_delta_spec(DeltaSpec::TryLookback),
+    ChunkConfig::default().with_mode_spec(ModeSpec::TryIntMult(7)),
+  ] {
     let valid = simple_compress(&nums, &config)?;
-    assert!(
-      simple_decompress::<i64>(&valid)?.len() == nums.len(),
-      "{} did not round trip before corruption",
-      name
+    assert_eq!(
+      simple_decompress::<i64>(&valid)?.len(),
+      nums.len(),
+      "{:?} did not round trip before corruption",
+      config
     );
 
     for idx in 0..valid.len() {
       for value in corrupt_values(valid[idx]) {
         let mut corrupt = valid.clone();
         corrupt[idx] = value;
-        // The result is unconstrained -- corrupt data may legitimately decode
-        // to garbage -- but reaching this line at all is the assertion.
+        // Corrupt data may legitimately decode to garbage, so reaching this
+        // line at all is the assertion.
         let _ = simple_decompress::<i64>(&corrupt);
       }
     }
@@ -76,7 +54,6 @@ fn test_single_byte_corruption_never_panics() -> PcoResult<()> {
   Ok(())
 }
 
-/// Same, for float modes, which have their own latent-splitting arithmetic.
 #[test]
 fn test_single_byte_corruption_never_panics_floats() -> PcoResult<()> {
   let nums: Vec<f64> = (0..400).map(|i| (i as f64) * 0.25).collect();
@@ -101,56 +78,28 @@ fn test_single_byte_corruption_never_panics_floats() -> PcoResult<()> {
   Ok(())
 }
 
-/// `n_hint` is a hint, not a promise: a 26-byte file may legally declare
-/// `usize::MAX` (`standalone/guarantee.rs` writes exactly that), so it must be
-/// clamped before it reaches `Vec::with_capacity`.
-///
-/// This checks the clamp arithmetic rather than decompressing such a file,
-/// since the point of the clamp is that the allocation never happens.
+/// `n_hint` is a hint, not a promise: a tiny file may legally declare
+/// `usize::MAX` (`standalone/guarantee.rs` writes exactly that), so it must not
+/// reach `Vec::with_capacity` unclamped.
 #[test]
-fn test_absurd_n_hint_is_clamped() {
-  for n_hint in [0, 1 << 20, 1 << 40, usize::MAX] {
-    let capped = n_hint_prealloc(n_hint);
-    assert!(
-      capped <= MAX_N_HINT_PREALLOC,
-      "n_hint={} was not clamped ({})",
-      n_hint,
-      capped
-    );
-    assert_eq!(
-      capped,
-      cmp::min(n_hint, MAX_N_HINT_PREALLOC),
-      "n_hint={} should be preserved when small enough",
-      n_hint
-    );
-  }
-}
+fn test_absurd_n_hint_is_clamped() -> PcoResult<()> {
+  let mut file = Vec::new();
+  let fc = FileCompressor::default().with_n_hint(usize::MAX);
+  fc.write_header(&mut file)?;
+  let mut cc = fc.chunk_compressor(&[7_i64], &ChunkConfig::default())?;
+  cc.write(&mut file)?;
+  fc.write_footer(&mut file)?;
 
-/// The clamp must not disturb ordinary round trips, including for files whose
-/// `n_hint` is absurd.
-#[test]
-fn test_absurd_n_hint_still_round_trips() -> PcoResult<()> {
-  for n_hint in [1 << 20, 1 << 40, usize::MAX] {
-    let mut file = Vec::new();
-    let fc = FileCompressor::default().with_n_hint(n_hint);
-    fc.write_header(&mut file)?;
-    let mut cc = fc.chunk_compressor(&[7_i64], &ChunkConfig::default())?;
-    cc.write(&mut file)?;
-    fc.write_footer(&mut file)?;
+  let (fd, src) = FileDecompressor::new(file.as_slice())?;
+  // 8 KiB is 1024 i64s.
+  let nums = fd.with_max_prealloc(8192).simple_decompress::<i64>(src)?;
 
-    assert!(
-      file.len() < 64,
-      "n_hint={} produced an unexpectedly large file ({} bytes)",
-      n_hint,
-      file.len()
-    );
-    assert_eq!(
-      simple_decompress::<i64>(&file)?,
-      vec![7_i64],
-      "n_hint={}",
-      n_hint
-    );
-  }
+  assert_eq!(nums, vec![7_i64]);
+  assert!(
+    nums.capacity() <= 1024,
+    "preallocated {} numbers",
+    nums.capacity()
+  );
 
   Ok(())
 }

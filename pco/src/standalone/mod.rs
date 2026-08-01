@@ -3,7 +3,7 @@ pub use decompressor::{ChunkDecompressor, DecompressorItem, FileDecompressor};
 pub use simple::*;
 
 mod compressor;
-pub(crate) mod constants;
-pub(crate) mod decompressor;
+mod constants;
+mod decompressor;
 pub mod guarantee;
 mod simple;
