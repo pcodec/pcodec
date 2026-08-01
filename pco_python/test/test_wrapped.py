@@ -38,13 +38,13 @@ def test_compress(dtype):
 
     # page 1, which has elements 6-10
     dst1 = np.zeros(100).astype(dtype)
-    progress, n_bytes_read = cd.read_page_into(page1, 4, dst1)
+    _progress, n_bytes_read = cd.read_page_into(page1, 4, dst1)
     np.testing.assert_array_equal(dst1[4:], np.zeros(96))
     np.testing.assert_array_equal(dst1[:4], data[6:])
     assert n_bytes_read == len(page1)
 
     # page 0, which has elements 0-6
     dst0 = np.zeros(6).astype(dtype)
-    progress, n_bytes_read = cd.read_page_into(page0, 6, dst0)
+    _progress, n_bytes_read = cd.read_page_into(page0, 6, dst0)
     np.testing.assert_array_equal(dst0, data[:6])
     assert n_bytes_read == len(page0)
