@@ -19,8 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Override Rust Version
-        run: |
-          rustup override set 1.89
+        run: rustup override set "$(cat .github/rust-version)"
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.8.1
       - name: Install cross
@@ -38,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Override Rust Version
         run: |
-          rustup override set nightly
+          rustup override set "$(cat .github/rust-version)"
           rustup component add clippy rustfmt
       - name: Ensure formatted
         run: cargo fmt --check
