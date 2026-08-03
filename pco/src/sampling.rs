@@ -100,11 +100,9 @@ pub fn choose_mode_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   compression_level: usize,
   filter: Filter,
 ) -> Option<Vec<S>> {
-  // We can't modify the list, and copying it may be expensive, but we want to
-  // sample a small fraction from it without replacement. We use Floyd's
-  // algorithm (Programming Pearls) to draw target_sample_size distinct
-  // indices in exactly target_sample_size iterations, using a bitpacked
-  // vector to check set membership in O(1).
+  // We use Floyd's algorithm to draw a sample without replacement or modifying
+  // nums. One nice property is that if we take a larger sample, it will begin
+  // with the same subset as a smaller sample, keeping noise manageable.
   let n = nums.len();
   let target_sample_size = calc_sample_n(n, compression_level)?;
 
