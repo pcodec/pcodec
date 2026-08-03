@@ -11,9 +11,6 @@ pub const MIN_SAMPLE: usize = 10;
 // Int mults will be considered infrequent if they occur less than 1/this of
 // the time.
 const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64;
-// how many times over to try collecting samples without replacement before
-// giving up
-const SAMPLING_PERSISTENCE: usize = 4;
 const DELTA_MAX_GROUPS: usize = 16;
 const DELTA_TARGET_GROUP_SIZE: usize = 200;
 
@@ -45,6 +42,7 @@ fn calc_sample_n(n: usize, compression_level: usize) -> Option<usize> {
   }
 }
 
+// extracted for testing
 fn choose_delta_sample_inner(
   primary_latents: &DynLatents,
   group_size: usize,
@@ -66,6 +64,7 @@ fn choose_delta_sample_inner(
     }
   )
 }
+
 pub(crate) fn choose_delta_sample(
   primary_latents: &DynLatents,
   compression_level: usize,
@@ -74,15 +73,25 @@ pub(crate) fn choose_delta_sample(
   // can work both sample from a varienty of places from the chunk while
   // minimizing the number of unnatural jumps.
   let n = primary_latents.len();
-  let target_sample_size = calc_sample_n(n, compression_level)?;
-  let n_groups = ((target_sample_size as f32 / DELTA_TARGET_GROUP_SIZE as f32).ceil() as usize)
+  let target_sample_n = calc_sample_n(n, compression_level)?;
+  let n_groups = ((target_sample_n as f32 / DELTA_TARGET_GROUP_SIZE as f32).ceil() as usize)
     .min(DELTA_MAX_GROUPS);
-  let group_size = target_sample_size / n_groups;
+  let group_n = target_sample_n / n_groups;
   Some(choose_delta_sample_inner(
     primary_latents,
-    group_size,
+    group_n,
     n_groups,
   ))
+}
+
+#[inline]
+fn is_visited(visited: &[u8], idx: usize) -> bool {
+  visited[idx / 8] & (1 << (idx % 8)) != 0
+}
+
+#[inline]
+fn mark_visited(visited: &mut [u8], idx: usize) {
+  visited[idx / 8] |= 1 << (idx % 8);
 }
 
 #[inline(never)]
@@ -92,29 +101,23 @@ pub fn choose_mode_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   filter: Filter,
 ) -> Option<Vec<S>> {
   // We can't modify the list, and copying it may be expensive, but we want to
-  // sample a small fraction from it without replacement, so we keep a
-  // bitpacked vector representing whether each one is used yet and just keep
-  // resampling.
-  // Maybe this is a bad idea, but it works for now.
-  let target_sample_size = calc_sample_n(nums.len(), compression_level)?;
+  // sample a small fraction from it without replacement. We use Floyd's
+  // algorithm (Programming Pearls) to draw target_sample_size distinct
+  // indices in exactly target_sample_size iterations, using a bitpacked
+  // vector to check set membership in O(1).
+  let n = nums.len();
+  let target_sample_size = calc_sample_n(n, compression_level)?;
 
   let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
-  let mut visited = vec![0_u8; nums.len().div_ceil(8)];
+  let mut visited = vec![0_u8; n.div_ceil(8)];
   let mut res = Vec::with_capacity(target_sample_size);
-  let mut n_iters = 0;
-  while res.len() < target_sample_size && n_iters < SAMPLING_PERSISTENCE * target_sample_size {
-    let rand_idx = rng.next_u64() as usize % nums.len();
-    let visited_idx = rand_idx / 8;
-    let visited_bit = rand_idx % 8;
-    let mask = 1 << visited_bit;
-    let is_visited = visited[visited_idx] & mask;
-    if is_visited == 0 {
-      if let Some(x) = filter(&nums[rand_idx]) {
-        res.push(x);
-      }
-      visited[visited_idx] |= mask;
+  for j in (n - target_sample_size)..n {
+    let t = (rng.next_u64() % (j as u64 + 1)) as usize;
+    let idx = if is_visited(&visited, t) { j } else { t };
+    mark_visited(&mut visited, idx);
+    if let Some(x) = filter(&nums[idx]) {
+      res.push(x);
     }
-    n_iters += 1;
   }
 
   if res.len() >= MIN_SAMPLE {
@@ -231,6 +234,6 @@ mod tests {
     .unwrap();
     sample.sort_unstable_by(f32::total_cmp);
     assert_eq!(sample.len(), 13);
-    assert_eq!(&sample[0..3], &[-147.0, -142.0, -119.0]);
+    assert_eq!(&sample[0..3], &[-135.0, -131.0, -114.0]);
   }
 }
