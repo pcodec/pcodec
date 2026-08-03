@@ -169,7 +169,7 @@ mod tests {
   #[test]
   fn test_sample_ratio_monotonic() {
     for i in 1..12 {
-      assert!(calc_sample_n(10000, i) >= calc_sample_n(10000, i - 1));
+      assert!(calc_sample_n(10000, i).unwrap() >= calc_sample_n(10000, i - 1).unwrap());
     }
   }
 
