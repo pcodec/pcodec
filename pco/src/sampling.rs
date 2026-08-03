@@ -14,29 +14,28 @@ const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64
 const DELTA_MAX_GROUPS: usize = 16;
 const DELTA_TARGET_GROUP_SIZE: usize = 200;
 
-fn sample_ratio(compression_level: usize) -> usize {
-  // we use approximately n/sample_ratio nums for the sample
-  match compression_level {
-    0 => 100,
-    1 => 84,
-    2 => 73,
-    3 => 64,
-    4 => 57,
-    5 => 52,
-    6 => 47,
-    7 => 43,
-    8 => 40,
-    9 => 35,
-    10 => 31,
-    11 => 28,
-    12 => 25,
-    _ => unreachable!("impossible compression level"),
-  }
-}
-
 fn calc_sample_n(n: usize, compression_level: usize) -> Option<usize> {
+  // Bin selection compute cost is roughly affine up to 8 due to histogram, then
+  // starts to grow faster due to bin optimization, so we increase sample size
+  // in a qualitatively similar fashion.
+  let sample_prop = match compression_level {
+    0 => 0.010,
+    1 => 0.011,
+    2 => 0.013,
+    3 => 0.015,
+    4 => 0.017,
+    5 => 0.019,
+    6 => 0.021,
+    7 => 0.023,
+    8 => 0.025,
+    9 => 0.028,
+    10 => 0.031,
+    11 => 0.035,
+    12 => 0.040,
+    _ => unreachable!("impossible compression level"),
+  };
   if n >= MIN_SAMPLE {
-    Some(MIN_SAMPLE + (n - MIN_SAMPLE) / sample_ratio(compression_level))
+    Some(MIN_SAMPLE + ((n - MIN_SAMPLE) as f64 * sample_prop) as usize)
   } else {
     None
   }
@@ -104,12 +103,12 @@ pub fn choose_mode_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   // nums. One nice property is that if we take a larger sample, it will begin
   // with the same subset as a smaller sample, keeping noise manageable.
   let n = nums.len();
-  let target_sample_size = calc_sample_n(n, compression_level)?;
+  let target_sample_n = calc_sample_n(n, compression_level)?;
 
   let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
   let mut visited = vec![0_u8; n.div_ceil(8)];
-  let mut res = Vec::with_capacity(target_sample_size);
-  for j in (n - target_sample_size)..n {
+  let mut res = Vec::with_capacity(target_sample_n);
+  for j in (n - target_sample_n)..n {
     let t = (rng.next_u64() % (j as u64 + 1)) as usize;
     let idx = if is_visited(&visited, t) { j } else { t };
     mark_visited(&mut visited, idx);
@@ -170,7 +169,7 @@ mod tests {
   #[test]
   fn test_sample_ratio_monotonic() {
     for i in 1..12 {
-      assert!(sample_ratio(i) <= sample_ratio(i - 1));
+      assert!(calc_sample_n(10000, i) >= calc_sample_n(10000, i - 1));
     }
   }
 
