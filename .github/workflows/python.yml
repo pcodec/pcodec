@@ -11,11 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jpetrucciani/ruff-check@main
+      - name: Install ruff
+        run: pip install ruff==0.16.1
+      - name: Run ruff
+        run: ruff check .
       - uses: actions/setup-python@v5
         with:
           # locking this to a version compatible with pyo3+maturin
-          python-version: 3.14
+          python-version: "3.14.6"
+      - name: Override Rust Version
+        run: rustup override set "$(cat .github/rust-test-version)"
       # TODO: there has to be a cleaner way to do this and also add caching
       - name: "create venv"
         run: python -m venv .venv

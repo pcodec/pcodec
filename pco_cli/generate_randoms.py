@@ -3,7 +3,7 @@
 
 import argparse
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -136,7 +136,7 @@ def write_f64(arr, name, base_dir):
 def write_timestamp_micros(arr, name, base_dir):
     if arr.dtype != np.int64:
         arr = np.floor(arr).astype(np.int64)
-    ts = [datetime.utcfromtimestamp(x / 10**6) for x in arr]
+    ts = [datetime.fromtimestamp(x / 10**6, tz=timezone.utc) for x in arr]
     strs = [x.strftime("%Y-%m-%dT%H:%M:%S:%fZ") for x in ts]
     full_name = f"micros_{name}"
     write_generic(strs, arr, full_name, base_dir)

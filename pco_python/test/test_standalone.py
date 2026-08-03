@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 from pcodec import (
@@ -7,7 +9,6 @@ from pcodec import (
     PagingSpec,
     standalone,
 )
-from pathlib import Path
 
 np.random.seed(12345)
 all_lengths = (

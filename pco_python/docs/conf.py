@@ -1,6 +1,6 @@
-import toml
 # I don't know why, but sphinx fails to import pcodec during autodoc without this
-import pcodec # noqa: F401
+import pcodec  # noqa: F401
+import toml
 
 # Configuration file for the Sphinx documentation builder.
 #
