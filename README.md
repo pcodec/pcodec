@@ -141,7 +141,7 @@ Suppose we assign these as `fare[0...n]` and `trip_miles[0...n]` respectively, w
 
 [contributing guide](./docs/CONTRIBUTING.md)
 
-[Pcodec: Better Compression for Numerical Sequences](https://arxiv.org/abs/2502.06112) (academic paper)
+[Academic papers and projects](./docs/academic_result.md)
 
 ### Community
 
