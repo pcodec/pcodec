@@ -1,7 +1,8 @@
 use std::cmp::max;
 use std::collections::HashMap;
 
-use crate::constants::CLASSIC_MEMORIZABLE_BINS_LOG;
+use crate::macros::match_latent_enum;
+use crate::{constants::CLASSIC_MEMORIZABLE_BINS_LOG, metadata::DynLatents};
 use rand_xoshiro::rand_core::{RngCore, SeedableRng};
 
 use crate::data_types::Latent;
@@ -15,6 +16,7 @@ const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64
 // how many times over to try collecting samples without replacement before
 // giving up
 const SAMPLING_PERSISTENCE: usize = 4;
+const DELTA_GROUP_SIZE: usize = 200;
 
 fn calc_sample_n(n: usize) -> Option<usize> {
   if n >= MIN_SAMPLE {
@@ -24,8 +26,53 @@ fn calc_sample_n(n: usize) -> Option<usize> {
   }
 }
 
+// extracted for testing
+fn choose_delta_sample_inner(
+  primary_latents: &DynLatents,
+  group_size: usize,
+  n_extra_groups: usize,
+) -> DynLatents {
+  let n = primary_latents.len();
+  let nominal_sample_size = (n_extra_groups + 1) * group_size;
+  let group_padding = if n_extra_groups == 0 {
+    0
+  } else {
+    n.saturating_sub(nominal_sample_size) / n_extra_groups
+  };
+
+  let mut i = group_size;
+
+  match_latent_enum!(
+    primary_latents,
+    DynLatents<L>(primary_latents) => {
+      let mut sample = Vec::<L>::with_capacity(nominal_sample_size);
+      sample.extend(primary_latents.iter().take(group_size));
+      for _ in 0..n_extra_groups {
+        i += group_padding;
+        sample.extend(primary_latents.iter().skip(i).take(group_size));
+        i += group_size;
+      }
+      DynLatents::new(sample)
+    }
+  )
+}
+
+pub(crate) fn choose_delta_sample(primary_latents: &DynLatents) -> Option<DynLatents> {
+  // We select some large contiguous groups of latents so that delta encodings
+  // can both sample from a variety of places in the chunk while minimizing the
+  // number of unnatural jumps.
+  let n = primary_latents.len();
+  let target_sample_n = calc_sample_n(n)?;
+  let n_extra_groups = target_sample_n / DELTA_GROUP_SIZE;
+  Some(choose_delta_sample_inner(
+    primary_latents,
+    DELTA_GROUP_SIZE,
+    n_extra_groups,
+  ))
+}
+
 #[inline(never)]
-pub fn choose_sample<T, S, Filter: Fn(&T) -> Option<S>>(
+pub fn choose_mode_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   nums: &[T],
   filter: Filter,
 ) -> Option<Vec<S>> {
@@ -113,12 +160,45 @@ mod tests {
   }
 
   #[test]
-  fn test_choose_sample() {
+  fn test_choose_delta_sample() {
+    let latents = DynLatents::new(vec![0_u32, 1]);
+    assert_eq!(
+      choose_delta_sample_inner(&latents, 100, 0)
+        .downcast::<u32>()
+        .unwrap(),
+      vec![0, 1]
+    );
+    assert_eq!(
+      choose_delta_sample_inner(&latents, 100, 1)
+        .downcast::<u32>()
+        .unwrap(),
+      vec![0, 1]
+    );
+
+    let latents = DynLatents::new((0..300).collect::<Vec<u32>>());
+    let sample = choose_delta_sample_inner(&latents, 100, 1)
+      .downcast::<u32>()
+      .unwrap();
+    assert_eq!(sample.len(), 200);
+    assert_eq!(&sample[..3], &[0, 1, 2]);
+    assert_eq!(&sample[197..], &[297, 298, 299]);
+
+    let latents = DynLatents::new((0..8).collect::<Vec<u32>>());
+    assert_eq!(
+      choose_delta_sample_inner(&latents, 2, 2)
+        .downcast::<u32>()
+        .unwrap(),
+      vec![0, 1, 3, 4, 6, 7]
+    );
+  }
+
+  #[test]
+  fn test_choose_mode_sample() {
     let mut nums = Vec::new();
     for i in 0..150 {
       nums.push(-i as f32);
     }
-    let mut sample = choose_sample(&nums, |&num| {
+    let mut sample = choose_mode_sample(&nums, |&num| {
       if num == 0.0 {
         None
       } else {
