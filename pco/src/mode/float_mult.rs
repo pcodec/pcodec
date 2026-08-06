@@ -335,18 +335,31 @@ impl<F: Float> FloatMultConfig<F> {
   }
 }
 
-fn choose_config<F: Float>(sample: &[F]) -> Option<FloatMultConfig<F>> {
-  choose_config_by_trailing_zeros(sample).or_else(|| choose_config_by_euclidean(sample))
-}
-
 pub(crate) fn compute_bid<F: Float>(sample: &[F]) -> Option<Bid<F>> {
-  choose_config(sample).and_then(|config| {
-    let bits_saved_per_num = bits_saved_per_num_over_classic(config, sample)?;
-    Some(Bid {
-      mode: Mode::float_mult(config.base),
-      bits_saved_per_num,
-      split_fn: Box::new(move |nums| split_latents(nums, config)),
+  // We used to just take whichever of these two methods found a candidate
+  // first, but that's unreliable: e.g. a fraction like 0.01 can get shadowed
+  // by trailing-zeros' power-of-2 detection whenever enough of the sample
+  // happens to be exact powers of 2, even when the euclidean method's
+  // fractional candidate would compress far better. So instead we compute
+  // both candidates' actual estimated savings and let them compete.
+  let candidates = [
+    choose_config_by_trailing_zeros(sample),
+    choose_config_by_euclidean(sample),
+  ];
+
+  let (config, bits_saved_per_num) = candidates
+    .into_iter()
+    .flatten()
+    .filter_map(|config| {
+      let bits_saved_per_num = bits_saved_per_num_over_classic(config, sample)?;
+      Some((config, bits_saved_per_num))
     })
+    .max_by(|(_, a), (_, b)| a.total_cmp(b))?;
+
+  Some(Bid {
+    mode: Mode::float_mult(config.base),
+    bits_saved_per_num,
+    split_fn: Box::new(move |nums| split_latents(nums, config)),
   })
 }
 
@@ -628,32 +641,19 @@ mod test {
     let sevenths_sample = &sevenths[..50];
 
     assert_eq!(
-      choose_config(&sevenths),
-      Some(FloatMultConfig {
-        base: 1.0 / 7.0,
-        inv_base: 7.0,
-      })
+      compute_bid(sevenths_sample).unwrap().mode,
+      Mode::float_mult(1.0_f32 / 7.0),
     );
     assert_eq!(
-      choose_config(&ones),
-      Some(FloatMultConfig {
-        base: 1.0,
-        inv_base: 1.0,
-      })
+      compute_bid(&noisy_decimals).unwrap().mode,
+      Mode::float_mult(1.0_f32 / 10.0),
     );
-    assert_eq!(
-      choose_config(&noisy_decimals),
-      Some(FloatMultConfig {
-        base: 1.0 / 10.0,
-        inv_base: 10.0,
-      })
-    );
-    // just check this last one terminates
+
+    // just check this terminates
     let mut big_nums = vec![f32::MAX; 10];
     big_nums.resize(20, f32::MAX * 0.6);
-    choose_config(&big_nums);
+    compute_bid(&big_nums);
 
-    assert!(compute_bid(sevenths_sample).is_some());
     // not enough distinct mults
     assert!(compute_bid(&ones).is_none());
     assert!(compute_bid(&junk).is_none());
