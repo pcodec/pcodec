@@ -16,7 +16,7 @@ const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64
 // how many times over to try collecting samples without replacement before
 // giving up
 const SAMPLING_PERSISTENCE: usize = 4;
-const DELTA_GROUP_SIZE: usize = 200;
+const DELTA_TARGET_GROUP_N: f64 = 200.0;
 
 fn calc_sample_n(n: usize) -> Option<usize> {
   if n >= MIN_SAMPLE {
@@ -29,28 +29,20 @@ fn calc_sample_n(n: usize) -> Option<usize> {
 // extracted for testing
 fn choose_delta_sample_inner(
   primary_latents: &DynLatents,
-  group_size: usize,
-  n_extra_groups: usize,
+  group_n: usize,
+  n_groups: usize,
 ) -> DynLatents {
   let n = primary_latents.len();
-  let nominal_sample_size = (n_extra_groups + 1) * group_size;
-  let group_padding = if n_extra_groups == 0 {
-    0
-  } else {
-    n.saturating_sub(nominal_sample_size) / n_extra_groups
-  };
-
-  let mut i = group_size;
+  let nominal_sample_size = n_groups * group_n;
+  let group_stride = group_n + (n.saturating_sub(nominal_sample_size) / (n_groups.max(2) - 1));
 
   match_latent_enum!(
     primary_latents,
     DynLatents<L>(primary_latents) => {
       let mut sample = Vec::<L>::with_capacity(nominal_sample_size);
-      sample.extend(primary_latents.iter().take(group_size));
-      for _ in 0..n_extra_groups {
-        i += group_padding;
-        sample.extend(primary_latents.iter().skip(i).take(group_size));
-        i += group_size;
+      for i in 0..n_groups {
+        let group_start = group_stride * i;
+        sample.extend(&primary_latents[group_start..group_start + group_n]);
       }
       DynLatents::new(sample)
     }
@@ -63,11 +55,12 @@ pub(crate) fn choose_delta_sample(primary_latents: &DynLatents) -> Option<DynLat
   // number of unnatural jumps.
   let n = primary_latents.len();
   let target_sample_n = calc_sample_n(n)?;
-  let n_extra_groups = target_sample_n / DELTA_GROUP_SIZE;
+  let n_groups = (target_sample_n as f64 / DELTA_TARGET_GROUP_N).ceil() as usize;
+  let group_n = target_sample_n / n_groups;
   Some(choose_delta_sample_inner(
     primary_latents,
-    DELTA_GROUP_SIZE,
-    n_extra_groups,
+    group_n,
+    n_groups,
   ))
 }
 
@@ -163,20 +156,20 @@ mod tests {
   fn test_choose_delta_sample() {
     let latents = DynLatents::new(vec![0_u32, 1]);
     assert_eq!(
-      choose_delta_sample_inner(&latents, 100, 0)
+      choose_delta_sample_inner(&latents, 2, 1)
         .downcast::<u32>()
         .unwrap(),
       vec![0, 1]
     );
     assert_eq!(
-      choose_delta_sample_inner(&latents, 100, 1)
+      choose_delta_sample_inner(&latents, 1, 2)
         .downcast::<u32>()
         .unwrap(),
       vec![0, 1]
     );
 
     let latents = DynLatents::new((0..300).collect::<Vec<u32>>());
-    let sample = choose_delta_sample_inner(&latents, 100, 1)
+    let sample = choose_delta_sample_inner(&latents, 100, 2)
       .downcast::<u32>()
       .unwrap();
     assert_eq!(sample.len(), 200);
@@ -185,7 +178,7 @@ mod tests {
 
     let latents = DynLatents::new((0..8).collect::<Vec<u32>>());
     assert_eq!(
-      choose_delta_sample_inner(&latents, 2, 2)
+      choose_delta_sample_inner(&latents, 2, 3)
         .downcast::<u32>()
         .unwrap(),
       vec![0, 1, 3, 4, 6, 7]
