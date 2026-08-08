@@ -16,7 +16,7 @@ const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64
 // how many times over to try collecting samples without replacement before
 // giving up
 const SAMPLING_PERSISTENCE: usize = 4;
-const DELTA_TARGET_GROUP_N: f64 = 200.0;
+const DELTA_TARGET_GROUP_N: usize = 200;
 
 fn calc_sample_n(n: usize) -> Option<usize> {
   if n >= MIN_SAMPLE {
@@ -55,12 +55,10 @@ pub(crate) fn choose_delta_sample(primary_latents: &DynLatents) -> Option<DynLat
   // number of unnatural jumps.
   let n = primary_latents.len();
   let target_sample_n = calc_sample_n(n)?;
-  let n_groups = (target_sample_n as f64 / DELTA_TARGET_GROUP_N).ceil() as usize;
-  let group_n = target_sample_n / n_groups;
   Some(choose_delta_sample_inner(
     primary_latents,
-    group_n,
-    n_groups,
+    DELTA_TARGET_GROUP_N.min(n),
+    target_sample_n.div_ceil(DELTA_TARGET_GROUP_N),
   ))
 }
 
