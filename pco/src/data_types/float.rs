@@ -459,7 +459,7 @@ mod tests {
   #[test]
   fn test_choose_mult_mode() {
     let base = 1.5;
-    let nums = (0..1000).map(|i| (i as f64) * base).collect::<Vec<_>>();
+    let nums = (0..2000).map(|i| (i as f64) * base).collect::<Vec<_>>();
     let mode = choose_mode(&nums);
     assert_eq!(mode, Mode::float_mult(base));
     assert!(f64::mode_is_valid(&mode))
