@@ -336,12 +336,6 @@ impl<F: Float> FloatMultConfig<F> {
 }
 
 pub(crate) fn compute_bid<F: Float>(sample: &[F]) -> Option<Bid<F>> {
-  // We used to just take whichever of these two methods found a candidate
-  // first, but that's unreliable: e.g. a fraction like 0.01 can get shadowed
-  // by trailing-zeros' power-of-2 detection whenever enough of the sample
-  // happens to be exact powers of 2, even when the euclidean method's
-  // fractional candidate would compress far better. So instead we compute
-  // both candidates' actual estimated savings and let them compete.
   let candidates = [
     choose_config_by_trailing_zeros(sample),
     choose_config_by_euclidean(sample),
