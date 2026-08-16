@@ -12,14 +12,9 @@ use pco::match_latent_enum;
 use pco::metadata::{ChunkMeta, DynBins, DynLatent, LatentVarKey};
 use pco::standalone::{DecompressorItem, FileDecompressor};
 
-use crate::core_handlers::CoreHandlerImpl;
 use crate::dtypes::PcoNumber;
 use crate::inspect::InspectOpt;
 use crate::utils;
-
-pub trait InspectHandler {
-  fn inspect(&self, opt: &InspectOpt, bytes: &[u8]) -> Result<()>;
-}
 
 #[derive(Serialize)]
 pub struct CompressionSummary {
@@ -147,84 +142,82 @@ fn short_debug_str<T: Debug>(val: &T) -> String {
   }
 }
 
-impl<T: PcoNumber> InspectHandler for CoreHandlerImpl<T> {
-  fn inspect(&self, opt: &InspectOpt, src: &[u8]) -> Result<()> {
-    let mut prev_src_len_val = src.len();
-    let prev_src_len = &mut prev_src_len_val;
-    let (fd, mut src) = FileDecompressor::new(src)?;
-    let header_size = measure_bytes_read(src, prev_src_len);
+pub fn inspect<T: PcoNumber>(opt: &InspectOpt, src: &[u8]) -> Result<()> {
+  let mut prev_src_len_val = src.len();
+  let prev_src_len = &mut prev_src_len_val;
+  let (fd, mut src) = FileDecompressor::new(src)?;
+  let header_size = measure_bytes_read(src, prev_src_len);
 
-    let mut meta_size = 0;
-    let mut page_size = 0;
-    let mut footer_size = 0;
-    let mut chunk_ns = Vec::new();
-    let mut metas = Vec::new();
-    let mut void = Vec::new();
-    loop {
-      // Rather hacky, but first just measure the metadata size,
-      // then reread it to measure the page size
-      match fd.chunk_decompressor::<T, _>(src)? {
-        DecompressorItem::Chunk(cd) => {
-          chunk_ns.push(cd.n());
-          metas.push(cd.meta().clone());
-          meta_size += measure_bytes_read(cd.into_src(), prev_src_len);
-        }
-        DecompressorItem::EndOfData(rest) => {
-          src = rest;
-          footer_size += measure_bytes_read(src, prev_src_len);
-          break;
-        }
+  let mut meta_size = 0;
+  let mut page_size = 0;
+  let mut footer_size = 0;
+  let mut chunk_ns = Vec::new();
+  let mut metas = Vec::new();
+  let mut void = Vec::new();
+  loop {
+    // Rather hacky, but first just measure the metadata size,
+    // then reread it to measure the page size
+    match fd.chunk_decompressor::<T, _>(src)? {
+      DecompressorItem::Chunk(cd) => {
+        chunk_ns.push(cd.n());
+        metas.push(cd.meta().clone());
+        meta_size += measure_bytes_read(cd.into_src(), prev_src_len);
       }
-
-      match fd.chunk_decompressor::<T, _>(src)? {
-        DecompressorItem::Chunk(mut cd) => {
-          void.resize(cd.n(), T::default());
-          let _ = cd.read(&mut void)?;
-          src = cd.into_src();
-          page_size += measure_bytes_read(src, prev_src_len);
-        }
-        _ => panic!("unreachable"),
+      DecompressorItem::EndOfData(rest) => {
+        src = rest;
+        footer_size += measure_bytes_read(src, prev_src_len);
+        break;
       }
     }
 
-    let n: usize = chunk_ns.iter().sum();
-    let uncompressed_size = size_of::<T>() * n;
-    let compressed_size = header_size + meta_size + page_size + footer_size;
-    let unknown_trailing_bytes = src.len();
-
-    let mut chunks = Vec::new();
-    for (idx, meta) in metas.iter().enumerate() {
-      let latent_vars = build_latent_var_summaries::<T>(meta);
-      chunks.push(ChunkSummary {
-        idx,
-        n: chunk_ns[idx],
-        mode: short_debug_str(&meta.mode),
-        delta_encoding: short_debug_str(&meta.delta_encoding),
-        latent_var: latent_vars,
-      });
+    match fd.chunk_decompressor::<T, _>(src)? {
+      DecompressorItem::Chunk(mut cd) => {
+        void.resize(cd.n(), T::default());
+        let _ = cd.read(&mut void)?;
+        src = cd.into_src();
+        page_size += measure_bytes_read(src, prev_src_len);
+      }
+      _ => panic!("unreachable"),
     }
-
-    let output = Output {
-      filename: opt.path.to_str().unwrap().to_string(),
-      format_version: fd.format_version().to_string(),
-      number_type: utils::dtype_name::<T>(),
-      n,
-      n_chunks: metas.len(),
-      uncompressed_size,
-      compressed: CompressionSummary {
-        ratio: uncompressed_size as f64 / compressed_size as f64,
-        total_size: compressed_size,
-        header_size,
-        meta_size,
-        page_size,
-        footer_size,
-        unknown_trailing_bytes,
-      },
-      chunk: chunks,
-    };
-
-    println!("{}", toml::to_string_pretty(&output)?);
-
-    Ok(())
   }
+
+  let n: usize = chunk_ns.iter().sum();
+  let uncompressed_size = size_of::<T>() * n;
+  let compressed_size = header_size + meta_size + page_size + footer_size;
+  let unknown_trailing_bytes = src.len();
+
+  let mut chunks = Vec::new();
+  for (idx, meta) in metas.iter().enumerate() {
+    let latent_vars = build_latent_var_summaries::<T>(meta);
+    chunks.push(ChunkSummary {
+      idx,
+      n: chunk_ns[idx],
+      mode: short_debug_str(&meta.mode),
+      delta_encoding: short_debug_str(&meta.delta_encoding),
+      latent_var: latent_vars,
+    });
+  }
+
+  let output = Output {
+    filename: opt.path.to_str().unwrap().to_string(),
+    format_version: fd.format_version().to_string(),
+    number_type: utils::dtype_name::<T>(),
+    n,
+    n_chunks: metas.len(),
+    uncompressed_size,
+    compressed: CompressionSummary {
+      ratio: uncompressed_size as f64 / compressed_size as f64,
+      total_size: compressed_size,
+      header_size,
+      meta_size,
+      page_size,
+      footer_size,
+      unknown_trailing_bytes,
+    },
+    chunk: chunks,
+  };
+
+  println!("{}", toml::to_string_pretty(&output)?);
+
+  Ok(())
 }

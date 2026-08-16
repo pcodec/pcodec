@@ -4,8 +4,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
+use pco::data_types::NumberType;
+use pco::match_number_enum;
 
-use crate::{core_handlers, utils};
+use crate::utils;
 
 pub mod handler;
 
@@ -41,6 +43,11 @@ pub fn decompress(opt: DecompressOpt) -> Result<()> {
     // file terminated; nothing to decompress
     return Ok(());
   };
-  let handler = core_handlers::from_dtype(dtype);
-  handler.decompress(&opt)
+
+  match_number_enum!(
+    dtype,
+    NumberType<T> => {
+      handler::decompress::<T>(&opt)
+    }
+  )
 }

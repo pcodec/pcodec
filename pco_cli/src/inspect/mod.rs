@@ -4,10 +4,12 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use pco::data_types::NumberType;
+use pco::match_number_enum;
 use pco::standalone::{DecompressorItem, FileDecompressor};
 
 use crate::inspect::handler::{CompressionSummary, Output};
-use crate::{core_handlers, utils};
+use crate::utils;
 
 pub mod handler;
 
@@ -54,6 +56,11 @@ pub fn inspect(opt: InspectOpt) -> Result<()> {
   let Some(dtype) = utils::get_standalone_dtype(&bytes)? else {
     return trivial_inspect(&opt, &bytes);
   };
-  let handler = core_handlers::from_dtype(dtype);
-  handler.inspect(&opt, &bytes)
+
+  match_number_enum!(
+    dtype,
+    NumberType<T> => {
+      handler::inspect::<T>(&opt, &bytes)
+    }
+  )
 }

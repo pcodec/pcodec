@@ -14,53 +14,46 @@ use better_io::BetterBufReader;
 use pco::standalone::{DecompressorItem, FileDecompressor};
 use pco::FULL_BATCH_N;
 
-use crate::core_handlers::CoreHandlerImpl;
 use crate::decompress::DecompressOpt;
 use crate::decompress::OutputKind::*;
 use crate::dtypes::PcoNumber;
 
-pub trait DecompressHandler {
-  fn decompress(&self, opt: &DecompressOpt) -> Result<()>;
-}
+pub fn decompress<T: PcoNumber>(opt: &DecompressOpt) -> Result<()> {
+  let file = OpenOptions::new().read(true).open(&opt.path)?;
+  let src = BetterBufReader::from_read_simple(file);
+  let (fd, mut src) = FileDecompressor::new(src)?;
 
-impl<T: PcoNumber> DecompressHandler for CoreHandlerImpl<T> {
-  fn decompress(&self, opt: &DecompressOpt) -> Result<()> {
-    let file = OpenOptions::new().read(true).open(&opt.path)?;
-    let src = BetterBufReader::from_read_simple(file);
-    let (fd, mut src) = FileDecompressor::new(src)?;
+  let mut writer = new_column_writer::<T>(opt)?;
+  let mut remaining_limit = opt.limit.unwrap_or(usize::MAX);
+  let mut nums = Vec::new();
 
-    let mut writer = new_column_writer::<T>(opt)?;
-    let mut remaining_limit = opt.limit.unwrap_or(usize::MAX);
-    let mut nums = Vec::new();
-
-    loop {
-      if remaining_limit == 0 {
-        break;
-      }
-
-      if let DecompressorItem::Chunk(mut cd) = fd.chunk_decompressor::<T, _>(src)? {
-        let n = cd.n();
-        let batch_size = min(n, remaining_limit);
-        // how many pco should decompress
-        let pco_size = (1 + batch_size / FULL_BATCH_N) * FULL_BATCH_N;
-        nums.resize(pco_size, T::default());
-        let _ = cd.read(&mut nums)?;
-        src = cd.into_src();
-        let arrow_nums = nums
-          .iter()
-          .take(batch_size)
-          .map(|&x| T::to_arrow_native(x))
-          .collect::<Vec<_>>();
-        writer.write(arrow_nums)?;
-        remaining_limit -= batch_size;
-      } else {
-        break;
-      }
+  loop {
+    if remaining_limit == 0 {
+      break;
     }
 
-    writer.close()?;
-    Ok(())
+    if let DecompressorItem::Chunk(mut cd) = fd.chunk_decompressor::<T, _>(src)? {
+      let n = cd.n();
+      let batch_size = min(n, remaining_limit);
+      // how many pco should decompress
+      let pco_size = (1 + batch_size / FULL_BATCH_N) * FULL_BATCH_N;
+      nums.resize(pco_size, T::default());
+      let _ = cd.read(&mut nums)?;
+      src = cd.into_src();
+      let arrow_nums = nums
+        .iter()
+        .take(batch_size)
+        .map(|&x| T::to_arrow_native(x))
+        .collect::<Vec<_>>();
+      writer.write(arrow_nums)?;
+      remaining_limit -= batch_size;
+    } else {
+      break;
+    }
   }
+
+  writer.close()?;
+  Ok(())
 }
 
 fn new_column_writer<T: PcoNumber>(opt: &DecompressOpt) -> Result<Box<dyn ColumnWriter<T>>> {
