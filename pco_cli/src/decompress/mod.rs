@@ -7,9 +7,16 @@ use clap::{Parser, ValueEnum};
 use pco::data_types::NumberType;
 use pco::match_number_enum;
 
+use std::cmp::min;
+
+use better_io::BetterBufReader;
+use pco::standalone::{DecompressorItem, FileDecompressor};
+use pco::FULL_BATCH_N;
+
+use crate::dtypes::PcoNumber;
 use crate::utils;
 
-pub mod handler;
+pub mod column_writers;
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum OutputKind {
@@ -26,6 +33,44 @@ pub struct DecompressOpt {
   pub output: OutputKind,
 
   pub path: PathBuf,
+}
+
+pub fn decompress_generic<T: PcoNumber>(opt: &DecompressOpt) -> Result<()> {
+  let file = OpenOptions::new().read(true).open(&opt.path)?;
+  let src = BetterBufReader::from_read_simple(file);
+  let (fd, mut src) = FileDecompressor::new(src)?;
+
+  let mut writer = column_writers::new::<T>(opt)?;
+  let mut remaining_limit = opt.limit.unwrap_or(usize::MAX);
+  let mut nums = Vec::new();
+
+  loop {
+    if remaining_limit == 0 {
+      break;
+    }
+
+    if let DecompressorItem::Chunk(mut cd) = fd.chunk_decompressor::<T, _>(src)? {
+      let n = cd.n();
+      let batch_size = min(n, remaining_limit);
+      // how many pco should decompress
+      let pco_size = (1 + batch_size / FULL_BATCH_N) * FULL_BATCH_N;
+      nums.resize(pco_size, T::default());
+      let _ = cd.read(&mut nums)?;
+      src = cd.into_src();
+      let arrow_nums = nums
+        .iter()
+        .take(batch_size)
+        .map(|&x| T::to_arrow_native(x))
+        .collect::<Vec<_>>();
+      writer.write(arrow_nums)?;
+      remaining_limit -= batch_size;
+    } else {
+      break;
+    }
+  }
+
+  writer.close()?;
+  Ok(())
 }
 
 pub fn decompress(opt: DecompressOpt) -> Result<()> {
@@ -47,7 +92,7 @@ pub fn decompress(opt: DecompressOpt) -> Result<()> {
   match_number_enum!(
     dtype,
     NumberType<T> => {
-      handler::decompress::<T>(&opt)
+      decompress_generic::<T>(&opt)
     }
   )
 }
