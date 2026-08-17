@@ -8,7 +8,6 @@ use arrow::csv::WriterBuilder as CsvWriterBuilder;
 use arrow::datatypes::{ArrowPrimitiveType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
-
 use crate::decompress::DecompressOpt;
 use crate::decompress::OutputKind::*;
 use crate::dtypes::PcoNumber;
