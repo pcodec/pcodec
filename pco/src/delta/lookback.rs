@@ -245,6 +245,86 @@ pub fn decode_in_place<L: Latent>(
   has_oob_lookbacks
 }
 
+#[cfg(kani)]
+mod kani_proofs {
+  use super::*;
+  use crate::metadata::DeltaLookbackConfig;
+
+  // ---------------------------------------------------------------------------
+  // delta lookback: unchecked window-buffer indexing on attacker-chosen offsets
+  // ---------------------------------------------------------------------------
+  //
+  // `lookback::decode_in_place` writes `window_buffer[pos]` and reads
+  // `window_buffer[pos - lookback]` through get_unchecked, where `lookback`
+  // comes straight off the wire. The only guard is `lookback <= window_n`.
+  // Safety therefore rests on the buffer invariant `pos >= window_n`.
+  #[kani::proof]
+  #[kani::unwind(5)]
+  fn proof_lookback_decode_in_place_stays_in_bounds() {
+    const N: usize = 3;
+
+    let window_n_log: Bitlen = kani::any();
+    let state_n_log: Bitlen = kani::any();
+    // Small logs keep the model tractable; the buffer is sized by FULL_BATCH_N
+    // anyway, so these are the realistic small-window cases.
+    kani::assume(window_n_log >= 1 && window_n_log <= 3);
+    kani::assume(state_n_log <= window_n_log);
+
+    let config = DeltaLookbackConfig {
+      state_n_log,
+      window_n_log,
+    };
+    let state = vec![0u32; config.state_n()];
+    let (mut window_buffer, mut pos) = new_window_buffer_and_pos::<u32>(config, &state);
+
+    let mut latents: [u32; N] = kani::any();
+    let lookbacks: [u32; N] = kani::any();
+
+    let _ = decode_in_place::<u32>(
+      config,
+      &lookbacks,
+      &mut pos,
+      &mut window_buffer,
+      &mut latents,
+    );
+  }
+
+  // Same routine, but entered at an arbitrary buffer position satisfying the
+  // invariant the caller is supposed to maintain -- this is what reaches the
+  // buffer-cycling branch (`copy_within`), which the batch-0 harness above
+  // never gets to.
+  #[kani::proof]
+  #[kani::unwind(5)]
+  fn proof_lookback_decode_in_place_cycling_stays_in_bounds() {
+    const N: usize = 3;
+
+    let config = DeltaLookbackConfig {
+      state_n_log: 1,
+      window_n_log: 2,
+    };
+    let window_n = config.window_n();
+    let state = vec![0u32; config.state_n()];
+    let (mut window_buffer, _) = new_window_buffer_and_pos::<u32>(config, &state);
+    let buffer_n: usize = window_buffer.len();
+
+    // The documented invariant: the position never falls below window_n and
+    // never runs past the buffer.
+    let mut pos: usize = kani::any();
+    kani::assume(pos >= window_n && pos <= buffer_n);
+
+    let mut latents: [u32; N] = kani::any();
+    let lookbacks: [u32; N] = kani::any();
+
+    let _ = decode_in_place::<u32>(
+      config,
+      &lookbacks,
+      &mut pos,
+      &mut window_buffer,
+      &mut latents,
+    );
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
