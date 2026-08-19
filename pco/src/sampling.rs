@@ -8,16 +8,33 @@ use rand_xoshiro::rand_core::{RngCore, SeedableRng};
 use crate::data_types::Latent;
 
 pub const MIN_SAMPLE: usize = 10;
-// 1 in this many nums get put into sample
-const SAMPLE_RATIO: usize = 40;
 // Int mults will be considered infrequent if they occur less than 1/this of
 // the time.
 const CLASSIC_MEMORIZABLE_BINS: f64 = (1 << CLASSIC_MEMORIZABLE_BINS_LOG) as f64;
 const DELTA_TARGET_GROUP_N: usize = 200;
 
-fn calc_sample_n(n: usize) -> Option<usize> {
+fn calc_sample_n(n: usize, compression_level: usize) -> Option<usize> {
+  // Bin selection compute cost is roughly affine up to 8 due to histogram, then
+  // starts to grow faster due to bin optimization, so we increase sample size
+  // in a qualitatively similar fashion.
+  let sample_prop = match compression_level {
+    0 => 0.010,
+    1 => 0.011,
+    2 => 0.013,
+    3 => 0.015,
+    4 => 0.017,
+    5 => 0.019,
+    6 => 0.021,
+    7 => 0.023,
+    8 => 0.025,
+    9 => 0.028,
+    10 => 0.031,
+    11 => 0.035,
+    12 => 0.040,
+    _ => unreachable!("impossible compression level"),
+  };
   if n >= MIN_SAMPLE {
-    Some(MIN_SAMPLE + (n - MIN_SAMPLE) / SAMPLE_RATIO)
+    Some(MIN_SAMPLE + ((n - MIN_SAMPLE) as f64 * sample_prop) as usize)
   } else {
     None
   }
@@ -46,12 +63,15 @@ fn choose_delta_sample_inner(
   )
 }
 
-pub(crate) fn choose_delta_sample(primary_latents: &DynLatents) -> Option<DynLatents> {
+pub(crate) fn choose_delta_sample(
+  primary_latents: &DynLatents,
+  compression_level: usize,
+) -> Option<DynLatents> {
   // We select some large contiguous groups of latents so that delta encodings
   // can both sample from a variety of places in the chunk while minimizing the
   // number of unnatural jumps.
   let n = primary_latents.len();
-  let target_sample_n = calc_sample_n(n)?;
+  let target_sample_n = calc_sample_n(n, compression_level)?;
   Some(choose_delta_sample_inner(
     primary_latents,
     DELTA_TARGET_GROUP_N.min(n),
@@ -72,13 +92,14 @@ fn mark_visited(visited: &mut [u8], idx: usize) {
 #[inline(never)]
 pub fn choose_mode_sample<T, S, Filter: Fn(&T) -> Option<S>>(
   nums: &[T],
+  compression_level: usize,
   filter: Filter,
 ) -> Option<Vec<S>> {
   // We use Floyd's algorithm to draw a sample without replacement or modifying
   // nums. One nice property is that if we take a larger sample, it will begin
   // with the same subset as a smaller sample, keeping noise manageable.
   let n = nums.len();
-  let target_sample_n = calc_sample_n(n)?;
+  let target_sample_n = calc_sample_n(n, compression_level)?;
 
   let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(0);
   let mut visited = vec![0_u8; n.div_ceil(8)];
@@ -143,10 +164,18 @@ mod tests {
 
   #[test]
   fn test_sample_n() {
-    assert_eq!(calc_sample_n(9), None);
-    assert_eq!(calc_sample_n(10), Some(10));
-    assert_eq!(calc_sample_n(100), Some(12));
-    assert_eq!(calc_sample_n(1000010), Some(25010));
+    assert_eq!(calc_sample_n(9, 8), None);
+    assert_eq!(calc_sample_n(10, 8), Some(10));
+    assert_eq!(calc_sample_n(100, 8), Some(12));
+    assert_eq!(calc_sample_n(1000010, 8), Some(25010));
+    assert_eq!(calc_sample_n(1000010, 0), Some(10010));
+  }
+
+  #[test]
+  fn test_sample_n_monotonic_in_level() {
+    for i in 1..13 {
+      assert!(calc_sample_n(10000, i).unwrap() >= calc_sample_n(10000, i - 1).unwrap());
+    }
   }
 
   #[test]
@@ -188,7 +217,7 @@ mod tests {
     for i in 0..150 {
       nums.push(-i as f32);
     }
-    let mut sample = choose_mode_sample(&nums, |&num| {
+    let mut sample = choose_mode_sample(&nums, 8, |&num| {
       if num == 0.0 {
         None
       } else {
