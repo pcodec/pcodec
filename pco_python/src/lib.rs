@@ -14,7 +14,7 @@ mod utils;
 pub mod wrapped;
 
 /// Pcodec is a codec for numerical sequences.
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn pcodec(m: &Bound<PyModule>) -> PyResult<()> {
   let py = m.py();
   m.add("__version__", env!("CARGO_PKG_VERSION"))?;
