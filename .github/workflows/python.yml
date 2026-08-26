@@ -7,12 +7,8 @@ on:
 
 jobs:
   build:
-    name: "Test (${{ matrix.python-version }})"
+    name: "Test"
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # 3.14t is the free-threaded build
-        python-version: [ "3.14.6", "3.14t" ]
     steps:
       - uses: actions/checkout@v4
       - name: Install ruff
@@ -21,8 +17,9 @@ jobs:
         run: ruff check .
       - uses: actions/setup-python@v5
         with:
-          # locking this to a version compatible with pyo3+maturin
-          python-version: "${{ matrix.python-version }}"
+          # locking this to a version compatible with pyo3+maturin;
+          # free threaded to assert lack of GIL behavior
+          python-version: "3.14t"
       - name: Override Rust Version
         run: rustup override set "$(cat .github/rust-test-version)"
       # TODO: there has to be a cleaner way to do this and also add caching
