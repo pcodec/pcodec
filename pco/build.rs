@@ -14,6 +14,9 @@ fn main() {
     if !cfg!(target_feature = "bmi2") {
       missing_instructions.push("bmi2");
     }
+    if !cfg!(target_feature = "lzcnt") {
+      missing_instructions.push("lzcnt");
+    }
     if !cfg!(target_feature = "avx2") {
       missing_instructions.push("avx2");
     }
