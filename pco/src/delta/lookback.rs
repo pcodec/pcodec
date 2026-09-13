@@ -119,8 +119,7 @@ pub fn choose_lookbacks<L: Latent>(
   let mut lookback_counts = vec![1_u32; n_lookbacks];
   // `lookback_goodnesses[j]` is always the bit width of `lookback_counts[j]`,
   // which only changes when the count crosses a power of two. Maintaining it
-  // there keeps a `leading_zeros` out of the hot loop below, and a byte per
-  // lookback keeps the table 4x smaller than the counts it summarizes.
+  // there keeps a `leading_zeros` out of the hot loop below.
   let mut lookback_goodnesses = vec![1_u8; n_lookbacks];
   let mut lookbacks = Vec::with_capacity(latents.len() - state_n);
   let uninit_lookbacks = lookbacks.spare_capacity_mut();
