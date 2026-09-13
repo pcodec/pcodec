@@ -32,7 +32,7 @@ fn main() -> PcoResult<()> {
 
 # Compilation Notes
 
-**For best performance on x86_64, compile with `bmi1`, `bmi2`, and `avx2`**.
+**For best performance on x86_64, compile with `bmi1`, `bmi2`, `lzcnt`, and `avx2`**.
 This improves compression speed slightly and decompression speed substantially!
 Almost all hardware nowadays supports these instruction sets.
 To make sure you're using these, you can:
@@ -40,9 +40,9 @@ To make sure you're using these, you can:
 * Add the following to your `~/.cargo/config.toml`:
 ```toml
 [target.'cfg(target_arch = "x86_64")']
-rustflags = ["-C", "target-feature=+bmi1,+bmi2,+avx2"]
+rustflags = ["-C", "target-feature=+bmi1,+bmi2,+lzcnt,+avx2"]
 ```
-* OR compile with `RUSTFLAGS="-C target-feature=+bmi1,+bmi2,+avx2" cargo build --release ...`
+* OR compile with `RUSTFLAGS="-C target-feature=+bmi1,+bmi2,+lzcnt,+avx2" cargo build --release ...`
 
 Note that setting `target-cpu=native` does not always have the same effect,
 since LLVM compiles for the lowest common denominator of instructions for a
