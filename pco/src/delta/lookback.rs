@@ -69,7 +69,7 @@ fn find_best_lookback<L: Latent>(
   i: usize,
   latents: &[L],
   proposed_lookbacks: &[usize; PROPOSED_LOOKBACKS],
-  lookback_goodnesses: &[Bitlen],
+  lookback_goodnesses: &[u8],
 ) -> usize {
   let mut best_goodness = 0;
   let mut best_lookback: usize = 0;
@@ -87,7 +87,7 @@ fn find_best_lookback<L: Latent>(
     };
     let delta = L::min(l.wrapping_sub(other), other.wrapping_sub(l));
     let delta_goodness = delta.leading_zeros();
-    let goodness = lookback_goodness + delta_goodness;
+    let goodness = lookback_goodness as Bitlen + delta_goodness;
     if goodness > best_goodness {
       best_goodness = goodness;
       best_lookback = lookback;
@@ -119,8 +119,9 @@ pub fn choose_lookbacks<L: Latent>(
   let mut lookback_counts = vec![1_u32; n_lookbacks];
   // `lookback_goodnesses[j]` is always the bit width of `lookback_counts[j]`,
   // which only changes when the count crosses a power of two. Maintaining it
-  // there keeps a `leading_zeros` out of the hot loop below.
-  let mut lookback_goodnesses = vec![1 as Bitlen; n_lookbacks];
+  // there keeps a `leading_zeros` out of the hot loop below, and a byte per
+  // lookback keeps the table 4x smaller than the counts it summarizes.
+  let mut lookback_goodnesses = vec![1_u8; n_lookbacks];
   let mut lookbacks = Vec::with_capacity(latents.len() - state_n);
   let uninit_lookbacks = lookbacks.spare_capacity_mut();
   let mut idx_hash_table = vec![0_usize; COARSENESSES.len() * hash_table_n];
