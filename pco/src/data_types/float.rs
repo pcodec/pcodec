@@ -69,7 +69,6 @@ pub(crate) trait Float:
   fn int_float_from_latent(l: Self::L) -> Self {
     let sign = Self::L::MID;
     let abs_mask = sign - Self::L::ONE;
-    // the greatest power of two below which every integer is exactly representable
     let gpi = Self::L::ONE << (Self::PRECISION_BITS + 1);
     // above gpi, int floats continue linearly in bit space rather than in value
     let gpi_bits_offset = Self::from_latent_numerical(gpi)
@@ -383,10 +382,6 @@ macro_rules! impl_float_number {
         choose_mode_bids(nums, config)
       }
 
-      // The two conversions below are written branchlessly, as a xor against a
-      // mask derived from the sign bit, so that hot loops over them vectorize.
-      // Spelled as `if`s they cost several extra instructions per number once
-      // the compiler if-converts them.
       #[inline]
       fn from_latent_ordered(l: Self::L) -> Self {
         // sign bit set means a positive float, where we flip only that bit;
@@ -397,7 +392,7 @@ macro_rules! impl_float_number {
       #[inline]
       fn to_latent_ordered(self) -> Self::L {
         let mem_layout = self.to_bits();
-        // the inverse: flip everything for a negative float, else just the sign
+        // flip everything for a negative float, else just the sign
         let flip_all = Self::L::ZERO.wrapping_sub(mem_layout >> (Self::L::BITS - 1));
         mem_layout ^ (flip_all | $sign_bit_mask)
       }
