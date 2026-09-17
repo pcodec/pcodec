@@ -2,9 +2,11 @@ use std::cmp::min;
 use std::io::Write;
 
 use crate::chunk_config::ChunkConfig;
-use crate::data_types::{Number, NumberType};
+use crate::data_types::number_priv::NumberPriv;
+use crate::data_types::{LatentType, Number, NumberType};
 use crate::dyn_slices::DynNumberSlice;
 use crate::errors::PcoResult;
+use crate::macros::match_number_enum;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
@@ -24,6 +26,13 @@ pub fn simple_compress_into<T: Number, W: Write>(
   config: &ChunkConfig,
   mut dst: W,
 ) -> PcoResult<W> {
+  // Validate up front, not only per chunk. The config is otherwise checked
+  // inside `ChunkCompressor::new`, which an empty input never reaches -- so
+  // `simple_compress_into(&[], config)` accepted configs this function
+  // documents as an error (a compression level of 2^31, say), and a caller
+  // testing their config against an empty array got a false all-clear.
+  config.validate(LatentType::new::<<T as NumberPriv>::L>())?;
+
   let file_compressor = FileCompressor::default()
     .with_n_hint(src.len())
     .with_uniform_type(Some(NumberType::new::<T>()));
@@ -60,6 +69,14 @@ pub fn simple_compress<T: Number>(src: &[T], config: &ChunkConfig) -> PcoResult<
 }
 
 pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResult<Vec<u8>> {
+  // Same reason as in `simple_compress_into`: no chunks, hence no per-chunk
+  // validation, hence an empty input used to accept an invalid config.
+  let latent_type = match_number_enum!(
+    &src,
+    DynNumberSlice<T>(_inner) => { LatentType::new::<<T as NumberPriv>::L>() }
+  );
+  config.validate(latent_type)?;
+
   let n = src.len();
   let mut dst = Vec::new();
   let file_compressor = FileCompressor::default().with_n_hint(n);
@@ -180,6 +197,33 @@ mod tests {
     assert_eq!(decompressed, nums);
 
     Ok(())
+  }
+
+  /// An invalid config must be rejected regardless of how many numbers were
+  /// passed. Found by the C API fuzz harness: config validation lived inside
+  /// per-chunk compression, and an empty input produces no chunks, so
+  /// `compression_level = 2^31` came back as success for `&[]` and as an error
+  /// for `&[0]` -- the same config, two answers.
+  #[test]
+  fn test_invalid_config_rejected_when_empty() {
+    let config = ChunkConfig {
+      compression_level: 1_577_058_303,
+      ..Default::default()
+    };
+    for n in [0, 1] {
+      let nums = vec![0_i64; n];
+      assert!(
+        simple_compress(&nums, &config).is_err(),
+        "compression level above the maximum was accepted for n={}",
+        n
+      );
+      let mut buffer = vec![0_u8; 1000];
+      assert!(
+        simple_compress_into(&nums, &config, buffer.as_mut_slice()).is_err(),
+        "compression level above the maximum was accepted by _into for n={}",
+        n
+      );
+    }
   }
 
   #[test]

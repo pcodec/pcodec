@@ -5,7 +5,10 @@ edition = "2021"
 
 [lib]
 name = "cpcodec"
-crate-type = ["cdylib", "staticlib"]
+# `rlib` in addition to the C artifacts: without it the crate has no target any
+# Rust code can link, so nothing in-process -- test or fuzz harness -- could
+# call the C API at all. Building it costs nothing at the C consumer's end.
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 half = { workspace = true, features = ["std"] }
