@@ -75,7 +75,7 @@ fn decompress_chunks<T: Number + JavaConversions>(
   let nums = file_decompressor.simple_decompress::<T>(src)?;
   let num_array = num_array::to_java(env, &nums)?;
   let optional = env.call_static_method(
-    "Ljava/util/Optional;",
+    "java/util/Optional",
     "of",
     "(Ljava/lang/Object;)Ljava/util/Optional;",
     &[JValueGen::Object(&num_array)],
@@ -87,7 +87,7 @@ fn decompress_chunks<T: Number + JavaConversions>(
 }
 
 fn java_none(env: &mut JNIEnv) -> Result<jobject> {
-  let optional = env.call_static_method("Ljava/util/Optional;", "empty", "", &[])?;
+  let optional = env.call_static_method("java/util/Optional", "empty", "", &[])?;
   let JValueGen::Object(optional) = optional else {
     unreachable!()
   };
