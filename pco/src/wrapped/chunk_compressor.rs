@@ -309,9 +309,10 @@ fn calculate_compressed_sample_size(
 #[inline(never)]
 fn choose_auto_delta_encoding(
   primary_latents: &DynLatents,
+  compression_level: usize,
   unoptimized_bins_log: Bitlen,
 ) -> PcoResult<DeltaEncoding> {
-  let Some(sample) = sampling::choose_delta_sample(primary_latents) else {
+  let Some(sample) = sampling::choose_delta_sample(primary_latents, compression_level) else {
     return Ok(DeltaEncoding::NoOp);
   };
   let sample_n = sample.len();
@@ -377,7 +378,11 @@ fn choose_delta_encoding(
 ) -> PcoResult<DeltaEncoding> {
   let n = latents.primary.len();
   let delta_encoding = match config.delta_spec {
-    DeltaSpec::Auto => choose_auto_delta_encoding(&latents.primary, unoptimized_bins_log)?,
+    DeltaSpec::Auto => choose_auto_delta_encoding(
+      &latents.primary,
+      config.compression_level,
+      unoptimized_bins_log,
+    )?,
     DeltaSpec::NoOp | DeltaSpec::TryConsecutive(0) | DeltaSpec::TryConv1(0) => DeltaEncoding::NoOp,
     DeltaSpec::TryConsecutive(order) => DeltaEncoding::Consecutive {
       order,
