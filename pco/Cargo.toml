@@ -7,7 +7,7 @@ build = "build.rs"
 authors = ["mwlon <m.w.loncaric@gmail.com>"]
 categories = ["compression", "encoding"]
 description = "Good compression for numerical sequences"
-include = ["src/**/*.rs", "Cargo.toml", "README.md", "build.rs"]
+include = ["src/**/*.rs", "benches/**/*.rs", "Cargo.toml", "README.md", "build.rs"]
 keywords = ["compression", "numerical", "delta"]
 license = "Apache-2.0"
 repository = "https://github.com/pcodec/pcodec"
@@ -15,9 +15,20 @@ rust-version = "1.87.0"
 
 [dependencies]
 better_io = { workspace = true }
+divan = { workspace = true, optional = true }
 dtype_dispatch = { workspace = true }
 half = { workspace = true }
 rand_xoshiro = { workspace = true }
 
 [dev-dependencies]
 rand = "0.8.4"
+
+[features]
+# Microbenchmarks of pco internals. Not public API; exists only so that
+# `benches/` can reach routines that are private to the crate.
+bench = ["dep:divan"]
+
+[[bench]]
+name = "decompress"
+harness = false
+required-features = ["bench"]

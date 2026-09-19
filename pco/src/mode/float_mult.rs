@@ -653,3 +653,48 @@ mod test {
     assert!(compute_bid(&junk).is_none());
   }
 }
+
+#[cfg(feature = "bench")]
+mod benches {
+  use divan::{black_box, Bencher};
+  use half::f16;
+  use rand_xoshiro::rand_core::RngCore;
+
+  use super::*;
+  use crate::bench_utils::{rng, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+
+  const BASE: f64 = 0.01;
+
+  /// Decimal-ish data: what float mult mode exists for.
+  fn decimal_floats<F: Float>(n: usize) -> Vec<F> {
+    let mut rng = rng();
+    (0..n)
+      .map(|_| F::from_f64((rng.next_u64() % 1000) as f64 * BASE))
+      .collect()
+  }
+
+  #[divan::bench(types = [f16, f32, f64])]
+  fn join_latents<F: Float>(bencher: Bencher) {
+    let base = F::from_f64(BASE);
+    let nums = decimal_floats::<F>(BENCH_N);
+    let latents = split_latents(&nums, FloatMultConfig::from_base(base));
+    let primary = latents.primary.downcast::<F::L>().unwrap();
+    let secondary = latents.secondary.unwrap().downcast::<F::L>().unwrap();
+    let mut dst = vec![F::ZERO; nums.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents(
+            black_box(base),
+            DynLatentSlice::new(&primary[range.clone()]),
+            Some(DynLatentSlice::new(&secondary[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}
