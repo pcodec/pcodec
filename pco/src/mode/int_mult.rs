@@ -330,3 +330,44 @@ mod tests {
     );
   }
 }
+
+#[cfg(feature = "bench")]
+mod benches {
+  use divan::{black_box, Bencher};
+
+  use super::*;
+  use crate::bench_utils::{random_walk_nums, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::Latent;
+
+  // Small enough to fit every latent type. The join is a multiply and an add
+  // per element, so its cost does not depend on the base's value.
+  const BASE: u64 = 7;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    let base = T::from_u64(BASE);
+    let nums = random_walk_nums::<T>(BENCH_N)
+      .into_iter()
+      .map(|x| x.wrapping_mul(base))
+      .collect::<Vec<_>>();
+    let latents = split_latents(&nums, base);
+    let primary = latents.primary.downcast::<T>().unwrap();
+    let secondary = latents.secondary.unwrap().downcast::<T>().unwrap();
+    let mut dst = vec![T::ZERO; nums.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents(
+            black_box(DynLatent::new(base)),
+            DynLatentSlice::new(&primary[range.clone()]),
+            Some(DynLatentSlice::new(&secondary[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}

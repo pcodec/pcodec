@@ -261,3 +261,164 @@ define_latent_enum!(
   #[derive()]
   pub DynPageLatentDecompressor(PageLatentDecompressor)
 );
+
+#[cfg(feature = "bench")]
+mod benches {
+  use divan::{black_box, Bencher};
+
+  use super::*;
+
+  use crate::bench_utils::{clustered_nums, single_latent_var_config, uniform_nums, LatentFixture};
+  use crate::constants::MAX_COMPRESSION_LEVEL;
+  use crate::data_types::Number;
+
+  // Each timed iteration decodes a whole page, so that the cost of building a
+  // reader is amortized away.
+  const N: usize = 64 * FULL_BATCH_N;
+  // Enough distinct values to give the ANS table some size, but not so many
+  // that bin optimization starts merging them away. Narrow latent types can't
+  // hold that many well-separated values, so they get fewer.
+  const MAX_N_DISTINCT: usize = 256;
+
+  /// Advances past a batch's offsets without decoding them, using the widths
+  /// the ANS read just wrote into scratch.
+  ///
+  /// The ANS benches need this because ANS symbols and offsets are interleaved
+  /// batch by batch in the page body: without it, the second batch's symbols
+  /// would be read from the first batch's offset bits. It costs a handful of
+  /// operations per 256 symbols.
+  unsafe fn skip_offsets<L: Latent>(reader: &mut BitReader, cld: &ChunkLatentDecompressor<L>) {
+    let last = FULL_BATCH_N - 1;
+    let offset_bits = cld.scratch.offset_bits_csum[last] + cld.scratch.offset_bits[last];
+    let bit_idx = reader.bit_idx() + offset_bits as usize;
+    reader.stale_byte_idx = bit_idx / 8;
+    reader.bits_past_byte = bit_idx as Bitlen % 8;
+  }
+
+  fn ans_fixture<L: Latent + Number<L = L>>() -> LatentFixture<L> {
+    let n_distinct = MAX_N_DISTINCT.min(1 << (L::BITS / 2));
+    let nums = clustered_nums::<L>(N, n_distinct);
+    LatentFixture::new(
+      &nums,
+      &single_latent_var_config(MAX_COMPRESSION_LEVEL),
+    )
+  }
+
+  fn offset_fixture<L: Latent + Number<L = L>>(
+    precision: Bitlen,
+    expected_bytes_per_offset: usize,
+  ) -> LatentFixture<L> {
+    let nums = uniform_nums::<L>(N, precision);
+    let fixture = LatentFixture::new(&nums, &single_latent_var_config(0));
+    assert_eq!(fixture.n_bins(), 1);
+    assert_eq!(
+      fixture.bytes_per_offset(),
+      expected_bytes_per_offset
+    );
+    fixture
+  }
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn read_full_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
+    let fixture = ans_fixture::<L>();
+    let batches = fixture.n_batches();
+    bencher
+      .counter(divan::counter::ItemsCount::new(
+        fixture.n_latents(),
+      ))
+      .with_inputs(|| {
+        (
+          fixture.reader(),
+          fixture.pld(),
+          fixture.cld(),
+        )
+      })
+      .bench_local_refs(|(reader, pld, cld)| unsafe {
+        for _ in 0..batches {
+          pld.read_full_ans_symbols(black_box(reader), cld);
+          skip_offsets(reader, cld);
+        }
+      });
+  }
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn read_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
+    let fixture = ans_fixture::<L>();
+    let batches = fixture.n_batches();
+    bencher
+      .counter(divan::counter::ItemsCount::new(
+        fixture.n_latents(),
+      ))
+      .with_inputs(|| {
+        (
+          fixture.reader(),
+          fixture.pld(),
+          fixture.cld(),
+        )
+      })
+      .bench_local_refs(|(reader, pld, cld)| unsafe {
+        for _ in 0..batches {
+          pld.read_ans_symbols(black_box(reader), FULL_BATCH_N, cld);
+          skip_offsets(reader, cld);
+        }
+      });
+  }
+
+  fn bench_read_offsets<L: Latent + Number<L = L>, const READ_BYTES: usize>(
+    bencher: Bencher,
+    precision: Bitlen,
+    expected_bytes_per_offset: usize,
+  ) {
+    let fixture = offset_fixture::<L>(precision, expected_bytes_per_offset);
+    let batches = fixture.n_batches();
+    bencher
+      .counter(divan::counter::ItemsCount::new(
+        fixture.n_latents(),
+      ))
+      .with_inputs(|| (fixture.reader(), fixture.cld()))
+      .bench_local_refs(|(reader, cld)| unsafe {
+        let scratch = &mut cld.scratch;
+        for _ in 0..batches {
+          read_offsets::<L, READ_BYTES>(
+            black_box(reader),
+            &scratch.offset_bits_csum.0,
+            &scratch.offset_bits.0,
+            &mut scratch.latents.0,
+            FULL_BATCH_N,
+          );
+        }
+      });
+  }
+
+  // One bench per (latent type, READ_BYTES) pair reachable through
+  // read_batch_pre_delta's dispatch, matching force_export! above.
+  #[divan::bench]
+  fn read_offsets_u8_4(bencher: Bencher) {
+    bench_read_offsets::<u8, 4>(bencher, 8, 2);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u16_4(bencher: Bencher) {
+    bench_read_offsets::<u16, 4>(bencher, 16, 3);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u32_4(bencher: Bencher) {
+    bench_read_offsets::<u32, 4>(bencher, 20, 4);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u32_8(bencher: Bencher) {
+    bench_read_offsets::<u32, 8>(bencher, 32, 5);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u64_8(bencher: Bencher) {
+    bench_read_offsets::<u64, 8>(bencher, 40, 6);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u64_15(bencher: Bencher) {
+    bench_read_offsets::<u64, 15>(bencher, 64, 9);
+  }
+}

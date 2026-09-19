@@ -22,3 +22,34 @@ pub(crate) fn join_latents<T: Number>(primary: DynLatentSlice, dst: &mut [T]) ->
   }
   Ok(())
 }
+
+#[cfg(feature = "bench")]
+mod benches {
+  use divan::{black_box, Bencher};
+
+  use super::*;
+  use crate::bench_utils::{random_walk_nums, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::Latent;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    let nums = random_walk_nums::<T>(BENCH_N);
+    let primary = split_latents(&nums).primary.downcast::<T>().unwrap();
+    let mut dst = vec![T::ZERO; nums.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let start = batch_idx * FULL_BATCH_N;
+          super::join_latents(
+            black_box(DynLatentSlice::new(
+              &primary[start..start + dst_batch.len()],
+            )),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}
