@@ -16,18 +16,13 @@ you're opposed to creating a Discord account, Github issues also work.
   * Test your code; `cargo test` and `cargo clippy`.
   * Format it; `cargo fmt`.
   * [Run the benchmarks](benchmark_results.md).
-    This verifies compression and
-    decompression works for each synthetic dataset, which occasionally catches
-    strange cases the tests miss.
+    This verifies compression and decompression works for each synthetic
+    dataset, which occasionally catches strange cases the tests miss.
     Also, if your change might affect performance, compare relevant runtimes to
     the benchmarks on the main branch.
-  * If you changed a subroutine, run the microbenchmarks;
-    `cargo bench -p pco --features bench --bench micro`. They time individual
-    routines rather than whole files, so they localize a regression that the
-    end-to-end benchmarks can only tell you happened. Each bench's name is its
-    module path, so a regex filter selects along whichever axis you name:
-    `-- mode`, `-- u32`, `-- read_full_ans_symbols`. They also run on every PR
-    through CodSpeed.
+    If your change affects performance of a specific subroutine, you may also
+    want to run microbenchmarks with
+    `cargo bench -p pco --features bench`.
 
 Looking for ideas on what to contribute? Grep through the repo for concrete
 TODOs, or look at our

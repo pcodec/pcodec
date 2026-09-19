@@ -45,23 +45,3 @@ jobs:
         uses: Swatinem/rust-cache@v2.8.1
       - name: Clippy
         run: cargo clippy --no-deps --all-features
-  benchmarks:
-    name: "Benchmarks"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Override Rust Version
-        run: rustup override set "$(cat .github/rust-test-version)"
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.8.1
-      - name: Install cargo-codspeed
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-codspeed
-      - name: Build benchmarks
-        run: cargo codspeed build -p pco --features bench
-      - name: Run benchmarks
-        uses: CodSpeedHQ/action@v3
-        with:
-          run: cargo codspeed run
-          token: ${{ secrets.CODSPEED_TOKEN }}
