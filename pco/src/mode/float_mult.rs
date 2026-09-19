@@ -655,7 +655,7 @@ mod test {
 }
 
 #[cfg(feature = "bench")]
-mod benches {
+mod micro {
   use divan::{black_box, Bencher};
   use half::f16;
   use rand_xoshiro::rand_core::RngCore;

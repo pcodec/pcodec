@@ -29,6 +29,6 @@ rand = "0.8.4"
 bench = ["dep:divan"]
 
 [[bench]]
-name = "decompress"
+name = "micro"
 harness = false
 required-features = ["bench"]

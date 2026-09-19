@@ -21,12 +21,12 @@ you're opposed to creating a Discord account, Github issues also work.
     strange cases the tests miss.
     Also, if your change might affect performance, compare relevant runtimes to
     the benchmarks on the main branch.
-  * If you changed a decompression subroutine, run the microbenchmarks;
-    `cargo bench -p pco --features bench --bench decompress`. They time
-    individual routines (ANS symbol reading, offset reading, delta decoding,
-    joining latents) rather than whole files, so they localize a regression that
-    the end-to-end benchmarks can only tell you happened. Filter with a
-    substring, e.g. `-- read_full_ans_symbols`. They also run on every PR
+  * If you changed a subroutine, run the microbenchmarks;
+    `cargo bench -p pco --features bench --bench micro`. They time individual
+    routines rather than whole files, so they localize a regression that the
+    end-to-end benchmarks can only tell you happened. Each bench's name is its
+    module path, so a regex filter selects along whichever axis you name:
+    `-- mode`, `-- u32`, `-- read_full_ans_symbols`. They also run on every PR
     through CodSpeed.
 
 Looking for ideas on what to contribute? Grep through the repo for concrete

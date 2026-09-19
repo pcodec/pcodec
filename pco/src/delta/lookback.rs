@@ -333,7 +333,7 @@ mod tests {
 }
 
 #[cfg(feature = "bench")]
-mod benches {
+mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;

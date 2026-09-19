@@ -24,7 +24,7 @@ pub(crate) fn join_latents<T: Number>(primary: DynLatentSlice, dst: &mut [T]) ->
 }
 
 #[cfg(feature = "bench")]
-mod benches {
+mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;

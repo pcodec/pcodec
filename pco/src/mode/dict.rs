@@ -112,7 +112,7 @@ mod tests {
 }
 
 #[cfg(feature = "bench")]
-mod benches {
+mod micro {
   use divan::{black_box, Bencher};
   use rand_xoshiro::rand_core::RngCore;
 
