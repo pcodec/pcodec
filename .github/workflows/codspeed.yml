@@ -22,10 +22,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x64
-            runner: codspeed-macro-x64-ryzen-9950x-ubuntu-24-04
           - arch: arm64
             runner: codspeed-macro-arm64-graviton-ubuntu-22-04
+          # TODO: enable these if we upgrade to paid plan
+          # - arch: x64
+          #   runner: codspeed-macro-x64-ryzen-9950x-ubuntu-24-04
     steps:
       - uses: actions/checkout@v4
       - name: Override Rust Version
