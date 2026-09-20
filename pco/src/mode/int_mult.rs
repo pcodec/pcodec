@@ -347,7 +347,7 @@ mod micro {
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
     let base = T::from_u64(BASE);
-    let nums = random_walk_nums::<T>(BENCH_N)
+    let nums = random_walk_nums::<T>()
       .into_iter()
       .map(|x| x.wrapping_mul(base))
       .collect::<Vec<_>>();

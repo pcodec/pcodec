@@ -268,13 +268,13 @@ mod micro {
 
   use super::*;
 
-  use crate::bench_utils::{clustered_nums, single_latent_var_config, uniform_nums, LatentFixture};
+  use crate::bench_utils::{
+    clustered_nums, single_latent_var_config, uniform_offsets, LatentFixture, BENCH_BATCHES,
+    BENCH_N,
+  };
   use crate::constants::MAX_COMPRESSION_LEVEL;
   use crate::data_types::Number;
 
-  // Each timed iteration decodes a whole page, so that the cost of building a
-  // reader is amortized away.
-  const N: usize = 64 * FULL_BATCH_N;
   // Enough distinct values to give the ANS table some size, but not so many
   // that bin optimization starts merging them away. Narrow latent types can't
   // hold that many well-separated values, so they get fewer.
@@ -297,35 +297,18 @@ mod micro {
 
   fn ans_fixture<L: Latent + Number<L = L>>() -> LatentFixture<L> {
     let n_distinct = MAX_N_DISTINCT.min(1 << (L::BITS / 2));
-    let nums = clustered_nums::<L>(N, n_distinct);
+    let nums = clustered_nums::<L>(n_distinct);
     LatentFixture::new(
       &nums,
       &single_latent_var_config(MAX_COMPRESSION_LEVEL),
     )
   }
 
-  fn offset_fixture<L: Latent + Number<L = L>>(
-    precision: Bitlen,
-    expected_bytes_per_offset: usize,
-  ) -> LatentFixture<L> {
-    let nums = uniform_nums::<L>(N, precision);
-    let fixture = LatentFixture::new(&nums, &single_latent_var_config(0));
-    assert_eq!(fixture.n_bins(), 1);
-    assert_eq!(
-      fixture.bytes_per_offset(),
-      expected_bytes_per_offset
-    );
-    fixture
-  }
-
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn read_full_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
     let fixture = ans_fixture::<L>();
-    let batches = fixture.n_batches();
     bencher
-      .counter(divan::counter::ItemsCount::new(
-        fixture.n_latents(),
-      ))
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| {
         (
           fixture.reader(),
@@ -334,7 +317,7 @@ mod micro {
         )
       })
       .bench_local_refs(|(reader, pld, cld)| unsafe {
-        for _ in 0..batches {
+        for _ in 0..BENCH_BATCHES {
           pld.read_full_ans_symbols(black_box(reader), cld);
           skip_offsets(reader, cld);
         }
@@ -344,11 +327,8 @@ mod micro {
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn read_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
     let fixture = ans_fixture::<L>();
-    let batches = fixture.n_batches();
     bencher
-      .counter(divan::counter::ItemsCount::new(
-        fixture.n_latents(),
-      ))
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| {
         (
           fixture.reader(),
@@ -357,7 +337,7 @@ mod micro {
         )
       })
       .bench_local_refs(|(reader, pld, cld)| unsafe {
-        for _ in 0..batches {
+        for _ in 0..BENCH_BATCHES {
           pld.read_ans_symbols(black_box(reader), FULL_BATCH_N, cld);
           skip_offsets(reader, cld);
         }
@@ -366,19 +346,17 @@ mod micro {
 
   fn bench_read_offsets<L: Latent + Number<L = L>, const READ_BYTES: usize>(
     bencher: Bencher,
-    precision: Bitlen,
-    expected_bytes_per_offset: usize,
+    n_bits: Bitlen,
   ) {
-    let fixture = offset_fixture::<L>(precision, expected_bytes_per_offset);
-    let batches = fixture.n_batches();
+    let nums = uniform_offsets::<L>(n_bits);
+    let fixture = LatentFixture::new(&nums, &single_latent_var_config(0));
     bencher
-      .counter(divan::counter::ItemsCount::new(
-        fixture.n_latents(),
-      ))
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| (fixture.reader(), fixture.cld()))
       .bench_local_refs(|(reader, cld)| unsafe {
-        let scratch = &mut cld.scratch;
-        for _ in 0..batches {
+        let scratch: &mut crate::chunk_latent_decompressor::ChunkLatentDecompressorScratch<L> =
+          &mut cld.scratch;
+        for _ in 0..BENCH_BATCHES {
           read_offsets::<L, READ_BYTES>(
             black_box(reader),
             &scratch.offset_bits_csum.0,
@@ -394,31 +372,31 @@ mod micro {
   // read_batch_pre_delta's dispatch, matching force_export! above.
   #[divan::bench]
   fn read_offsets_u8_4(bencher: Bencher) {
-    bench_read_offsets::<u8, 4>(bencher, 8, 2);
+    bench_read_offsets::<u8, 4>(bencher, 8);
   }
 
   #[divan::bench]
   fn read_offsets_u16_4(bencher: Bencher) {
-    bench_read_offsets::<u16, 4>(bencher, 16, 3);
+    bench_read_offsets::<u16, 4>(bencher, 16);
   }
 
   #[divan::bench]
   fn read_offsets_u32_4(bencher: Bencher) {
-    bench_read_offsets::<u32, 4>(bencher, 20, 4);
+    bench_read_offsets::<u32, 4>(bencher, 20);
   }
 
   #[divan::bench]
   fn read_offsets_u32_8(bencher: Bencher) {
-    bench_read_offsets::<u32, 8>(bencher, 32, 5);
+    bench_read_offsets::<u32, 8>(bencher, 32);
   }
 
   #[divan::bench]
   fn read_offsets_u64_8(bencher: Bencher) {
-    bench_read_offsets::<u64, 8>(bencher, 40, 6);
+    bench_read_offsets::<u64, 8>(bencher, 40);
   }
 
   #[divan::bench]
   fn read_offsets_u64_15(bencher: Bencher) {
-    bench_read_offsets::<u64, 15>(bencher, 64, 9);
+    bench_read_offsets::<u64, 15>(bencher, 64);
   }
 }

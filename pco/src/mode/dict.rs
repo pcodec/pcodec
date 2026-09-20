@@ -114,9 +114,10 @@ mod tests {
 #[cfg(feature = "bench")]
 mod micro {
   use divan::{black_box, Bencher};
-  use rand_xoshiro::rand_core::RngCore;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
 
-  use crate::bench_utils::{rng, BENCH_N};
+  use crate::bench_utils::BENCH_N;
   use crate::constants::FULL_BATCH_N;
   use crate::data_types::{Latent, Number};
   use crate::dyn_slices::DynLatentSlice;
@@ -126,7 +127,7 @@ mod micro {
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
-    let mut rng = rng();
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
     let dict = DynLatents::new(
       (0..DICT_N)
         .map(|_| T::from_u64(rng.next_u64()))

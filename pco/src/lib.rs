@@ -61,9 +61,7 @@ mod bench_utils;
 #[cfg(test)]
 mod tests;
 
-/// Not public API.
-///
-/// Exists so that the `decompress` bench target can force the linker to pull in
+/// Exists so that the `micro` bench target can force the linker to pull in
 /// this crate's `#[divan::bench]` items, which register themselves at startup.
 #[cfg(feature = "bench")]
 #[doc(hidden)]

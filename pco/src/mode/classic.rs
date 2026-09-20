@@ -34,7 +34,7 @@ mod micro {
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
-    let nums = random_walk_nums::<T>(BENCH_N);
+    let nums = random_walk_nums::<T>();
     let primary = split_latents(&nums).primary.downcast::<T>().unwrap();
     let mut dst = vec![T::ZERO; nums.len()];
     bencher

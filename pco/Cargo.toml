@@ -13,6 +13,11 @@ license = "Apache-2.0"
 repository = "https://github.com/pcodec/pcodec"
 rust-version = "1.87.0"
 
+[lib]
+# There is one bench target and filtering selects within it, so `cargo bench`
+# should not also run the unit test harness in bench mode.
+bench = false
+
 [dependencies]
 better_io = { workspace = true }
 divan = { workspace = true, optional = true }

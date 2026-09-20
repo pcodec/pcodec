@@ -86,11 +86,9 @@ mod micro {
   use crate::bench_utils::random_walk_nums;
   use crate::constants::FULL_BATCH_N;
 
-  const BATCHES: usize = 64;
-
   #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3])]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
-    let mut latents = random_walk_nums::<L>(BATCHES * FULL_BATCH_N);
+    let mut latents = random_walk_nums::<L>();
     let mut moments = encode_in_place(order, &mut latents);
     bencher
       .counter(divan::counter::ItemsCount::new(

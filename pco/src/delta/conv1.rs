@@ -589,17 +589,15 @@ mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;
-  use crate::bench_utils::random_walk_nums;
+  use crate::bench_utils::{random_walk_nums, BENCH_N};
   use crate::constants::FULL_BATCH_N;
-
-  const BATCHES: usize = 64;
 
   // Order 6 has a specialized unrolled implementation; other orders go through
   // the generic decode_residuals.
   #[divan::bench(types = [u8, u16, u32], args = [3, 6])]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
-    let n = BATCHES * FULL_BATCH_N;
-    let mut latents = random_walk_nums::<L>(n);
+    let n = BENCH_N;
+    let mut latents = random_walk_nums::<L>();
     let config = choose_config(order, &latents).expect("conv1 rejected the bench data");
     let mut state = encode_in_place(&config, &mut latents);
     bencher

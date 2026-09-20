@@ -288,10 +288,11 @@ mod test {
 mod micro {
   use divan::{black_box, Bencher};
   use half::f16;
-  use rand_xoshiro::rand_core::RngCore;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
 
   use super::*;
-  use crate::bench_utils::{rng, BENCH_N};
+  use crate::bench_utils::BENCH_N;
   use crate::constants::FULL_BATCH_N;
 
   /// Floats whose lowest `k` mantissa bits are zero, the shape float quant
@@ -300,7 +301,7 @@ mod micro {
   /// Scaling an integer below `2^(PRECISION_BITS - k)` by a power of two is
   /// exact, so the result has the mantissa bits to spare.
   fn quantized_floats<F: Float>(n: usize, k: Bitlen) -> Vec<F> {
-    let mut rng = rng();
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
     let max_int = 1_u64 << (F::PRECISION_BITS - k);
     (0..n)
       .map(|_| F::from_f64((rng.next_u64() % max_int) as f64 * 0.125))

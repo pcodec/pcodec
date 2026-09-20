@@ -337,10 +337,8 @@ mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;
-  use crate::bench_utils::interleaved_nums;
+  use crate::bench_utils::{interleaved_nums, BENCH_N};
   use crate::metadata::DeltaLookbackConfig;
-
-  const BATCHES: usize = 64;
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn decode_in_place<L: Latent>(bencher: Bencher) {
@@ -348,8 +346,8 @@ mod micro {
       window_n_log: 8,
       state_n_log: 0,
     };
-    let n = BATCHES * FULL_BATCH_N;
-    let mut latents = interleaved_nums::<L>(n);
+    let n = BENCH_N;
+    let mut latents = interleaved_nums::<L>();
     let lookbacks = choose_lookbacks(config, &latents);
     encode_in_place(config, &lookbacks, &mut latents);
     let (mut window_buffer, mut pos) = new_window_buffer_and_pos::<L>(config, &[]);
