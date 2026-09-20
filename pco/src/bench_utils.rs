@@ -8,7 +8,7 @@ use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::{Latent, Number};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::page::PageMeta;
-use crate::metadata::LatentVarKey;
+use crate::metadata::{LatentVarKey, Mode};
 use crate::page_latent_decompressor::PageLatentDecompressor;
 use crate::wrapped::{FileCompressor, FileDecompressor};
 use crate::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
@@ -89,16 +89,13 @@ impl<L: Latent> LatentFixture<L> {
     let (cd, _) = fd
       .chunk_decompressor::<T, _>(chunk_meta.as_slice())
       .unwrap();
-    let (page_latent_var, delta_encoding, body_byte_idx) = {
-      let meta = cd.meta();
-      let mut reader = BitReader::new(&src, unpadded_len, 0);
-      let page_meta = unsafe { PageMeta::read_from(&mut reader, meta) }.unwrap();
-      (
-        page_meta.per_latent_var.primary,
-        meta.delta_encoding.for_latent_var(LatentVarKey::Primary),
-        meta.exact_page_meta_size(),
-      )
-    };
+    let meta = cd.meta();
+    let mut reader = BitReader::new(&src, unpadded_len, 0);
+    let page_meta = unsafe { PageMeta::read_from(&mut reader, meta) }.unwrap();
+    let page_latent_var = page_meta.per_latent_var.primary;
+    let delta_encoding = meta.delta_encoding.for_latent_var(LatentVarKey::Primary);
+    let body_byte_idx = meta.exact_page_meta_size();
+    assert!(matches!(meta.mode, Mode::Classic));
     assert_eq!(delta_encoding, LatentVarDeltaEncoding::NoOp);
 
     let cld = cd
