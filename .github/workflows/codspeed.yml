@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    types: [ labeled ]
+    types: [ labeled, synchronize, reopened ]
 
 concurrency:
   group: codspeed-${{ github.event.pull_request.number || github.ref }}
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   benchmarks:
-    if: github.event_name != 'pull_request' || github.event.label.name == 'bench'
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'bench')
     name: "Benchmarks (${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
     permissions:
