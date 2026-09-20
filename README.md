@@ -8,6 +8,7 @@
 [![crates.io][crates-badge]][crates-url]
 [![pypi.org][pypi-badge]][pypi-url]
 [![https://central.sonatype.com/][maven-central-badge]][maven-central-url]
+[![CodSpeed][codspeed-badge]][codspeed-url]
 
 [crates-badge]: https://img.shields.io/crates/v/pco.svg
 
@@ -20,6 +21,10 @@
 [maven-central-badge]: https://img.shields.io/maven-central/v/io.github.pcodec/pco-jni
 
 [maven-central-url]: https://central.sonatype.com/artifact/io.github.pcodec/pco-jni
+
+[codspeed-badge]: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+
+[codspeed-url]: https://app.codspeed.io/pcodec/pcodec?utm_source=badge
 
 # Pcodec
 
