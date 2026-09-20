@@ -57,10 +57,36 @@ pub(crate) trait Float:
 
   /// This should use something like [`f32::to_bits()`]
   fn to_latent_bits(self) -> Self::L;
-  /// This should surjectively map the latent to the set of integers in its
-  /// floating point type. E.g. 3.0, Inf, and NaN are int floats, but 3.5 is
-  /// not.
-  fn int_float_from_latent(l: Self::L) -> Self;
+  /// This should be the inverse of `to_latent_bits`.
+  fn from_latent_bits(l: Self::L) -> Self;
+  /// Surjectively maps the latent to the set of integers in this floating
+  /// point type. E.g. 3.0, Inf, and NaN are int floats, but 3.5 is not.
+  ///
+  /// This is written branchlessly, treating the sign as arithmetic rather than
+  /// control flow, so that hot loops vectorize to a single int->float
+  /// conversion per number instead of one per sign case.
+  #[inline]
+  fn int_float_from_latent(l: Self::L) -> Self {
+    let sign = Self::L::MID;
+    let abs_mask = sign - Self::L::ONE;
+    let gpi = Self::L::ONE << (Self::PRECISION_BITS + 1);
+    // above gpi, int floats continue linearly in bit space rather than in value
+    let gpi_bits_offset = Self::from_latent_numerical(gpi)
+      .to_latent_bits()
+      .wrapping_sub(gpi);
+
+    // l >= MID means positive, with magnitude l - MID; below MID it's negative
+    // with magnitude MID - 1 - l. Both are `(l ^ neg) & abs_mask` for the right
+    // choice of `neg`.
+    let neg = !(Self::L::ZERO.wrapping_sub(l >> (Self::L::BITS - 1)));
+    let abs_int = (l ^ neg) & abs_mask;
+    let abs_float = if abs_int < gpi {
+      Self::from_latent_numerical(abs_int)
+    } else {
+      Self::from_latent_bits(abs_int.wrapping_add(gpi_bits_offset))
+    };
+    Self::from_latent_bits(abs_float.to_latent_bits() | (neg & sign))
+  }
   /// This should be the inverse of `int_float_from_latent`.
   fn int_float_to_latent(self) -> Self::L;
   /// This should map from e.g. 7_u32 -> 7.0_f32
@@ -205,24 +231,8 @@ macro_rules! impl_float {
       }
 
       #[inline]
-      fn int_float_from_latent(l: Self::L) -> Self {
-        let mid = Self::L::MID;
-        let (negative, abs_int) = if l >= mid {
-          (false, l - mid)
-        } else {
-          (true, mid - 1 - l)
-        };
-        let gpi = 1 << Self::MANTISSA_DIGITS;
-        let abs_float = if abs_int < gpi {
-          abs_int as Self
-        } else {
-          Self::from_bits((gpi as Self).to_bits() + (abs_int - gpi))
-        };
-        if negative {
-          -abs_float
-        } else {
-          abs_float
-        }
+      fn from_latent_bits(l: Self::L) -> Self {
+        Self::from_bits(l)
       }
 
       #[inline]
@@ -321,24 +331,8 @@ impl Float for f16 {
   }
 
   #[inline]
-  fn int_float_from_latent(l: Self::L) -> Self {
-    let mid = Self::L::MID;
-    let (negative, abs_int) = if l >= mid {
-      (false, l - mid)
-    } else {
-      (true, mid - 1 - l)
-    };
-    let gpi = 1 << Self::MANTISSA_DIGITS;
-    let abs_float = if abs_int < gpi {
-      Self::from_f32(abs_int as f32)
-    } else {
-      Self::from_bits(Self::from_f32(gpi as f32).to_bits() + (abs_int - gpi))
-    };
-    if negative {
-      -abs_float
-    } else {
-      abs_float
-    }
+  fn from_latent_bits(l: Self::L) -> Self {
+    Self::from_bits(l)
   }
 
   #[inline]
@@ -390,24 +384,17 @@ macro_rules! impl_float_number {
 
       #[inline]
       fn from_latent_ordered(l: Self::L) -> Self {
-        if l & $sign_bit_mask > 0 {
-          // positive float
-          Self::from_bits(l ^ $sign_bit_mask)
-        } else {
-          // negative float
-          Self::from_bits(!l)
-        }
+        // sign bit set means a positive float, where we flip only that bit;
+        // otherwise it's a negative float and we flip everything
+        let flip_all = !(Self::L::ZERO.wrapping_sub(l >> (Self::L::BITS - 1)));
+        Self::from_bits(l ^ (flip_all | $sign_bit_mask))
       }
       #[inline]
       fn to_latent_ordered(self) -> Self::L {
         let mem_layout = self.to_bits();
-        if mem_layout & $sign_bit_mask > 0 {
-          // negative float
-          !mem_layout
-        } else {
-          // positive float
-          mem_layout ^ $sign_bit_mask
-        }
+        // flip everything for a negative float, else just the sign
+        let flip_all = Self::L::ZERO.wrapping_sub(mem_layout >> (Self::L::BITS - 1));
+        mem_layout ^ (flip_all | $sign_bit_mask)
       }
       fn join_latents(
         mode: &Mode,
