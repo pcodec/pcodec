@@ -34,9 +34,8 @@ mod micro {
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
-    let nums = uniform_latents::<T>(T::BITS);
-    let primary = split_latents(&nums).primary.downcast::<T>().unwrap();
-    let mut dst = vec![T::ZERO; nums.len()];
+    let primary = uniform_latents::<T>(T::BITS);
+    let mut dst = vec![T::ZERO; primary.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

@@ -288,28 +288,18 @@ mod test {
 mod micro {
   use divan::{black_box, Bencher};
   use half::f16;
-  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
-  use rand_xoshiro::Xoroshiro128PlusPlus;
 
   use super::*;
-  use crate::bench_utils::BENCH_N;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
+    // An `F` holding values from a type with half its precision.
     let k = F::PRECISION_BITS / 2;
-    // Floats whose lowest `k` mantissa bits are zero, the shape float quant
-    // mode exists for. Scaling an integer below `2^(PRECISION_BITS - k)` by a
-    // power of two is exact, so the result has the mantissa bits to spare.
-    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-    let max_int = 1_u64 << (F::PRECISION_BITS - k);
-    let nums = (0..BENCH_N)
-      .map(|_| F::from_f64((rng.next_u64() % max_int) as f64 * 0.125))
-      .collect::<Vec<F>>();
-    let latents = split_latents(&nums, k);
-    let primary = latents.primary.downcast::<F::L>().unwrap();
-    let secondary = latents.secondary.unwrap().downcast::<F::L>().unwrap();
-    let mut dst = vec![F::ZERO; nums.len()];
+    let ys = uniform_latents::<F::L>(F::L::BITS - k);
+    let ms = uniform_latents::<F::L>(k);
+    let mut dst = vec![F::ZERO; ys.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
@@ -317,8 +307,8 @@ mod micro {
           let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
           super::join_latents::<F>(
             black_box(k),
-            DynLatentSlice::new(&primary[range.clone()]),
-            Some(DynLatentSlice::new(&secondary[range])),
+            DynLatentSlice::new(&ys[range.clone()]),
+            Some(DynLatentSlice::new(&ms[range])),
             dst_batch,
           )
           .unwrap();

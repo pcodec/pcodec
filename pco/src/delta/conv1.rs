@@ -592,13 +592,25 @@ mod micro {
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
+  // The weights sum to `1 << QUANTIZATION`, so a prediction is a weighted mean
+  // of the preceding latents. Kept small enough that the accumulator, which is
+  // only an i16 for u8 latents, cannot overflow.
+  const QUANTIZATION: Bitlen = 7;
+
+  fn config(order: usize) -> DeltaConv1Config {
+    let total = 1_i64 << QUANTIZATION;
+    let mut weights = vec![total / order as i64; order];
+    weights[0] += total - weights.iter().sum::<i64>();
+    DeltaConv1Config::new(QUANTIZATION, 0, weights)
+  }
+
   // Order 6 has a specialized unrolled implementation; other orders go through
   // the generic decode_residuals.
   #[divan::bench(types = [u8, u16, u32], args = [3, 6])]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
-    let mut latents = uniform_latents::<L>(L::BITS);
-    let config = choose_config(order, &latents).expect("conv1 rejected the bench data");
-    let mut state = encode_in_place(&config, &mut latents);
+    let config = config(order);
+    let mut latents = uniform_latents::<L>(L::BITS - 1);
+    let mut state = vec![L::ZERO; order];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

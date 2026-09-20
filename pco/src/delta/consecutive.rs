@@ -89,7 +89,9 @@ mod micro {
   #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3])]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
     let mut latents = uniform_latents::<L>(L::BITS);
-    let mut moments = encode_in_place(order, &mut latents);
+    // The moments are accumulators the decode walks forward; it wrapping-adds
+    // whatever they hold, so their starting values don't affect the work.
+    let mut moments = vec![L::ZERO; order];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

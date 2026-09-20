@@ -265,61 +265,90 @@ define_latent_enum!(
 #[cfg(feature = "bench")]
 mod micro {
   use divan::Bencher;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
 
   use super::*;
+  use crate::bench_utils::{BENCH_BATCHES, BENCH_N};
+  use crate::constants::{Weight, OVERSHOOT_PADDING};
+  use crate::metadata::Bin;
 
-  use crate::bench_utils::{
-    clustered_latents, single_latent_var_config, uniform_latents, LatentFixture, BENCH_BATCHES,
-    BENCH_N,
-  };
-  use crate::constants::MAX_COMPRESSION_LEVEL;
-  use crate::data_types::Number;
-
+  const ANS_SIZE_LOG: Bitlen = 8;
   const ANS_BINS: usize = 64;
 
+  /// Random bits for the decoder to walk. ANS decoding is table lookups, so
+  /// any bits decode; what the table does with them is set by the bins.
+  fn page_body(n_bits: usize) -> Vec<u8> {
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    (0..n_bits.div_ceil(8) + OVERSHOOT_PADDING)
+      .map(|_| rng.next_u64() as u8)
+      .collect()
+  }
+
+  fn reader(src: &[u8]) -> BitReader<'_> {
+    BitReader::new(src, src.len() - OVERSHOOT_PADDING, 0)
+  }
+
+  fn pld<L: Latent>() -> PageLatentDecompressor<L> {
+    PageLatentDecompressor::new(
+      [0; ANS_INTERLEAVING],
+      &LatentVarDeltaEncoding::NoOp,
+      Vec::new(),
+    )
+  }
+
+  /// Bins whose weights vary, so that the decode table's symbols cost
+  /// different numbers of bits the way a real chunk's would.
+  fn ans_cld<L: Latent>() -> Box<ChunkLatentDecompressor<L>> {
+    let mut bins = (0..ANS_BINS)
+      .map(|i| Bin {
+        weight: 1 << (i % 4),
+        lower: L::from_u64(i as u64),
+        offset_bits: 0,
+      })
+      .collect::<Vec<_>>();
+    let assigned = bins.iter().map(|bin| bin.weight).sum::<Weight>();
+    bins[0].weight += (1 << ANS_SIZE_LOG) - assigned;
+    ChunkLatentDecompressor::new(
+      ANS_SIZE_LOG,
+      &bins,
+      LatentVarDeltaEncoding::NoOp,
+    )
+    .unwrap()
+  }
+
   #[divan::bench(types = [u8, u16, u32, u64])]
-  fn read_full_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
-    let fixture = LatentFixture::new(
-      &clustered_latents::<L>(ANS_BINS),
-      &single_latent_var_config(MAX_COMPRESSION_LEVEL),
-    );
+  fn read_full_ans_symbols<L: Latent + 'static>(bencher: Bencher) {
+    // Worst case is one symbol per table entry's widest read.
+    let src = page_body(BENCH_N * ANS_SIZE_LOG as usize);
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
-      .with_inputs(|| {
-        (
-          fixture.reader(),
-          fixture.pld(),
-          fixture.cld(),
-        )
-      })
+      .with_inputs(|| (reader(&src), pld::<L>(), ans_cld::<L>()))
       .bench_local_refs(|(reader, pld, cld)| unsafe {
         for _ in 0..BENCH_BATCHES {
           pld.read_full_ans_symbols(reader, cld);
-          // Advance past the batch's offsets without decoding them, using the
-          // widths the ANS read just wrote into scratch.
-          let last = FULL_BATCH_N - 1;
-          let offset_bits = cld.scratch.offset_bits_csum[last] + cld.scratch.offset_bits[last];
-          let bit_idx = reader.bit_idx() + offset_bits as usize;
-          reader.stale_byte_idx = bit_idx / 8;
-          reader.bits_past_byte = bit_idx as Bitlen % 8;
         }
       });
   }
 
-  fn bench_read_offsets<L: Latent + Number<L = L>, const READ_BYTES: usize>(
-    bencher: Bencher,
-    n_bits: Bitlen,
-  ) {
-    let fixture = LatentFixture::new(
-      &uniform_latents::<L>(n_bits),
-      &single_latent_var_config(0),
-    );
+  /// A single bin means no ANS, so the page body is nothing but offsets and
+  /// the decompressor's scratch is prefilled with this bin's widths.
+  fn offset_cld<L: Latent>(n_bits: Bitlen) -> Box<ChunkLatentDecompressor<L>> {
+    let bins = vec![Bin {
+      weight: 1,
+      lower: L::ZERO,
+      offset_bits: n_bits,
+    }];
+    ChunkLatentDecompressor::new(0, &bins, LatentVarDeltaEncoding::NoOp).unwrap()
+  }
+
+  fn bench_read_offsets<L: Latent, const READ_BYTES: usize>(bencher: Bencher, n_bits: Bitlen) {
+    let src = page_body(BENCH_N * n_bits as usize);
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
-      .with_inputs(|| (fixture.reader(), fixture.cld()))
+      .with_inputs(|| (reader(&src), offset_cld::<L>(n_bits)))
       .bench_local_refs(|(reader, cld)| unsafe {
-        let scratch: &mut crate::chunk_latent_decompressor::ChunkLatentDecompressorScratch<L> =
-          &mut cld.scratch;
+        let scratch = &mut cld.scratch;
         for _ in 0..BENCH_BATCHES {
           read_offsets::<L, READ_BYTES>(
             reader,

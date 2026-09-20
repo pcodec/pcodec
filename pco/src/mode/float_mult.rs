@@ -658,27 +658,22 @@ mod test {
 mod micro {
   use divan::{black_box, Bencher};
   use half::f16;
-  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
-  use rand_xoshiro::Xoroshiro128PlusPlus;
 
   use super::*;
-  use crate::bench_utils::BENCH_N;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
   const BASE: f64 = 0.01;
+  // Decimal-ish data: a few digits of multiplier, with small adjustments.
+  const MULT_BITS: Bitlen = 10;
+  const ADJ_BITS: Bitlen = 4;
 
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
     let base = F::from_f64(BASE);
-    // Decimal-ish data: what float mult mode exists for.
-    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-    let nums = (0..BENCH_N)
-      .map(|_| F::from_f64((rng.next_u64() % 1000) as f64 * BASE))
-      .collect::<Vec<F>>();
-    let latents = split_latents(&nums, FloatMultConfig::from_base(base));
-    let primary = latents.primary.downcast::<F::L>().unwrap();
-    let secondary = latents.secondary.unwrap().downcast::<F::L>().unwrap();
-    let mut dst = vec![F::ZERO; nums.len()];
+    let mults = uniform_latents::<F::L>(MULT_BITS);
+    let adjs = uniform_latents::<F::L>(ADJ_BITS);
+    let mut dst = vec![F::ZERO; mults.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
@@ -686,8 +681,8 @@ mod micro {
           let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
           super::join_latents(
             black_box(base),
-            DynLatentSlice::new(&primary[range.clone()]),
-            Some(DynLatentSlice::new(&secondary[range])),
+            DynLatentSlice::new(&mults[range.clone()]),
+            Some(DynLatentSlice::new(&adjs[range])),
             dst_batch,
           )
           .unwrap();
