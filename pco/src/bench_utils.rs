@@ -1,6 +1,3 @@
-//! Fixtures for the microbenchmarks that live in `#[cfg(feature = "bench")]`
-//! modules throughout the crate. See `benches/micro.rs`.
-
 use rand_xoshiro::rand_core::{RngCore, SeedableRng};
 use rand_xoshiro::Xoroshiro128PlusPlus;
 
@@ -20,16 +17,12 @@ pub const BENCH_BATCHES: usize = 64;
 pub const BENCH_N: usize = BENCH_BATCHES * FULL_BATCH_N;
 // Reads at the end of a batch overshoot the bits they need by up to 15 bytes.
 const PADDING: usize = 64;
-// Distinct values are spread over the latent type's range, up to this much
-// space between them, so that merging two of them into one bin would cost more
-// offset bits than it saves in metadata.
-const MAX_SEPARATION: u128 = 1000;
 
 /// Drawn from a set of `n_distinct` widely separated values.
 pub fn clustered_latents<L: Latent>(n_distinct: usize) -> Vec<L> {
   assert!(n_distinct <= 1 << L::BITS.min(16));
   let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-  let separation = ((1_u128 << L::BITS) / n_distinct as u128).min(MAX_SEPARATION) as u64;
+  let separation = ((1_u128 << L::BITS) / n_distinct as u128) as u64;
   (0..BENCH_N)
     .map(|_| {
       let symbol = rng.next_u64() as usize % n_distinct;
@@ -49,8 +42,7 @@ pub fn uniform_latents<L: Latent>(n_bits: Bitlen) -> Vec<L> {
     .collect()
 }
 
-/// Interleaved subsequences, which is the shape lookback delta encoding exists
-/// for.
+/// Latents amenable to Lookback delta encoding.
 pub fn interleaved_latents<L: Latent>() -> Vec<L> {
   const N_SUBSEQS: usize = 16;
   let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
@@ -170,8 +162,6 @@ mod tests {
     }
   }
 
-  /// The fixtures are only meaningful if reading them back reproduces the
-  /// original latents, so check that a full pass does.
   #[test]
   fn fixture_round_trips() {
     let latents = clustered_latents::<u64>(64);
