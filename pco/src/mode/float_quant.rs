@@ -283,3 +283,36 @@ mod test {
     assert!(bid.is_none());
   }
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::{black_box, Bencher};
+  use half::f16;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+
+  #[divan::bench(types = [f16, f32, f64])]
+  fn join_latents<F: Float>(bencher: Bencher) {
+    // An `F` holding values from a type with half its precision.
+    let k = F::PRECISION_BITS / 2;
+    let ys = uniform_latents::<F::L>(F::L::BITS - k);
+    let ms = uniform_latents::<F::L>(k);
+    let mut dst = vec![F::ZERO; ys.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents::<F>(
+            black_box(k),
+            DynLatentSlice::new(&ys[range.clone()]),
+            Some(DynLatentSlice::new(&ms[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}

@@ -330,3 +330,36 @@ mod tests {
     );
   }
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::{black_box, Bencher};
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::Latent;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    // base, mults, adjs chosen to avoid overflow on all dtypes
+    let base = T::from_u64(3);
+    let mults = uniform_latents::<T>(6);
+    let adjs = uniform_latents::<T>(5);
+    let mut dst = vec![T::ZERO; mults.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents(
+            black_box(DynLatent::new(base)),
+            DynLatentSlice::new(&mults[range.clone()]),
+            Some(DynLatentSlice::new(&adjs[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}
