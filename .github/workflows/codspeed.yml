@@ -1,15 +1,32 @@
 name: CodSpeed
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
-  workflow_dispatch:
+    types: [ labeled ]
+  issue_comment:
+    types: [ created ]
+
+concurrency:
+  group: codspeed-${{ github.event.issue.number || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   benchmarks:
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'bench') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@bench') &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     name: "Benchmarks (${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -20,6 +37,8 @@ jobs:
             runner: codspeed-macro-arm64-graviton-ubuntu-22-04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/merge', github.event.issue.number) || '' }}
       - name: Override Rust Version
         run: rustup override set "$(cat .github/rust-test-version)"
       - name: Rust Cache
