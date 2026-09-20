@@ -25,12 +25,36 @@ typedef struct PcoChunkConfig {
 
 /**
  * Return the maximum possible byte size of a standalone file for `n`
- * elements of `dtype`.  Returns 0 for an invalid `dtype` or invalid
- * paging spec.
+ * elements of `dtype`, **assuming the default paging spec**.  Returns 0 for
+ * an invalid `dtype` or invalid paging spec.
+ *
+ * If you pass a `PcoChunkConfig` with a non-zero `max_page_n` to
+ * `pco_standalone_simple_compress_into`, use
+ * `pco_standalone_guarantee_file_size_with_config` instead: the file is split
+ * into one chunk per page, each with its own overhead, so a smaller
+ * `max_page_n` means a *larger* upper bound than this function reports.
  *
  * This function is thread-safe and performs no heap allocation.
  */
 size_t pco_standalone_guarantee_file_size(size_t n, unsigned char dtype);
+
+/**
+ * Return the maximum possible byte size of a standalone file for `n` elements
+ * of `dtype` compressed with `config`.  Returns 0 for an invalid `dtype` or
+ * invalid paging spec.
+ *
+ * This is the size to allocate before `pco_standalone_simple_compress_into`
+ * whenever the config is not the default one.  A null `config` means the
+ * default, making this identical to `pco_standalone_guarantee_file_size`.
+ *
+ * This function is thread-safe and performs no heap allocation.
+ *
+ * # Safety
+ * `config` must be null or point to a valid `PcoChunkConfig`.
+ */
+size_t pco_standalone_guarantee_file_size_with_config(size_t n,
+                                                      unsigned char dtype,
+                                                      const struct PcoChunkConfig *config);
 
 /**
  * Compress `n` numbers of `dtype` from `nums` into the caller-owned buffer
