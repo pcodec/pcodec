@@ -1,0 +1,46 @@
+name: CodSpeed
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ labeled, synchronize, reopened ]
+
+concurrency:
+  group: codspeed-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+jobs:
+  benchmarks:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'bench')
+    name: "Benchmarks (${{ matrix.arch }})"
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: codspeed-macro-arm64-graviton-ubuntu-22-04
+          # TODO: enable these if we upgrade to paid plan
+          # - arch: x64
+          #   runner: codspeed-macro-x64-ryzen-9950x-ubuntu-24-04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Override Rust Version
+        run: rustup override set "$(cat .github/rust-test-version)"
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.8.1
+      - name: Install cargo-codspeed
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-codspeed
+      - name: Build benchmarks
+        run: cargo codspeed build -p pco --features bench
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: cargo codspeed run
+          mode: walltime
