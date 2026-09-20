@@ -77,3 +77,25 @@ mod tests {
     assert_eq!(&deltas[3..5], &orig_latents[3..5]);
   }
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::Bencher;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+
+  #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3])]
+  fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
+    let mut latents = uniform_latents::<L>(L::BITS);
+    let mut moments = vec![L::ZERO; order];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for batch in latents.chunks_mut(FULL_BATCH_N) {
+          super::decode_in_place(&mut moments, batch);
+        }
+      });
+  }
+}

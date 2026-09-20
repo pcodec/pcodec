@@ -583,3 +583,38 @@ mod tests {
     }
   }
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::{black_box, Bencher};
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+
+  // Small enough that u8 * (1 << QUANTIZATION) cannot overflow i16.
+  const QUANTIZATION: Bitlen = 6;
+
+  fn config(order: usize) -> DeltaConv1Config {
+    let total = 1_i64 << QUANTIZATION;
+    let mut weights = vec![total / order as i64; order];
+    weights[0] += total - weights.iter().sum::<i64>();
+    DeltaConv1Config::new(QUANTIZATION, 0, weights)
+  }
+
+  // Order 6 has a specialized unrolled implementation; other orders go through
+  // the generic decode_residuals.
+  #[divan::bench(types = [u8, u16, u32], args = [3, 6])]
+  fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
+    let config = config(order);
+    let mut latents = uniform_latents::<L>(L::BITS - 1);
+    let mut state = vec![L::ZERO; order];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for batch in latents.chunks_mut(FULL_BATCH_N) {
+          super::decode_in_place(black_box(&config), &mut state, batch);
+        }
+      });
+  }
+}

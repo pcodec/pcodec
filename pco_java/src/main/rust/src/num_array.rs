@@ -5,7 +5,7 @@ use pco::data_types::{Number, NumberType};
 use crate::result::Result;
 use crate::traits::JavaConversions;
 
-const TYPE_SIGNATURE: &str = "Lio/github/pcodec/NumArray;";
+const TYPE_SIGNATURE: &str = "io/github/pcodec/NumArray";
 
 pub fn from_java<'a>(
   env: &mut JNIEnv<'a>,

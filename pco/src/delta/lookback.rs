@@ -331,3 +331,42 @@ mod tests {
     assert!(has_oob_lookbacks);
   }
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::Bencher;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::metadata::DeltaLookbackConfig;
+
+  // Interleaved subsequences: each latent's predecessor sits this far back, so
+  // every lookback reaches the same distance into the window.
+  const N_SUBSEQS: DeltaLookback = 16;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn decode_in_place<L: Latent>(bencher: Bencher) {
+    let config = DeltaLookbackConfig {
+      window_n_log: 8,
+      state_n_log: 0,
+    };
+    let lookbacks = vec![N_SUBSEQS; BENCH_N];
+    let mut latents = uniform_latents::<L>(L::BITS);
+    let (mut window_buffer, mut pos) = new_window_buffer_and_pos::<L>(config, &[]);
+
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, batch) in latents.chunks_mut(FULL_BATCH_N).enumerate() {
+          let start = batch_idx * FULL_BATCH_N;
+          super::decode_in_place(
+            config,
+            &lookbacks[start..start + batch.len()],
+            &mut pos,
+            &mut window_buffer,
+            batch,
+          );
+        }
+      });
+  }
+}

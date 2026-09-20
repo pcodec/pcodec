@@ -110,3 +110,45 @@ mod tests {
     );
   }
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::Bencher;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
+
+  use crate::bench_utils::BENCH_N;
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::{Latent, Number};
+  use crate::dyn_slices::DynLatentSlice;
+  use crate::metadata::DynLatents;
+
+  const DICT_N: usize = 64;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let dict = DynLatents::new(
+      (0..DICT_N)
+        .map(|_| T::from_u64(rng.next_u64()))
+        .collect::<Vec<T>>(),
+    );
+    let idxs = (0..BENCH_N)
+      .map(|_| (rng.next_u64() % DICT_N as u64) as u32)
+      .collect::<Vec<_>>();
+    let mut dst = vec![T::ZERO; idxs.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let start = batch_idx * FULL_BATCH_N;
+          super::join_latents::<T>(
+            &dict,
+            DynLatentSlice::new(&idxs[start..start + dst_batch.len()]),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}

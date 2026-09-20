@@ -22,3 +22,31 @@ pub(crate) fn join_latents<T: Number>(primary: DynLatentSlice, dst: &mut [T]) ->
   }
   Ok(())
 }
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::Bencher;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::Latent;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    let primary = uniform_latents::<T>(T::BITS);
+    let mut dst = vec![T::ZERO; primary.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let start = batch_idx * FULL_BATCH_N;
+          super::join_latents(
+            DynLatentSlice::new(&primary[start..start + dst_batch.len()]),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
+  }
+}
