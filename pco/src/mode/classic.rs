@@ -25,7 +25,7 @@ pub(crate) fn join_latents<T: Number>(primary: DynLatentSlice, dst: &mut [T]) ->
 
 #[cfg(feature = "bench")]
 mod micro {
-  use divan::{black_box, Bencher};
+  use divan::Bencher;
 
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
@@ -43,9 +43,7 @@ mod micro {
         for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
           let start = batch_idx * FULL_BATCH_N;
           super::join_latents(
-            black_box(DynLatentSlice::new(
-              &primary[start..start + dst_batch.len()],
-            )),
+            DynLatentSlice::new(&primary[start..start + dst_batch.len()]),
             dst_batch,
           )
           .unwrap();

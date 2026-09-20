@@ -80,7 +80,7 @@ mod tests {
 
 #[cfg(feature = "bench")]
 mod micro {
-  use divan::{black_box, Bencher};
+  use divan::Bencher;
 
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
@@ -94,7 +94,7 @@ mod micro {
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
         for batch in latents.chunks_mut(FULL_BATCH_N) {
-          super::decode_in_place(black_box(&mut moments), batch);
+          super::decode_in_place(&mut moments, batch);
         }
       });
   }

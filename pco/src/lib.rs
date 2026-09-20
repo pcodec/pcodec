@@ -55,12 +55,11 @@ mod sampling;
 mod scratch_array;
 mod sort_utils;
 
-#[cfg(feature = "bench")]
-mod bench_utils;
-
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "bench")]
+mod bench_utils;
 /// Exists so that the `micro` bench target can force the linker to pull in
 /// this crate's `#[divan::bench]` items, which register themselves at startup.
 #[cfg(feature = "bench")]

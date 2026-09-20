@@ -295,23 +295,17 @@ mod micro {
   use crate::bench_utils::BENCH_N;
   use crate::constants::FULL_BATCH_N;
 
-  /// Floats whose lowest `k` mantissa bits are zero, the shape float quant
-  /// mode exists for: an `F` holding values from a lower precision type.
-  ///
-  /// Scaling an integer below `2^(PRECISION_BITS - k)` by a power of two is
-  /// exact, so the result has the mantissa bits to spare.
-  fn quantized_floats<F: Float>(n: usize, k: Bitlen) -> Vec<F> {
-    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-    let max_int = 1_u64 << (F::PRECISION_BITS - k);
-    (0..n)
-      .map(|_| F::from_f64((rng.next_u64() % max_int) as f64 * 0.125))
-      .collect()
-  }
-
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
     let k = F::PRECISION_BITS / 2;
-    let nums = quantized_floats::<F>(BENCH_N, k);
+    // Floats whose lowest `k` mantissa bits are zero, the shape float quant
+    // mode exists for. Scaling an integer below `2^(PRECISION_BITS - k)` by a
+    // power of two is exact, so the result has the mantissa bits to spare.
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let max_int = 1_u64 << (F::PRECISION_BITS - k);
+    let nums = (0..BENCH_N)
+      .map(|_| F::from_f64((rng.next_u64() % max_int) as f64 * 0.125))
+      .collect::<Vec<F>>();
     let latents = split_latents(&nums, k);
     let primary = latents.primary.downcast::<F::L>().unwrap();
     let secondary = latents.secondary.unwrap().downcast::<F::L>().unwrap();

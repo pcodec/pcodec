@@ -334,7 +334,7 @@ mod tests {
 
 #[cfg(feature = "bench")]
 mod micro {
-  use divan::{black_box, Bencher};
+  use divan::Bencher;
 
   use super::*;
   use crate::bench_utils::{interleaved_latents, BENCH_N};
@@ -361,7 +361,7 @@ mod micro {
           let end = (start + batch.len()).min(lookbacks.len());
           super::decode_in_place(
             config,
-            black_box(&lookbacks[start..end]),
+            &lookbacks[start..end],
             &mut pos,
             &mut window_buffer,
             batch,

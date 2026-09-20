@@ -667,18 +667,14 @@ mod micro {
 
   const BASE: f64 = 0.01;
 
-  /// Decimal-ish data: what float mult mode exists for.
-  fn decimal_floats<F: Float>(n: usize) -> Vec<F> {
-    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-    (0..n)
-      .map(|_| F::from_f64((rng.next_u64() % 1000) as f64 * BASE))
-      .collect()
-  }
-
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
     let base = F::from_f64(BASE);
-    let nums = decimal_floats::<F>(BENCH_N);
+    // Decimal-ish data: what float mult mode exists for.
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let nums = (0..BENCH_N)
+      .map(|_| F::from_f64((rng.next_u64() % 1000) as f64 * BASE))
+      .collect::<Vec<F>>();
     let latents = split_latents(&nums, FloatMultConfig::from_base(base));
     let primary = latents.primary.downcast::<F::L>().unwrap();
     let secondary = latents.secondary.unwrap().downcast::<F::L>().unwrap();

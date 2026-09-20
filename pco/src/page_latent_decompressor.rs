@@ -264,7 +264,7 @@ define_latent_enum!(
 
 #[cfg(feature = "bench")]
 mod micro {
-  use divan::{black_box, Bencher};
+  use divan::Bencher;
 
   use super::*;
 
@@ -276,21 +276,6 @@ mod micro {
   use crate::data_types::Number;
 
   const ANS_BINS: usize = 64;
-
-  /// Advances past a batch's offsets without decoding them, using the widths
-  /// the ANS read just wrote into scratch.
-  ///
-  /// The ANS benches need this because ANS symbols and offsets are interleaved
-  /// batch by batch in the page body: without it, the second batch's symbols
-  /// would be read from the first batch's offset bits. It costs a handful of
-  /// operations per 256 symbols.
-  unsafe fn skip_offsets<L: Latent>(reader: &mut BitReader, cld: &ChunkLatentDecompressor<L>) {
-    let last = FULL_BATCH_N - 1;
-    let offset_bits = cld.scratch.offset_bits_csum[last] + cld.scratch.offset_bits[last];
-    let bit_idx = reader.bit_idx() + offset_bits as usize;
-    reader.stale_byte_idx = bit_idx / 8;
-    reader.bits_past_byte = bit_idx as Bitlen % 8;
-  }
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn read_full_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
@@ -309,8 +294,14 @@ mod micro {
       })
       .bench_local_refs(|(reader, pld, cld)| unsafe {
         for _ in 0..BENCH_BATCHES {
-          pld.read_full_ans_symbols(black_box(reader), cld);
-          skip_offsets(reader, cld);
+          pld.read_full_ans_symbols(reader, cld);
+          // Advance past the batch's offsets without decoding them, using the
+          // widths the ANS read just wrote into scratch.
+          let last = FULL_BATCH_N - 1;
+          let offset_bits = cld.scratch.offset_bits_csum[last] + cld.scratch.offset_bits[last];
+          let bit_idx = reader.bit_idx() + offset_bits as usize;
+          reader.stale_byte_idx = bit_idx / 8;
+          reader.bits_past_byte = bit_idx as Bitlen % 8;
         }
       });
   }
@@ -331,7 +322,7 @@ mod micro {
           &mut cld.scratch;
         for _ in 0..BENCH_BATCHES {
           read_offsets::<L, READ_BYTES>(
-            black_box(reader),
+            reader,
             &scratch.offset_bits_csum.0,
             &scratch.offset_bits.0,
             &mut scratch.latents.0,

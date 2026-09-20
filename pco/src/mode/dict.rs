@@ -113,7 +113,7 @@ mod tests {
 
 #[cfg(feature = "bench")]
 mod micro {
-  use divan::{black_box, Bencher};
+  use divan::Bencher;
   use rand_xoshiro::rand_core::{RngCore, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
 
@@ -143,7 +143,7 @@ mod micro {
         for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
           let start = batch_idx * FULL_BATCH_N;
           super::join_latents::<T>(
-            black_box(&dict),
+            &dict,
             DynLatentSlice::new(&idxs[start..start + dst_batch.len()]),
             dst_batch,
           )
