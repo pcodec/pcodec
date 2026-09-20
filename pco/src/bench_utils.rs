@@ -16,6 +16,8 @@ use crate::page_latent_decompressor::PageLatentDecompressor;
 use crate::wrapped::{FileCompressor, FileDecompressor};
 use crate::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
 
+pub const BENCH_BATCHES: usize = 64;
+pub const BENCH_N: usize = BENCH_BATCHES * FULL_BATCH_N;
 // Reads at the end of a batch overshoot the bits they need by up to 15 bytes.
 const PADDING: usize = 64;
 // Distinct values are spread over the latent type's range, up to this much
@@ -23,27 +25,21 @@ const PADDING: usize = 64;
 // offset bits than it saves in metadata.
 const MAX_SEPARATION: u128 = 1000;
 
-/// Values drawn from a geometrically weighted set of `n_distinct` widely
-/// separated values.
-///
-/// Separating the values keeps bin optimization from merging them away, which
-/// is what makes the bin count (and therefore the ANS table) controllable.
-pub fn clustered_nums<L: Latent>(n_distinct: usize) -> Vec<L> {
+/// Drawn from a set of `n_distinct` widely separated values.
+pub fn clustered_latents<L: Latent>(n_distinct: usize) -> Vec<L> {
   assert!(n_distinct <= 1 << L::BITS.min(16));
   let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
   let separation = ((1_u128 << L::BITS) / n_distinct as u128).min(MAX_SEPARATION) as u64;
-  let mean = n_distinct as f64 / 4.0;
   (0..BENCH_N)
     .map(|_| {
-      let u = (rng.next_u64() >> 11) as f64 / (1_u64 << 53) as f64;
-      let symbol = (((-(1.0 - u).ln()) * mean) as usize).min(n_distinct - 1);
+      let symbol = rng.next_u64() as usize % n_distinct;
       L::from_u64(symbol as u64 * separation)
     })
     .collect()
 }
 
 /// Uniformly random values in `[0, 2^n_bits)`.
-pub fn uniform_offsets<L: Latent>(n_bits: Bitlen) -> Vec<L> {
+pub fn uniform_latents<L: Latent>(n_bits: Bitlen) -> Vec<L> {
   let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
   (0..BENCH_N)
     .map(|_| {
@@ -53,22 +49,9 @@ pub fn uniform_offsets<L: Latent>(n_bits: Bitlen) -> Vec<L> {
     .collect()
 }
 
-/// A random walk, which is the shape consecutive and conv1 delta encoding
-/// exist for.
-pub fn random_walk_nums<L: Latent>() -> Vec<L> {
-  let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-  let mut x = 1_u64 << 30;
-  (0..BENCH_N)
-    .map(|_| {
-      x = x.wrapping_add(rng.next_u64() % 64).wrapping_sub(32);
-      L::from_u64(x)
-    })
-    .collect()
-}
-
 /// Interleaved subsequences, which is the shape lookback delta encoding exists
 /// for.
-pub fn interleaved_nums<L: Latent>() -> Vec<L> {
+pub fn interleaved_latents<L: Latent>() -> Vec<L> {
   const N_SUBSEQS: usize = 16;
   let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
   let mut subseqs = [0_u64; N_SUBSEQS];
@@ -80,11 +63,6 @@ pub fn interleaved_nums<L: Latent>() -> Vec<L> {
     })
     .collect()
 }
-
-/// Every microbenchmark works over this many latents, in this many batches, so
-/// that their throughputs are directly comparable.
-pub const BENCH_BATCHES: usize = 64;
-pub const BENCH_N: usize = BENCH_BATCHES * FULL_BATCH_N;
 
 /// A page's worth of compressed primary latents, plus the decompressor state
 /// needed to read it.
@@ -147,8 +125,6 @@ impl<L: Latent> LatentFixture<L> {
     }
   }
 
-  /// A reader positioned at the first byte of the page body, i.e. where the
-  /// first batch's ANS symbols begin.
   pub fn reader(&self) -> BitReader<'_> {
     let mut reader = BitReader::new(&self.src, self.unpadded_len, 0);
     reader.stale_byte_idx = self.body_byte_idx;
@@ -185,13 +161,13 @@ mod tests {
 
   #[test]
   fn bin_counts_track_distinct_values() {
-    for (n_distinct, expected_n_bins) in [(16, 16), (64, 64)] {
-      let nums = clustered_nums::<u32>(n_distinct);
+    for n_distinct in [16, 64, 256] {
+      let nums = clustered_latents::<u32>(n_distinct);
       let fixture = LatentFixture::new(
         &nums,
         &single_latent_var_config(MAX_COMPRESSION_LEVEL),
       );
-      assert_eq!(fixture.cld.n_bins, expected_n_bins);
+      assert_eq!(fixture.cld.n_bins, n_distinct);
     }
   }
 
@@ -199,7 +175,7 @@ mod tests {
   /// original latents, so check that a full pass does.
   #[test]
   fn fixture_round_trips() {
-    let nums = clustered_nums::<u64>(64);
+    let nums = clustered_latents::<u64>(64);
     let fixture = LatentFixture::new(
       &nums,
       &single_latent_var_config(MAX_COMPRESSION_LEVEL),

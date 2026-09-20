@@ -269,16 +269,13 @@ mod micro {
   use super::*;
 
   use crate::bench_utils::{
-    clustered_nums, single_latent_var_config, uniform_offsets, LatentFixture, BENCH_BATCHES,
+    clustered_latents, single_latent_var_config, uniform_latents, LatentFixture, BENCH_BATCHES,
     BENCH_N,
   };
   use crate::constants::MAX_COMPRESSION_LEVEL;
   use crate::data_types::Number;
 
-  // Enough distinct values to give the ANS table some size, but not so many
-  // that bin optimization starts merging them away. Narrow latent types can't
-  // hold that many well-separated values, so they get fewer.
-  const MAX_N_DISTINCT: usize = 256;
+  const ANS_BINS: usize = 64;
 
   /// Advances past a batch's offsets without decoding them, using the widths
   /// the ANS read just wrote into scratch.
@@ -296,10 +293,8 @@ mod micro {
   }
 
   fn ans_fixture<L: Latent + Number<L = L>>() -> LatentFixture<L> {
-    let n_distinct = MAX_N_DISTINCT.min(1 << (L::BITS / 2));
-    let nums = clustered_nums::<L>(n_distinct);
     LatentFixture::new(
-      &nums,
+      &clustered_latents::<L>(ANS_BINS),
       &single_latent_var_config(MAX_COMPRESSION_LEVEL),
     )
   }
@@ -348,7 +343,7 @@ mod micro {
     bencher: Bencher,
     n_bits: Bitlen,
   ) {
-    let nums = uniform_offsets::<L>(n_bits);
+    let nums = uniform_latents::<L>(n_bits);
     let fixture = LatentFixture::new(&nums, &single_latent_var_config(0));
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))

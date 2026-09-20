@@ -83,12 +83,12 @@ mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;
-  use crate::bench_utils::random_walk_nums;
+  use crate::bench_utils::uniform_latents;
   use crate::constants::FULL_BATCH_N;
 
   #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3])]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
-    let mut latents = random_walk_nums::<L>();
+    let mut latents = uniform_latents::<L>(L::BITS);
     let mut moments = encode_in_place(order, &mut latents);
     bencher
       .counter(divan::counter::ItemsCount::new(

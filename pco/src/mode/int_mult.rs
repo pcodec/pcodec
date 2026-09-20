@@ -336,7 +336,7 @@ mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;
-  use crate::bench_utils::{random_walk_nums, BENCH_N};
+  use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
   use crate::data_types::Latent;
 
@@ -347,7 +347,7 @@ mod micro {
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
     let base = T::from_u64(BASE);
-    let nums = random_walk_nums::<T>()
+    let nums = uniform_latents::<T>(T::BITS)
       .into_iter()
       .map(|x| x.wrapping_mul(base))
       .collect::<Vec<_>>();
