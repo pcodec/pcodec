@@ -596,12 +596,11 @@ mod micro {
   // the generic decode_residuals.
   #[divan::bench(types = [u8, u16, u32], args = [3, 6])]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
-    let n = BENCH_N;
     let mut latents = uniform_latents::<L>(L::BITS);
     let config = choose_config(order, &latents).expect("conv1 rejected the bench data");
     let mut state = encode_in_place(&config, &mut latents);
     bencher
-      .counter(divan::counter::ItemsCount::new(n))
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
         for batch in latents.chunks_mut(FULL_BATCH_N) {
           super::decode_in_place(black_box(&config), &mut state, batch);

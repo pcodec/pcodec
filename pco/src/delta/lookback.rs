@@ -346,14 +346,13 @@ mod micro {
       window_n_log: 8,
       state_n_log: 0,
     };
-    let n = BENCH_N;
     let mut latents = interleaved_latents::<L>();
     let lookbacks = choose_lookbacks(config, &latents);
     encode_in_place(config, &lookbacks, &mut latents);
     let (mut window_buffer, mut pos) = new_window_buffer_and_pos::<L>(config, &[]);
 
     bencher
-      .counter(divan::counter::ItemsCount::new(n))
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
         for (batch_idx, batch) in latents.chunks_mut(FULL_BATCH_N).enumerate() {
           let start = batch_idx * FULL_BATCH_N;

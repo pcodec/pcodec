@@ -14,8 +14,7 @@ repository = "https://github.com/pcodec/pcodec"
 rust-version = "1.87.0"
 
 [lib]
-# There is one bench target and filtering selects within it, so `cargo bench`
-# should not also run the unit test harness in bench mode.
+# disables building the libtest harness when running cargo bench
 bench = false
 
 [dependencies]
@@ -29,8 +28,7 @@ rand_xoshiro = { workspace = true }
 rand = "0.8.4"
 
 [features]
-# Microbenchmarks of pco internals. Not public API; exists only so that
-# `benches/` can reach routines that are private to the crate.
+# Microbenchmarks of pco internals. Not intended for public use.
 bench = ["dep:divan"]
 
 [[bench]]

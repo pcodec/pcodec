@@ -83,7 +83,7 @@ mod micro {
   use divan::{black_box, Bencher};
 
   use super::*;
-  use crate::bench_utils::uniform_latents;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
   #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3])]
@@ -91,9 +91,7 @@ mod micro {
     let mut latents = uniform_latents::<L>(L::BITS);
     let mut moments = encode_in_place(order, &mut latents);
     bencher
-      .counter(divan::counter::ItemsCount::new(
-        latents.len(),
-      ))
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
         for batch in latents.chunks_mut(FULL_BATCH_N) {
           super::decode_in_place(black_box(&mut moments), batch);

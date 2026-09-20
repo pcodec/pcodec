@@ -162,9 +162,8 @@ mod tests {
   #[test]
   fn bin_counts_track_distinct_values() {
     for n_distinct in [16, 64, 256] {
-      let nums = clustered_latents::<u32>(n_distinct);
       let fixture = LatentFixture::new(
-        &nums,
+        &clustered_latents::<u32>(n_distinct),
         &single_latent_var_config(MAX_COMPRESSION_LEVEL),
       );
       assert_eq!(fixture.cld.n_bins, n_distinct);
@@ -175,21 +174,21 @@ mod tests {
   /// original latents, so check that a full pass does.
   #[test]
   fn fixture_round_trips() {
-    let nums = clustered_latents::<u64>(64);
+    let latents = clustered_latents::<u64>(64);
     let fixture = LatentFixture::new(
-      &nums,
+      &latents,
       &single_latent_var_config(MAX_COMPRESSION_LEVEL),
     );
     let mut reader = fixture.reader();
     let mut pld = fixture.pld();
     let mut cld = fixture.cld();
 
-    let mut recovered = Vec::with_capacity(nums.len());
+    let mut recovered = Vec::with_capacity(latents.len());
     for _ in 0..BENCH_BATCHES {
       unsafe { pld.read_batch_pre_delta(&mut reader, FULL_BATCH_N, &mut cld) };
       recovered.extend_from_slice(&cld.scratch.latents[..FULL_BATCH_N]);
     }
 
-    assert_eq!(recovered, nums);
+    assert_eq!(recovered, latents);
   }
 }

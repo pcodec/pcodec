@@ -292,16 +292,12 @@ mod micro {
     reader.bits_past_byte = bit_idx as Bitlen % 8;
   }
 
-  fn ans_fixture<L: Latent + Number<L = L>>() -> LatentFixture<L> {
-    LatentFixture::new(
-      &clustered_latents::<L>(ANS_BINS),
-      &single_latent_var_config(MAX_COMPRESSION_LEVEL),
-    )
-  }
-
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn read_full_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
-    let fixture = ans_fixture::<L>();
+    let fixture = LatentFixture::new(
+      &clustered_latents::<L>(ANS_BINS),
+      &single_latent_var_config(MAX_COMPRESSION_LEVEL),
+    );
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| {
@@ -319,32 +315,14 @@ mod micro {
       });
   }
 
-  #[divan::bench(types = [u8, u16, u32, u64])]
-  fn read_ans_symbols<L: Latent + Number<L = L>>(bencher: Bencher) {
-    let fixture = ans_fixture::<L>();
-    bencher
-      .counter(divan::counter::ItemsCount::new(BENCH_N))
-      .with_inputs(|| {
-        (
-          fixture.reader(),
-          fixture.pld(),
-          fixture.cld(),
-        )
-      })
-      .bench_local_refs(|(reader, pld, cld)| unsafe {
-        for _ in 0..BENCH_BATCHES {
-          pld.read_ans_symbols(black_box(reader), FULL_BATCH_N, cld);
-          skip_offsets(reader, cld);
-        }
-      });
-  }
-
   fn bench_read_offsets<L: Latent + Number<L = L>, const READ_BYTES: usize>(
     bencher: Bencher,
     n_bits: Bitlen,
   ) {
-    let nums = uniform_latents::<L>(n_bits);
-    let fixture = LatentFixture::new(&nums, &single_latent_var_config(0));
+    let fixture = LatentFixture::new(
+      &uniform_latents::<L>(n_bits),
+      &single_latent_var_config(0),
+    );
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| (fixture.reader(), fixture.cld()))
