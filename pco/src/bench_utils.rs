@@ -4,12 +4,11 @@ use rand_xoshiro::Xoroshiro128PlusPlus;
 use crate::constants::{Bitlen, FULL_BATCH_N};
 use crate::data_types::Latent;
 
-/// Every microbenchmark works over this many latents, in this many batches, so
-/// that their throughputs are directly comparable.
+/// Every decompression microbenchmark works over this many latents, in this
+/// many batches, so that their throughputs are directly comparable.
 pub const BENCH_BATCHES: usize = 64;
 pub const BENCH_N: usize = BENCH_BATCHES * FULL_BATCH_N;
 
-/// Uniformly random values in `[0, 2^n_bits)`.
 pub fn uniform_latents<L: Latent>(n_bits: Bitlen) -> Vec<L> {
   let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
   (0..BENCH_N)
