@@ -1,0 +1,41 @@
+# Continuous benchmarking of the pco crate with CodSpeed.
+# Runs the divan benchmarks (microbenchmarks of pco's internals plus
+# end-to-end benchmarks of its public API) under CPU simulation.
+
+name: CodSpeed
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  # `workflow_dispatch` allows CodSpeed to trigger backtest
+  # performance analysis in order to generate initial data.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # for OpenID Connect authentication with CodSpeed
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmarks:
+    name: "Benchmarks"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust toolchain, cache and cargo-codspeed binary
+        uses: moonrepo/setup-rust@v1
+        with:
+          channel: stable
+          cache-target: release
+          bins: cargo-codspeed
+      - name: Build the benchmark target(s)
+        run: cargo codspeed build -p pco --features bench
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@v5
+        with:
+          mode: simulation
+          run: cargo codspeed run

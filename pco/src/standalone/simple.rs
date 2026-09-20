@@ -213,3 +213,108 @@ mod tests {
     Ok(())
   }
 }
+
+// End-to-end benchmarks of the public API, covering mode and delta inference
+// as well as the encoding/decoding the microbenchmarks focus on.
+// For compressed sizes or benchmarks over real datasets, use `pcodec bench`.
+#[cfg(feature = "bench")]
+mod e2e {
+  use divan::Bencher;
+
+  use super::*;
+  use crate::bench_utils::{decimal_f64s, id_i32s, random_i64s, smooth_f32s, timestamp_i64s};
+
+  fn bench_compress<T: Number>(bencher: Bencher, nums: Vec<T>, config: ChunkConfig) {
+    bencher.bench_local(|| simple_compress(&nums, &config).unwrap());
+  }
+
+  fn bench_decompress<T: Number>(bencher: Bencher, nums: Vec<T>) {
+    let src = simple_compress(&nums, &ChunkConfig::default()).unwrap();
+    bencher.bench_local(|| simple_decompress::<T>(&src).unwrap());
+  }
+
+  mod compress {
+    use super::*;
+
+    #[divan::bench]
+    fn random_i64(bencher: Bencher) {
+      bench_compress(
+        bencher,
+        random_i64s(),
+        ChunkConfig::default(),
+      );
+    }
+
+    #[divan::bench]
+    fn timestamp_i64(bencher: Bencher) {
+      bench_compress(
+        bencher,
+        timestamp_i64s(),
+        ChunkConfig::default(),
+      );
+    }
+
+    #[divan::bench]
+    fn id_i32(bencher: Bencher) {
+      bench_compress(bencher, id_i32s(), ChunkConfig::default());
+    }
+
+    #[divan::bench]
+    fn decimal_f64(bencher: Bencher) {
+      bench_compress(
+        bencher,
+        decimal_f64s(),
+        ChunkConfig::default(),
+      );
+    }
+
+    #[divan::bench]
+    fn smooth_f32(bencher: Bencher) {
+      bench_compress(
+        bencher,
+        smooth_f32s(),
+        ChunkConfig::default(),
+      );
+    }
+
+    /// How much compression level costs, on data where every mode and delta
+    /// encoding is a dead end.
+    #[divan::bench(args = [0, 12])]
+    fn random_i64_level(bencher: Bencher, level: usize) {
+      bench_compress(
+        bencher,
+        random_i64s(),
+        ChunkConfig::default().with_compression_level(level),
+      );
+    }
+  }
+
+  mod decompress {
+    use super::*;
+
+    #[divan::bench]
+    fn random_i64(bencher: Bencher) {
+      bench_decompress(bencher, random_i64s());
+    }
+
+    #[divan::bench]
+    fn timestamp_i64(bencher: Bencher) {
+      bench_decompress(bencher, timestamp_i64s());
+    }
+
+    #[divan::bench]
+    fn id_i32(bencher: Bencher) {
+      bench_decompress(bencher, id_i32s());
+    }
+
+    #[divan::bench]
+    fn decimal_f64(bencher: Bencher) {
+      bench_decompress(bencher, decimal_f64s());
+    }
+
+    #[divan::bench]
+    fn smooth_f32(bencher: Bencher) {
+      bench_decompress(bencher, smooth_f32s());
+    }
+  }
+}
