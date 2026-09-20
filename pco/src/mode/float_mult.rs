@@ -658,21 +658,28 @@ mod test {
 mod micro {
   use divan::{black_box, Bencher};
   use half::f16;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
 
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
   const BASE: f64 = 0.01;
-  // Decimal-ish data: a few digits of multiplier, with small adjustments.
-  const MULT_BITS: Bitlen = 10;
+  const MAX_MULT: u64 = 1000;
   const ADJ_BITS: Bitlen = 4;
 
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
     let base = F::from_f64(BASE);
-    let mults = uniform_latents::<F::L>(MULT_BITS);
-    let adjs = uniform_latents::<F::L>(ADJ_BITS);
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let mults = (0..BENCH_N)
+      .map(|_| F::from_f64((rng.next_u64() % MAX_MULT) as f64).int_float_to_latent())
+      .collect::<Vec<_>>();
+    let adjs = uniform_latents::<F::L>(ADJ_BITS)
+      .into_iter()
+      .map(|ulps| F::L::MID.wrapping_add(ulps))
+      .collect::<Vec<_>>();
     let mut dst = vec![F::ZERO; mults.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))

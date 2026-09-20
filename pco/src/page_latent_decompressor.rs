@@ -273,12 +273,11 @@ mod micro {
   use crate::constants::{Weight, OVERSHOOT_PADDING};
   use crate::metadata::Bin;
 
-  const ANS_SIZE_LOG: Bitlen = 8;
+  const ANS_SIZE_LOG: Bitlen = 10;
   const ANS_BINS: usize = 64;
 
-  /// Random bits for the decoder to walk. ANS decoding is table lookups, so
-  /// any bits decode; what the table does with them is set by the bins.
-  fn page_body(n_bits: usize) -> Vec<u8> {
+  // All bitstreams are valid for ANS decoding.
+  fn random_page_body(n_bits: usize) -> Vec<u8> {
     let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
     (0..n_bits.div_ceil(8) + OVERSHOOT_PADDING)
       .map(|_| rng.next_u64() as u8)
@@ -320,7 +319,7 @@ mod micro {
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn read_full_ans_symbols<L: Latent + 'static>(bencher: Bencher) {
     // Worst case is one symbol per table entry's widest read.
-    let src = page_body(BENCH_N * ANS_SIZE_LOG as usize);
+    let src = random_page_body(BENCH_N * ANS_SIZE_LOG as usize);
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| (reader(&src), pld::<L>(), ans_cld::<L>()))
@@ -343,7 +342,7 @@ mod micro {
   }
 
   fn bench_read_offsets<L: Latent, const READ_BYTES: usize>(bencher: Bencher, n_bits: Bitlen) {
-    let src = page_body(BENCH_N * n_bits as usize);
+    let src = random_page_body(BENCH_N * n_bits as usize);
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| (reader(&src), offset_cld::<L>(n_bits)))
@@ -361,8 +360,6 @@ mod micro {
       });
   }
 
-  // One bench per (latent type, READ_BYTES) pair reachable through
-  // read_batch_pre_delta's dispatch, matching force_export! above.
   #[divan::bench]
   fn read_offsets_u8_4(bencher: Bencher) {
     bench_read_offsets::<u8, 4>(bencher, 8);

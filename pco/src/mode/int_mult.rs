@@ -340,13 +340,12 @@ mod micro {
   use crate::constants::FULL_BATCH_N;
   use crate::data_types::Latent;
 
-  const BASE: u64 = 7;
-
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
-    let base = T::from_u64(BASE);
-    let mults = uniform_latents::<T>(T::BITS);
-    let adjs = uniform_latents::<T>(BASE.ilog2());
+    // base, mults, adjs chosen to avoid overflow on all dtypes
+    let base = T::from_u64(3);
+    let mults = uniform_latents::<T>(6);
+    let adjs = uniform_latents::<T>(5);
     let mut dst = vec![T::ZERO; mults.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))

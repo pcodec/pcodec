@@ -1,6 +1,3 @@
-//! The little that the microbenchmarks in `#[cfg(feature = "bench")] mod micro`
-//! modules share. See `benches/micro.rs`.
-
 use rand_xoshiro::rand_core::{RngCore, SeedableRng};
 use rand_xoshiro::Xoroshiro128PlusPlus;
 

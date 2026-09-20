@@ -592,10 +592,8 @@ mod micro {
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
-  // The weights sum to `1 << QUANTIZATION`, so a prediction is a weighted mean
-  // of the preceding latents. Kept small enough that the accumulator, which is
-  // only an i16 for u8 latents, cannot overflow.
-  const QUANTIZATION: Bitlen = 7;
+  // Small enough that u8 * (1 << QUANTIZATION) cannot overflow i16.
+  const QUANTIZATION: Bitlen = 6;
 
   fn config(order: usize) -> DeltaConv1Config {
     let total = 1_i64 << QUANTIZATION;
