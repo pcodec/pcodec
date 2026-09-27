@@ -21,6 +21,7 @@ def get_release_version() -> str:
     return toml.load("../Cargo.toml")["package"]["version"]
 
 version = get_release_version()
+release = version
 
 # from pcodec import standalone, wrapped
 
@@ -41,4 +42,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'alabaster'
+html_title = f'{project} v{release}'
+html_theme_options ={'description': f'v{release}'}
 html_static_path = ['_static']
