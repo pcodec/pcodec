@@ -41,4 +41,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'alabaster'
+html_title = f'{project} v{version}'
+html_theme_options ={'description': f'v{version}'}
 html_static_path = ['_static']
