@@ -51,7 +51,7 @@ numerical sequences with
 * [Rust API](https://docs.rs/pco/latest/pco/)
 * [Python API](https://pcodec.readthedocs.io/en/latest/)
 * [Java API](pco_java/README.md)
-* [C API](pco_c/README.md) (incomplete)
+* [C API](pco_c/README.md)
 
 ## How It Works
 
@@ -72,7 +72,7 @@ Pco uses a holistic, 3-step approach:
   lookback).
   If so, it takes differences.
 * **binning**.
-  This is the core of Pco and its most novel part.
+  This is the core and most novel part of Pco.
   Pco represents each delta-encoded latent variable as an approximate,
   entropy-coded bin paired with an exact offset into that bin.
   This nears the Shannon entropy of any smooth distribution very efficiently.
@@ -130,7 +130,7 @@ Suppose we assign these as `fare[0...n]` and `trip_miles[0...n]` respectively, w
 * [format specification](docs/format.md)
 * [benchmark results](docs/benchmark_results.md)
 * [binding versions per language](docs/ffi_versions.md)
-* [naming and etymology](docs/terminology.md)
+* [naming](docs/naming.md)
 * [academic papers](docs/academic_result.md)
 * [contributing guide](docs/CONTRIBUTING.md)
 * [Quantile Compression: Pco's predecessor](quantile-compression/README.md)

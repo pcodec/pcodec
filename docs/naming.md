@@ -1,4 +1,4 @@
-# Naming and Etymology
+# Naming
 
 The names Pcodec and Pco were chosen for these reasons:
 * "Pico" suggests that it makes very small things.
