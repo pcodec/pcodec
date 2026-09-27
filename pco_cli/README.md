@@ -4,10 +4,10 @@
 
 [crates-url]: https://crates.io/crates/pco_cli
 
-# Setup
+The CLI compresses, decompresses, inspects, and benchmarks standalone .pco
+files.
 
-You can compress, decompress, inspect, and benchmark standalone .pco files using the CLI.
-Follow this setup:
+# Setup
 
 1. Install Rust: https://www.rust-lang.org/tools/install
 2. (optional but recommended for best performance on x86) [Configure the instruction sets available](../pco/README.md#compilation-notes)
@@ -17,7 +17,7 @@ This provides you with the `pcodec` command.
 
 # Command Info
 
-You can always get help, e.g. `pcodec`, `pcodec compress --help`.
+Help is always available, e.g. `pcodec`, `pcodec compress --help`.
 
 ## Bench
 

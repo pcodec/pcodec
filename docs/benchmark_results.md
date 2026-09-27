@@ -4,7 +4,7 @@
 
 Below we compare speeds and compressed sizes on 3 real-world datasets.
 All these results, as well as those from [the paper](https://arxiv.org/abs/2502.06112), are available in the results CSVs, e.g. 
-[results for columnar datasets on a macbook pro](./benchmark_results/columnar_mbp_m3_max_rust1_82.csv).
+[results for columnar datasets on a macbook pro](./benchmark_results/columnar_mbp_m3_max_rust1_89.csv).
 All benchmarks reported here and in the paper can be easily run via
 [the CLI](../pco_cli/README.md#bench).
 

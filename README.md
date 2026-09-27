@@ -47,15 +47,13 @@ numerical sequences with
 
 ## Get Started
 
-[Use the CLI](./pco_cli/README.md) (also supports benchmarking)
+* [CLI](pco_cli/README.md) (also runs benchmarks)
+* [Rust API](https://docs.rs/pco/latest/pco/)
+* [Python API](https://pcodec.readthedocs.io/en/latest/)
+* [Java API](pco_java/README.md)
+* [C API](pco_c/README.md)
 
-[Use the Rust API](https://docs.rs/pco/latest/pco/)
-
-[Use the Python API](https://pcodec.readthedocs.io/en/latest/)
-
-[Use the Java API](./pco_java/README.md)
-
-## How is Pco so much better than alternatives?
+## How It Works
 
 Pco is designed specifically for numerical data, whereas alternatives rely on
 general-purpose (LZ) compressors that target string or binary data.
@@ -70,11 +68,11 @@ Pco uses a holistic, 3-step approach:
   Most natural data uses classic mode, which simply matches `x = l_0`.
 * **delta encoding**.
   Pco identifies whether certain latent variables would be better compressed as
-  deltas between consecutive elements (or deltas of deltas, or deltas with 
+  deltas between consecutive elements (or deltas of deltas, or deltas with
   lookback).
   If so, it takes differences.
 * **binning**.
-  This is the heart and most novel part of Pco.
+  This is the core and most novel part of Pco.
   Pco represents each delta-encoded latent variable as an approximate,
   entropy-coded bin paired with an exact offset into that bin.
   This nears the Shannon entropy of any smooth distribution very efficiently.
@@ -90,12 +88,12 @@ exact sequences of numbers.
 Pco is designed to embed into wrapping formats.
 To that end, we provide a wrapped API that allows users to place each of Pco's
 components in their files as needed.
-This separates concerns by allowing Pco to handle compression while the wrapping
-format to handles domain-specific needs like nullability, multiple
-columns/channels, random access, or seeking.
+This separates concerns: Pco handles compression, and the wrapping format
+handles domain-specific needs like nullability, multiple columns/channels,
+random access, or seeking.
 
 The standalone format is a minimal implementation of a wrapped format.
-It supports batched decompression only with no other niceties.
+It supports batched decompression and nothing else.
 It is mainly recommended for quick proofs of concept and benchmarking.
 
 ### Granularity
@@ -110,12 +108,12 @@ By default Pco uses up to 2^18 (~262k) numbers per chunk if available.
 | page  | interleaving w/ wrapping format | \>1k numbers              |
 | batch | decompression                   | 256 numbers (fixed)       |
 
-### Mistakes to Avoid
+### Pitfalls
 
-You may get disappointing results from Pco if your data in a single chunk
+Compression will be disappointing if the data in a single chunk
 
-* combines semantically different sequences, or
-* contains too few numbers (see above section),
+* combines semantically different sequences,
+* contains too few numbers (see above), or
 * is inherently 2D or higher.
 
 Example: the NYC taxi dataset has `f64` columns for `fare` and
@@ -127,23 +125,17 @@ Suppose we assign these as `fare[0...n]` and `trip_miles[0...n]` respectively, w
 * single chunk `fare[0], ... fare[n-1], trip_miles[0], ..., trip_miles[n-1]` => bad compression
 * single chunk `fare[0], trip_miles[0], ..., fare[n-1], trip_miles[n-1]` => bad compression
 
-## Extra
+## More Documentation
 
-### Docs
+* [format specification](docs/format.md)
+* [benchmark results](docs/benchmark_results.md)
+* [binding versions per language](docs/ffi_versions.md)
+* [naming](docs/naming.md)
+* [academic papers](docs/academic_result.md)
+* [contributing guide](docs/CONTRIBUTING.md)
+* [Quantile Compression: Pco's predecessor](quantile-compression/README.md)
 
-[benchmarks: see the results](docs/benchmark_results.md)
+## Community
 
-[format specification](./docs/format.md)
-
-[terminology](./docs/terminology.md)
-
-[Quantile Compression: Pcodec's predecessor](./quantile-compression/README.md)
-
-[contributing guide](./docs/CONTRIBUTING.md)
-
-[Academic papers and projects](./docs/academic_result.md)
-
-### Community
-
-[join the Discord](https://discord.gg/f6eRXgMP8w)
+[Join the Discord](https://discord.gg/f6eRXgMP8w)
 
