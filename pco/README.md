@@ -5,6 +5,9 @@
 Pco (Pcodec) losslessly compresses and decompresses numerical sequences with
 high compression ratio and moderately fast speed.
 
+For pcodec's uses, design, and benchmarks,
+[see the main repo](https://github.com/pcodec/pcodec).
+
 # Quick Start
 
 ```rust
