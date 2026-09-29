@@ -155,7 +155,7 @@ macro_rules! build_dtype_macros {
 
         impl<'a> $name<'a> {
           #[inline]
-          pub fn new<S: $constraint>(inner: &$container<S>) -> Self {
+          pub fn new<S: $constraint>(inner: &'a $container<S>) -> Self {
             let type_id = std::any::TypeId::of::<S>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
@@ -194,7 +194,7 @@ macro_rules! build_dtype_macros {
 
         impl<'a> $name<'a> {
           #[inline]
-          pub fn new<S: $constraint>(inner: &mut $container<S>) -> Self {
+          pub fn new<S: $constraint>(inner: &'a mut $container<S>) -> Self {
             let type_id = std::any::TypeId::of::<S>();
             $(
               if type_id == std::any::TypeId::of::<$t>() {
