@@ -76,33 +76,31 @@ macro_rules! build_dtype_macros {
 
         impl $name {
           #[inline]
-          #[allow(clippy::forget_non_drop)]
           pub fn new<S: $constraint>(inner: $container<S>) -> Self {
             let type_id = std::any::TypeId::of::<S>();
+            let inner = std::mem::ManuallyDrop::new(inner);
             $(
               if type_id == std::any::TypeId::of::<$t>() {
                 // Transmute doesn't work for containers whose size depends on T,
                 // so we use a hack from
                 // https://users.rust-lang.org/t/transmuting-a-generic-array/45645/6
-                let ptr = &inner as *const $container<S> as *const $container<$t>;
+                let ptr = &*inner as *const $container<S> as *const $container<$t>;
                 let typed = unsafe { ptr.read() };
-                std::mem::forget(inner);
                 return $name::$variant(typed);
               }
             )+
             unreachable!();
           }
 
-          #[allow(clippy::forget_non_drop)]
           pub fn downcast<T: $constraint>(self) -> Option<$container<T>> {
             match self {
               $(
                 Self::$variant(inner) => {
                   if std::any::TypeId::of::<T>() == std::any::TypeId::of::<$t>() {
                     // same hack from `new`
-                    let ptr = &inner as *const $container<$t> as *const $container<T>;
+                    let inner = std::mem::ManuallyDrop::new(inner);
+                    let ptr = &*inner as *const $container<$t> as *const $container<T>;
                     let typed = unsafe { ptr.read() };
-                    std::mem::forget(inner);
                     Some(typed)
                   } else {
                     None

@@ -109,14 +109,17 @@ pub fn break_patterns<L>(v: &mut [L]) {
 pub fn partition<L: Latent>(latents: &mut [L], pivot: L) -> (usize, bool) {
   // |-- < pivot--|-- >= pivot --|-- unprocessed --|
   let mut left_idx = 0;
-  let mut pos = latents.as_mut_ptr();
+  let len = latents.len();
+  let base = latents.as_mut_ptr();
+  let mut pos = base;
   unsafe {
-    let end = latents.as_mut_ptr().add(latents.len());
+    let end = base.add(len);
     while pos < end {
       let value = *pos;
       let is_lt_pivot = value < pivot;
-      *pos = *latents.get_unchecked(left_idx);
-      *latents.get_unchecked_mut(left_idx) = value;
+      let left = base.add(left_idx);
+      *pos = *left;
+      *left = value;
       left_idx += is_lt_pivot as usize;
       pos = pos.add(1);
     }
