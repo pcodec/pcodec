@@ -21,18 +21,26 @@ pub(crate) fn join_latents<F: Float>(
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;
-  let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
+  // mask for the bits the shifted primary will occupy
+  let high_mask = !((F::L::ONE << k) - F::L::ONE);
+
+  // `y << k` and the low k bits never overlap, so the add that rejoins them is
+  // a xor, and both remaining steps are xors by a sign-dependent constant too:
+  // `split_latents` flipped the low k bits of negative floats, and
+  // `from_latent_ordered` flips either every bit below the sign (negative) or
+  // just the sign (positive). Folding all of it into one xor chain can reduce
+  // the number of instructions required.
+  //   positive: (y << k | m) ^ MID
+  //   negative: !(y << k | (m ^ !high_mask)) == (y << k) ^ m ^ high_mask
   for ((&y, &m), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    let is_pos_as_float = y >= sign_cutoff;
-    // `m` is untrusted, so it may exceed k bits, in which case this wraps and
-    // we decode to garbage (but never panic). Our own compressor only ever
-    // emits k-bit `m`s; see the debug assertion in `split_latents`.
-    let lowest_k_bits = if is_pos_as_float {
-      m
+    // `m` is untrusted, so it may exceed k bits, in which case the xors below
+    // collide and we decode to garbage (but never panic).
+    let flip = if y < sign_cutoff {
+      high_mask
     } else {
-      lowest_k_bits_max.wrapping_sub(m)
+      F::L::MID
     };
-    *dst = F::from_latent_ordered((y << k).wrapping_add(lowest_k_bits));
+    *dst = F::from_latent_bits((y << k) ^ m ^ flip);
   }
 
   Ok(())
