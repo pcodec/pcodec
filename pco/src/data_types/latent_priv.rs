@@ -11,8 +11,10 @@ pub trait LatentPriv:
   + AddAssign
   + BitAnd<Output = Self>
   + BitOr<Output = Self>
+  + BitXor<Output = Self>
   + BitAndAssign
   + BitOrAssign
+  + Not<Output = Self>
   + Display
   + Div<Output = Self>
   + DivAssign
