@@ -200,6 +200,10 @@ mod micro {
   thread_local! {
     static PAGE_IDX: Cell<usize> = const { Cell::new(0) };
     static SCRATCH: RefCell<DecompressorScratch> = RefCell::new(DecompressorScratch::new());
+    // this thread's copy of a chunk decompressor, with the address of the
+    // chunk it was cloned from
+    static THREAD_CD: RefCell<Option<(usize, ChunkDecompressor<u64>)>> =
+      const { RefCell::new(None) };
   }
 
   fn next_page(chunk: &Chunk) -> &[u8] {
@@ -234,6 +238,26 @@ mod micro {
     bencher.counter(ItemsCount::new(PAGE_N)).bench(|| {
       let mut cd = chunk.cd.clone();
       read_page(cd.page_decompressor(next_page(&chunk), PAGE_N).unwrap())
+    });
+  }
+
+  /// Decompressing pages of one chunk from several threads by giving each
+  /// thread its own clone of the chunk decompressor, made once.
+  #[divan::bench(threads = [1, 8, 32])]
+  fn page_clone_per_thread(bencher: Bencher) {
+    let chunk = chunk();
+    let chunk_addr = &chunk as *const Chunk as usize;
+    bencher.counter(ItemsCount::new(PAGE_N)).bench(|| {
+      THREAD_CD.with_borrow_mut(|thread_cd| {
+        if thread_cd
+          .as_ref()
+          .is_none_or(|(addr, _)| *addr != chunk_addr)
+        {
+          *thread_cd = Some((chunk_addr, chunk.cd.clone()));
+        }
+        let (_, cd) = thread_cd.as_mut().unwrap();
+        read_page(cd.page_decompressor(next_page(&chunk), PAGE_N).unwrap())
+      })
     });
   }
 
