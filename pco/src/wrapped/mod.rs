@@ -1,5 +1,5 @@
 pub use chunk_compressor::ChunkCompressor;
-pub use chunk_decompressor::ChunkDecompressor;
+pub use chunk_decompressor::{ChunkDecompressor, DecompressorScratch};
 pub use file_compressor::FileCompressor;
 pub use file_decompressor::FileDecompressor;
 pub use page_decompressor::PageDecompressor;

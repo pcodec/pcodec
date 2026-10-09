@@ -17,12 +17,12 @@ fn test_stack_sizes() {
   assert_eq!(size_of::<DynPageLatentDecompressor>(), 56);
   assert_eq!(
     size_of::<PageDecompressor<u64, &[u8]>>(),
-    240
+    248
   );
   assert_eq!(
     size_of::<ChunkLatentDecompressor<u64>>(),
-    4224
+    112
   );
   assert_eq!(size_of::<DynChunkLatentCompressor>(), 16);
-  assert_eq!(size_of::<ChunkDecompressor<u64>>(), 240);
+  assert_eq!(size_of::<ChunkDecompressor<u64>>(), 288);
 }
