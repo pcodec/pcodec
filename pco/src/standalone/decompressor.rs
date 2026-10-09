@@ -239,8 +239,13 @@ impl FileDecompressor {
       return Ok(DecompressorItem::EndOfData(src));
     };
 
-    let (inner_cd, src) = self.inner.chunk_decompressor::<T, R>(src)?;
-    let inner_pd = wrapped::PageDecompressorState::new(src, &inner_cd.inner, n)?;
+    let (mut inner_cd, src) = self.inner.chunk_decompressor::<T, R>(src)?;
+    let inner_pd = wrapped::PageDecompressorState::new(
+      src,
+      &inner_cd.inner,
+      &mut inner_cd.scratch,
+      n,
+    )?;
 
     let res = ChunkDecompressor {
       inner_cd,
@@ -303,7 +308,8 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// of numbers remaining in the chunk.
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
-      &mut self.inner_cd.inner,
+      &self.inner_cd.inner,
+      &mut self.inner_cd.scratch,
       DynNumberSliceMut::new(dst),
     )?;
 
