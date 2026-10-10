@@ -27,7 +27,7 @@ fn int_mult_bid<T: Number>(base: T::L) -> Bid<T> {
 
 pub fn choose_mode_bids<T: Number>(nums: &[T], config: &ChunkConfig) -> PcoResult<Vec<Bid<T>>> {
   let bids = match config.mode_spec {
-    ModeSpec::Auto => match int_mult::choose_base(nums) {
+    ModeSpec::Auto => match int_mult::choose_base(nums, config.compression_level) {
       // int mult is only bid when it's already known to be worthwhile, so we
       // don't offer classic alongside it
       Some(base) => vec![int_mult_bid(base)],
