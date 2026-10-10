@@ -550,7 +550,7 @@ impl ChunkCompressor {
     &self.meta
   }
 
-  /// Returns an estimate of the overall size of the chunk.
+  /// Returns an estimate of the byte size of the chunk metadata.
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
   /// you can `.reserve()` ahead of time.
@@ -592,7 +592,7 @@ impl ChunkCompressor {
     })
   }
 
-  /// Returns an estimate of the overall size of a specific page.
+  /// Returns an estimate of the byte size of a specific page.
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
   /// you can `.reserve(chunk_compressor.size_hint())` ahead of time.
