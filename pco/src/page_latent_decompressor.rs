@@ -101,6 +101,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
+    scratch.prefilled_offset_bits = None;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] = self.ans_state_idxs;
     let ans_nodes = cld.decoder.nodes.as_slice();
     let lowers = cld.state_lowers.as_slice();
@@ -153,6 +154,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
+    scratch.prefilled_offset_bits = None;
     let mut state_idxs = self.ans_state_idxs;
     for i in 0..batch_n {
       let j = i % ANS_INTERLEAVING;
@@ -193,14 +195,16 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
     assert!(batch_n <= FULL_BATCH_N);
     if cld.n_bins > 1 {
-      scratch.prefilled_offset_bits = None;
       if batch_n == FULL_BATCH_N {
         self.read_full_ans_symbols(reader, cld, scratch);
       } else {
         self.read_ans_symbols(reader, batch_n, cld, scratch);
       }
     } else {
-      scratch.prefill_single_bin(cld.only_bin_offset_bits);
+      // with no bins there are no offsets to read
+      if let Some(offset_bits) = cld.single_bin_offset_bits {
+        scratch.prefill_single_bin(offset_bits);
+      }
       scratch.latents[..batch_n].fill(cld.state_lowers[0]);
     }
 

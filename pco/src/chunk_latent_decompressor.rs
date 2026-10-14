@@ -80,8 +80,8 @@ pub struct ChunkLatentDecompressor<L: Latent> {
   pub state_lowers: Vec<L>,
   pub n_bins: usize,
   pub decoder: ans::Decoder,
-  // offset width of the only bin, used when n_bins <= 1
-  pub only_bin_offset_bits: Bitlen,
+  // Some iff the chunk has exactly one bin, whose offsets need no ANS
+  pub single_bin_offset_bits: Option<Bitlen>,
 }
 
 impl<L: Latent> ChunkLatentDecompressor<L> {
@@ -101,10 +101,9 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       .collect();
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
-    let only_bin_offset_bits = if bins.len() == 1 {
-      bins[0].offset_bits
-    } else {
-      0
+    let single_bin_offset_bits = match bins {
+      [bin] => Some(bin.offset_bits),
+      _ => None,
     };
 
     Ok(Box::new(Self {
@@ -113,7 +112,7 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       n_bins: bins.len(),
       decoder,
       delta_encoding,
-      only_bin_offset_bits,
+      single_bin_offset_bits,
     }))
   }
 }

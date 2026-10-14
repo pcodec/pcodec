@@ -5,6 +5,7 @@ use std::io::Write;
 use better_io::{BetterBufRead, BetterBufReader};
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec, ModeSpec};
+use crate::data_types::Number;
 use crate::errors::PcoResult;
 use crate::macros::match_latent_enum;
 use crate::metadata::{DynBins, Mode};
@@ -355,6 +356,53 @@ fn test_scratch_reused_across_dict_chunks() -> PcoResult<()> {
     }
   }
   Ok(())
+}
+
+fn round_trip_with_scratch<T: Number>(
+  nums: &[T],
+  scratch: &mut DecompressorScratch,
+) -> PcoResult<()> {
+  let config = ChunkConfig::default().with_paging_spec(PagingSpec::EqualPagesUpTo(300));
+  let fc = FileCompressor::default();
+  let mut compressed = fc.write_header(Vec::new())?;
+  let mut cc = fc.chunk_compressor(nums, &config)?;
+  compressed = cc.write_meta(compressed)?;
+  for page_idx in 0..cc.n_per_page().len() {
+    compressed = cc.write_page(page_idx, compressed)?;
+  }
+
+  let (fd, src) = FileDecompressor::new(compressed.as_slice())?;
+  let (cd, mut src) = fd.chunk_decompressor::<T, _>(src)?;
+  let mut decompressed = Vec::new();
+  for page_n in config.paging_spec.n_per_page(nums.len())? {
+    let mut page = vec![T::default(); page_n];
+    let mut pd = cd.page_decompressor_with_scratch(scratch, src, page_n)?;
+    pd.read(&mut page)?;
+    src = pd.into_src();
+    decompressed.extend(page);
+  }
+  assert_eq!(decompressed, nums);
+  Ok(())
+}
+
+#[test]
+fn test_scratch_reused_across_number_types() -> PcoResult<()> {
+  // u32 and i32 share a latent type, as do u64 and f64; u16 has its own
+  let ints = pseudo_random(1000, 31, 1 << 20);
+  let mut scratch = DecompressorScratch::new();
+  round_trip_with_scratch(&ints, &mut scratch)?;
+  let u64s = ints.iter().map(|&x| (x as u64) << 20).collect::<Vec<_>>();
+  round_trip_with_scratch(&u64s, &mut scratch)?;
+  let f64s = ints.iter().map(|&x| x as f64 / 7.0).collect::<Vec<_>>();
+  round_trip_with_scratch(&f64s, &mut scratch)?;
+  let i32s = ints
+    .iter()
+    .map(|&x| x as i32 - (1 << 19))
+    .collect::<Vec<_>>();
+  round_trip_with_scratch(&i32s, &mut scratch)?;
+  let u16s = ints.iter().map(|&x| x as u16).collect::<Vec<_>>();
+  round_trip_with_scratch(&u16s, &mut scratch)?;
+  round_trip_with_scratch(&ints, &mut scratch)
 }
 
 #[test]
