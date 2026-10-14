@@ -156,7 +156,7 @@ impl<T: Number> ChunkDecompressor<T> {
 #[cfg(feature = "bench")]
 mod micro {
   use std::cell::{Cell, RefCell};
-  use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+  use std::sync::atomic::{AtomicU64, Ordering};
   use std::sync::LazyLock;
 
   use divan::counter::ItemsCount;
@@ -170,13 +170,12 @@ mod micro {
 
   const N: usize = 1 << 16;
   const MAX_PAGE_N: usize = 1024;
-  // (data, rows per page). Uniform data compresses to a single bin, so the
-  // chunk decompressor holds almost nothing but scratch; heavy-tailed data
-  // gets 20 bins and a 2^10-state ANS table at the default level.
+  // (data, rows per page). Uniform data compresses to a single bin, so pages
+  // are nothing but offsets; heavy-tailed data gets 20 bins and a 2^10-state
+  // ANS table at the default level.
   const CASES: [&str; 4] = ["1bin/256", "1bin/1024", "20bins/256", "20bins/1024"];
 
   struct Chunk {
-    id: usize,
     cd: ChunkDecompressor<u64>,
     pages: Vec<Vec<u8>>,
     page_n: usize,
@@ -184,11 +183,7 @@ mod micro {
 
   // One chunk of N numbers in equal pages, with each page's bytes kept
   // separately so any page can be decompressed on its own.
-  fn chunk(case: &str) -> Chunk {
-    chunk_seeded(case, 0)
-  }
-
-  fn chunk_seeded(case: &str, seed: u64) -> Chunk {
+  fn chunk(case: &str, seed: u64) -> Chunk {
     let (data, page_n) = case.split_once('/').unwrap();
     let page_n = page_n.parse().unwrap();
     let mut rng = Xoroshiro128PlusPlus::seed_from_u64(seed);
@@ -214,29 +209,18 @@ mod micro {
       .collect();
     let (fd, _) = FileDecompressor::new(header.as_slice()).unwrap();
     let (cd, _) = fd.chunk_decompressor(meta.as_slice()).unwrap();
-    static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    Chunk {
-      id,
-      cd,
-      pages,
-      page_n,
-    }
+    Chunk { cd, pages, page_n }
   }
 
   thread_local! {
     static PAGE_IDX: Cell<usize> = const { Cell::new(0) };
     static SCRATCH: RefCell<DecompressorScratch> = RefCell::new(DecompressorScratch::new());
-    // this thread's copy of a chunk decompressor, with the id of the chunk it
-    // was cloned from
-    static THREAD_CD: RefCell<Option<(usize, ChunkDecompressor<u64>)>> =
-      const { RefCell::new(None) };
   }
 
-  fn next_page(chunk: &Chunk) -> &[u8] {
+  fn next_page_idx(chunk: &Chunk) -> usize {
     let idx = PAGE_IDX.get();
     PAGE_IDX.set(idx + 1);
-    &chunk.pages[idx % chunk.pages.len()]
+    idx % chunk.pages.len()
   }
 
   fn read_page<R: BetterBufRead>(mut pd: PageDecompressor<u64, R>, page_n: usize) -> u64 {
@@ -245,15 +229,13 @@ mod micro {
     dst[page_n - 1]
   }
 
-  /// One decoder walking pages, reusing its own scratch: the baseline.
+  /// One decoder walking pages, reusing its own scratch: the existing path.
   #[divan::bench(args = CASES)]
   fn page_own_scratch(bencher: Bencher, case: &str) {
-    let mut chunk = chunk(case);
+    let mut chunk = chunk(case, 0);
     let page_n = chunk.page_n;
     bencher.counter(ItemsCount::new(page_n)).bench_local(|| {
-      let idx = PAGE_IDX.get();
-      PAGE_IDX.set(idx + 1);
-      let page = &chunk.pages[idx % chunk.pages.len()];
+      let page = &chunk.pages[next_page_idx(&chunk)];
       read_page(
         chunk.cd.page_decompressor(page.as_slice(), page_n).unwrap(),
         page_n,
@@ -261,53 +243,19 @@ mod micro {
     });
   }
 
-  /// Decompressing pages of one chunk from several threads by cloning the
-  /// chunk decompressor for each page.
-  #[divan::bench(threads = [1, 8, 32], args = CASES)]
-  fn page_clone_per_decode(bencher: Bencher, case: &str) {
-    let chunk = chunk(case);
-    let page_n = chunk.page_n;
-    bencher.counter(ItemsCount::new(page_n)).bench(|| {
-      let mut cd = chunk.cd.clone();
-      read_page(
-        cd.page_decompressor(next_page(&chunk), page_n).unwrap(),
-        page_n,
-      )
-    });
-  }
-
-  /// Decompressing pages of one chunk from several threads by giving each
-  /// thread its own clone of the chunk decompressor, made once.
-  #[divan::bench(threads = [1, 8, 32], args = CASES)]
-  fn page_clone_per_thread(bencher: Bencher, case: &str) {
-    let chunk = chunk(case);
-    let page_n = chunk.page_n;
-    bencher.counter(ItemsCount::new(page_n)).bench(|| {
-      THREAD_CD.with_borrow_mut(|thread_cd| {
-        if thread_cd.as_ref().is_none_or(|(id, _)| *id != chunk.id) {
-          *thread_cd = Some((chunk.id, chunk.cd.clone()));
-        }
-        let (_, cd) = thread_cd.as_mut().unwrap();
-        read_page(
-          cd.page_decompressor(next_page(&chunk), page_n).unwrap(),
-          page_n,
-        )
-      })
-    });
-  }
-
   /// Decompressing pages of one shared chunk decompressor from several
   /// threads, each with its own scratch.
   #[divan::bench(threads = [1, 8, 32], args = CASES)]
   fn page_shared_with_scratch(bencher: Bencher, case: &str) {
-    let chunk = chunk(case);
+    let chunk = chunk(case, 0);
     let page_n = chunk.page_n;
     bencher.counter(ItemsCount::new(page_n)).bench(|| {
+      let page = &chunk.pages[next_page_idx(&chunk)];
       SCRATCH.with_borrow_mut(|scratch| {
         read_page(
           chunk
             .cd
-            .page_decompressor_with_scratch(scratch, next_page(&chunk), page_n)
+            .page_decompressor_with_scratch(scratch, page.as_slice(), page_n)
             .unwrap(),
           page_n,
         )
@@ -318,13 +266,15 @@ mod micro {
   // An index of many chunks serving point lookups: each lookup decompresses
   // a random page of a random chunk.
   const TABLE_CHUNKS: usize = 256;
+  const TABLE_PAGE_N: usize = 1024;
   static TABLE: LazyLock<Vec<Chunk>> = LazyLock::new(|| {
     (0..TABLE_CHUNKS as u64)
-      .map(|seed| chunk_seeded("20bins/1024", seed))
+      .map(|seed| chunk(&format!("20bins/{TABLE_PAGE_N}"), seed))
       .collect()
   });
 
-  // a thread's clones of table chunk decompressors, direct-mapped by chunk id
+  // a thread's clones of table chunk decompressors, direct-mapped by chunk
+  // index
   type CloneCache = Vec<Option<(usize, ChunkDecompressor<u64>)>>;
 
   thread_local! {
@@ -335,19 +285,20 @@ mod micro {
     static CLONE_CACHE: RefCell<CloneCache> = const { RefCell::new(Vec::new()) };
   }
 
-  fn random_lookup() -> (&'static Chunk, &'static [u8]) {
+  fn random_lookup() -> (usize, &'static Chunk, &'static [u8]) {
     let r = LOOKUP_RNG.with_borrow_mut(|rng| rng.next_u64());
-    let chunk = &TABLE[r as usize % TABLE_CHUNKS];
+    let chunk_idx = r as usize % TABLE_CHUNKS;
+    let chunk = &TABLE[chunk_idx];
     let page = &chunk.pages[(r >> 32) as usize % chunk.pages.len()];
-    (chunk, page)
+    (chunk_idx, chunk, page)
   }
 
   /// Point lookups across a table, cloning the chunk decompressor per page.
   #[divan::bench(threads = [1, 8, 32])]
   fn table_clone_per_decode(bencher: Bencher) {
     LazyLock::force(&TABLE);
-    bencher.counter(ItemsCount::new(MAX_PAGE_N)).bench(|| {
-      let (chunk, page) = random_lookup();
+    bencher.counter(ItemsCount::new(TABLE_PAGE_N)).bench(|| {
+      let (_, chunk, page) = random_lookup();
       let mut cd = chunk.cd.clone();
       read_page(
         cd.page_decompressor(page, chunk.page_n).unwrap(),
@@ -361,15 +312,15 @@ mod micro {
   #[divan::bench(threads = [1, 8, 32], consts = [16, 64, 256])]
   fn table_clone_cache<const SLOTS: usize>(bencher: Bencher) {
     LazyLock::force(&TABLE);
-    bencher.counter(ItemsCount::new(MAX_PAGE_N)).bench(|| {
-      let (chunk, page) = random_lookup();
+    bencher.counter(ItemsCount::new(TABLE_PAGE_N)).bench(|| {
+      let (chunk_idx, chunk, page) = random_lookup();
       CLONE_CACHE.with_borrow_mut(|cache| {
         if cache.len() != SLOTS {
           *cache = (0..SLOTS).map(|_| None).collect();
         }
-        let slot = &mut cache[chunk.id % SLOTS];
-        if slot.as_ref().is_none_or(|(id, _)| *id != chunk.id) {
-          *slot = Some((chunk.id, chunk.cd.clone()));
+        let slot = &mut cache[chunk_idx % SLOTS];
+        if slot.as_ref().is_none_or(|(idx, _)| *idx != chunk_idx) {
+          *slot = Some((chunk_idx, chunk.cd.clone()));
         }
         let (_, cd) = slot.as_mut().unwrap();
         read_page(
@@ -385,8 +336,8 @@ mod micro {
   #[divan::bench(threads = [1, 8, 32])]
   fn table_shared_with_scratch(bencher: Bencher) {
     LazyLock::force(&TABLE);
-    bencher.counter(ItemsCount::new(MAX_PAGE_N)).bench(|| {
-      let (chunk, page) = random_lookup();
+    bencher.counter(ItemsCount::new(TABLE_PAGE_N)).bench(|| {
+      let (_, chunk, page) = random_lookup();
       SCRATCH.with_borrow_mut(|scratch| {
         read_page(
           chunk
