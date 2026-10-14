@@ -156,6 +156,7 @@ impl<T: Number> ChunkDecompressor<T> {
 #[cfg(feature = "bench")]
 mod micro {
   use std::cell::{Cell, RefCell};
+  use std::sync::atomic::{AtomicUsize, Ordering};
 
   use divan::counter::ItemsCount;
   use divan::Bencher;
@@ -163,28 +164,42 @@ mod micro {
   use rand_xoshiro::Xoroshiro128PlusPlus;
 
   use super::*;
-  use crate::bench_utils::BENCH_N;
   use crate::wrapped::{FileCompressor, FileDecompressor};
   use crate::{ChunkConfig, PagingSpec};
 
-  const PAGE_N: usize = 1024;
+  const N: usize = 1 << 16;
+  const MAX_PAGE_N: usize = 1024;
+  // (data, rows per page). Uniform data compresses to a single bin, so the
+  // chunk decompressor holds almost nothing but scratch; heavy-tailed data
+  // gets 20 bins and a 2^10-state ANS table at the default level.
+  const CASES: [&str; 4] = ["1bin/256", "1bin/1024", "20bins/256", "20bins/1024"];
 
   struct Chunk {
+    id: usize,
     cd: ChunkDecompressor<u64>,
     pages: Vec<Vec<u8>>,
+    page_n: usize,
   }
 
-  // One chunk of BENCH_N heavy-tailed numbers in pages of PAGE_N, with each
-  // page's bytes kept separately so any page can be decompressed on its own.
-  fn chunk() -> Chunk {
+  // One chunk of N numbers in equal pages, with each page's bytes kept
+  // separately so any page can be decompressed on its own.
+  fn chunk(case: &str) -> Chunk {
+    let (data, page_n) = case.split_once('/').unwrap();
+    let page_n = page_n.parse().unwrap();
     let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
-    let nums = (0..BENCH_N)
+    let nums = (0..N)
       .map(|_| {
-        let uniform = (rng.next_u64() >> 11) as f64 / (1_u64 << 53) as f64;
-        (1000.0 / (uniform + 1e-9).powf(0.7)) as u64
+        let r = rng.next_u64();
+        match data {
+          "1bin" => r >> 24,
+          _ => {
+            let uniform = (r >> 11) as f64 / (1_u64 << 53) as f64;
+            (1000.0 / (uniform + 1e-9).powf(0.7)) as u64
+          }
+        }
       })
       .collect::<Vec<_>>();
-    let config = ChunkConfig::default().with_paging_spec(PagingSpec::EqualPagesUpTo(PAGE_N));
+    let config = ChunkConfig::default().with_paging_spec(PagingSpec::EqualPagesUpTo(page_n));
     let fc = FileCompressor::default();
     let header = fc.write_header(Vec::new()).unwrap();
     let mut cc = fc.chunk_compressor(&nums, &config).unwrap();
@@ -194,14 +209,21 @@ mod micro {
       .collect();
     let (fd, _) = FileDecompressor::new(header.as_slice()).unwrap();
     let (cd, _) = fd.chunk_decompressor(meta.as_slice()).unwrap();
-    Chunk { cd, pages }
+    static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    Chunk {
+      id,
+      cd,
+      pages,
+      page_n,
+    }
   }
 
   thread_local! {
     static PAGE_IDX: Cell<usize> = const { Cell::new(0) };
     static SCRATCH: RefCell<DecompressorScratch> = RefCell::new(DecompressorScratch::new());
-    // this thread's copy of a chunk decompressor, with the address of the
-    // chunk it was cloned from
+    // this thread's copy of a chunk decompressor, with the id of the chunk it
+    // was cloned from
     static THREAD_CD: RefCell<Option<(usize, ChunkDecompressor<u64>)>> =
       const { RefCell::new(None) };
   }
@@ -212,67 +234,77 @@ mod micro {
     &chunk.pages[idx % chunk.pages.len()]
   }
 
-  fn read_page<R: BetterBufRead>(mut pd: PageDecompressor<u64, R>) -> u64 {
-    let mut dst = [0_u64; PAGE_N];
-    pd.read(&mut dst).unwrap();
-    dst[PAGE_N - 1]
+  fn read_page<R: BetterBufRead>(mut pd: PageDecompressor<u64, R>, page_n: usize) -> u64 {
+    let mut dst = [0_u64; MAX_PAGE_N];
+    pd.read(&mut dst[..page_n]).unwrap();
+    dst[page_n - 1]
   }
 
   /// One decoder walking pages, reusing its own scratch: the baseline.
-  #[divan::bench]
-  fn page_own_scratch(bencher: Bencher) {
-    let mut chunk = chunk();
-    bencher.counter(ItemsCount::new(PAGE_N)).bench_local(|| {
+  #[divan::bench(args = CASES)]
+  fn page_own_scratch(bencher: Bencher, case: &str) {
+    let mut chunk = chunk(case);
+    let page_n = chunk.page_n;
+    bencher.counter(ItemsCount::new(page_n)).bench_local(|| {
       let idx = PAGE_IDX.get();
       PAGE_IDX.set(idx + 1);
       let page = &chunk.pages[idx % chunk.pages.len()];
-      read_page(chunk.cd.page_decompressor(page.as_slice(), PAGE_N).unwrap())
+      read_page(
+        chunk.cd.page_decompressor(page.as_slice(), page_n).unwrap(),
+        page_n,
+      )
     });
   }
 
   /// Decompressing pages of one chunk from several threads by cloning the
   /// chunk decompressor for each page.
-  #[divan::bench(threads = [1, 8, 32])]
-  fn page_clone_per_decode(bencher: Bencher) {
-    let chunk = chunk();
-    bencher.counter(ItemsCount::new(PAGE_N)).bench(|| {
+  #[divan::bench(threads = [1, 8, 32], args = CASES)]
+  fn page_clone_per_decode(bencher: Bencher, case: &str) {
+    let chunk = chunk(case);
+    let page_n = chunk.page_n;
+    bencher.counter(ItemsCount::new(page_n)).bench(|| {
       let mut cd = chunk.cd.clone();
-      read_page(cd.page_decompressor(next_page(&chunk), PAGE_N).unwrap())
+      read_page(
+        cd.page_decompressor(next_page(&chunk), page_n).unwrap(),
+        page_n,
+      )
     });
   }
 
   /// Decompressing pages of one chunk from several threads by giving each
   /// thread its own clone of the chunk decompressor, made once.
-  #[divan::bench(threads = [1, 8, 32])]
-  fn page_clone_per_thread(bencher: Bencher) {
-    let chunk = chunk();
-    let chunk_addr = &chunk as *const Chunk as usize;
-    bencher.counter(ItemsCount::new(PAGE_N)).bench(|| {
+  #[divan::bench(threads = [1, 8, 32], args = CASES)]
+  fn page_clone_per_thread(bencher: Bencher, case: &str) {
+    let chunk = chunk(case);
+    let page_n = chunk.page_n;
+    bencher.counter(ItemsCount::new(page_n)).bench(|| {
       THREAD_CD.with_borrow_mut(|thread_cd| {
-        if thread_cd
-          .as_ref()
-          .is_none_or(|(addr, _)| *addr != chunk_addr)
-        {
-          *thread_cd = Some((chunk_addr, chunk.cd.clone()));
+        if thread_cd.as_ref().is_none_or(|(id, _)| *id != chunk.id) {
+          *thread_cd = Some((chunk.id, chunk.cd.clone()));
         }
         let (_, cd) = thread_cd.as_mut().unwrap();
-        read_page(cd.page_decompressor(next_page(&chunk), PAGE_N).unwrap())
+        read_page(
+          cd.page_decompressor(next_page(&chunk), page_n).unwrap(),
+          page_n,
+        )
       })
     });
   }
 
   /// Decompressing pages of one shared chunk decompressor from several
   /// threads, each with its own scratch.
-  #[divan::bench(threads = [1, 8, 32])]
-  fn page_shared_with_scratch(bencher: Bencher) {
-    let chunk = chunk();
-    bencher.counter(ItemsCount::new(PAGE_N)).bench(|| {
+  #[divan::bench(threads = [1, 8, 32], args = CASES)]
+  fn page_shared_with_scratch(bencher: Bencher, case: &str) {
+    let chunk = chunk(case);
+    let page_n = chunk.page_n;
+    bencher.counter(ItemsCount::new(page_n)).bench(|| {
       SCRATCH.with_borrow_mut(|scratch| {
         read_page(
           chunk
             .cd
-            .page_decompressor_with_scratch(scratch, next_page(&chunk), PAGE_N)
+            .page_decompressor_with_scratch(scratch, next_page(&chunk), page_n)
             .unwrap(),
+          page_n,
         )
       })
     });
