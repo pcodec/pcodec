@@ -120,7 +120,7 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
       }
     )
   })?;
-  Ok(dyn_scratch.latents())
+  Ok(dyn_scratch.latents(n_remaining.min(FULL_BATCH_N)))
 }
 
 impl<R: BetterBufRead> PageDecompressorState<R> {
@@ -168,14 +168,14 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     }
 
     // PRIMARY AND SECONDARY LATENTS
-    // only the delta latents this batch read, and only if this chunk has a
-    // delta latent var: the scratch may hold another chunk's
+    // only if this chunk has a delta latent var: the scratch may hold
+    // another chunk's
     let has_delta = self.latent_decompressors.delta.is_some();
     let delta_scratch = delta_scratch.as_ref();
     let delta_latents = || {
       delta_scratch
         .filter(|_| has_delta)
-        .map(|scratch| scratch.latents_prefix(delta_n))
+        .map(|scratch| scratch.latents(delta_n))
     };
     let primary = read_primary_or_secondary(
       &mut self.reader_builder,

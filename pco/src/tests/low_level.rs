@@ -4,10 +4,10 @@ use std::io::Write;
 
 use better_io::{BetterBufRead, BetterBufReader};
 
-use crate::chunk_config::{ChunkConfig, DeltaSpec};
+use crate::chunk_config::{ChunkConfig, DeltaSpec, ModeSpec};
 use crate::errors::PcoResult;
 use crate::macros::match_latent_enum;
-use crate::metadata::DynBins;
+use crate::metadata::{DynBins, Mode};
 use crate::wrapped::{
   ChunkDecompressor, DecompressorScratch, FileCompressor, FileDecompressor, PageDecompressor,
 };
@@ -275,7 +275,7 @@ fn test_scratch_reused_across_lookback_chunks() -> PcoResult<()> {
       nums: pseudo_random(3, 12, 1 << 30).repeat(100),
       config: ChunkConfig {
         delta_spec: DeltaSpec::TryLookback,
-        paging_spec: PagingSpec::EqualPagesUpTo(200),
+        paging_spec: PagingSpec::EqualPagesUpTo(150),
         ..Default::default()
       },
     },
@@ -289,6 +289,58 @@ fn test_scratch_reused_across_lookback_chunks() -> PcoResult<()> {
     let (cd, new_src) = fd.chunk_decompressor::<u32, _>(src)?;
     src = new_src;
     assert!(cd.meta().per_latent_var.delta.is_some());
+
+    let mut page_start = 0;
+    for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {
+      let mut pd = cd.page_decompressor_with_scratch(&mut scratch, src, page_n)?;
+      let page_nums = decompress_by_batch(&mut pd, page_n)?;
+      src = pd.into_src();
+      assert_eq!(
+        &page_nums,
+        &chunk.nums[page_start..page_start + page_n]
+      );
+      page_start += page_n;
+    }
+  }
+  Ok(())
+}
+
+#[test]
+fn test_scratch_reused_across_dict_chunks() -> PcoResult<()> {
+  // A dict chunk with a large dict, then one with a small dict whose pages
+  // end in partial batches. The second chunk must not see the first chunk's
+  // dict indices past the ones it read.
+  let big_dict = pseudo_random(1000, 21, 1 << 30);
+  let small_dict = pseudo_random(4, 22, 1 << 30);
+  let chunks = [
+    Chunk {
+      nums: (0..20000).map(|i| big_dict[(i * 7919) % 1000]).collect(),
+      config: ChunkConfig {
+        mode_spec: ModeSpec::TryDict,
+        delta_spec: DeltaSpec::NoOp,
+        paging_spec: PagingSpec::EqualPagesUpTo(20000),
+        ..Default::default()
+      },
+    },
+    Chunk {
+      nums: (0..300).map(|i| small_dict[(i * 3) % 4]).collect(),
+      config: ChunkConfig {
+        mode_spec: ModeSpec::TryDict,
+        delta_spec: DeltaSpec::NoOp,
+        paging_spec: PagingSpec::EqualPagesUpTo(150),
+        ..Default::default()
+      },
+    },
+  ];
+  let mut compressed = Vec::new();
+  test_wrapped_compress(&chunks, &mut compressed)?;
+
+  let mut scratch = DecompressorScratch::new();
+  let (fd, mut src) = FileDecompressor::new(compressed.as_slice())?;
+  for chunk in &chunks {
+    let (cd, new_src) = fd.chunk_decompressor::<u32, _>(src)?;
+    src = new_src;
+    assert!(matches!(cd.meta().mode, Mode::Dict(_)));
 
     let mut page_start = 0;
     for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {

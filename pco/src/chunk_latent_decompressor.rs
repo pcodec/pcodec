@@ -61,11 +61,9 @@ define_latent_enum!(
 );
 
 impl DynLatentScratch {
-  pub fn latents(&self) -> DynLatentSlice<'_> {
-    self.latents_prefix(FULL_BATCH_N)
-  }
-
-  pub fn latents_prefix(&self, n: usize) -> DynLatentSlice<'_> {
+  /// The first `n` latents. Past what the current batch wrote, the scratch
+  /// may hold another chunk's latents.
+  pub fn latents(&self, n: usize) -> DynLatentSlice<'_> {
     match_latent_enum!(
       self,
       DynLatentScratch<L>(inner) => {
