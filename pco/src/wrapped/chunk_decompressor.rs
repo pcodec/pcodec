@@ -156,7 +156,8 @@ impl<T: Number> ChunkDecompressor<T> {
 #[cfg(feature = "bench")]
 mod micro {
   use std::cell::{Cell, RefCell};
-  use std::sync::atomic::{AtomicUsize, Ordering};
+  use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+  use std::sync::LazyLock;
 
   use divan::counter::ItemsCount;
   use divan::Bencher;
@@ -184,9 +185,13 @@ mod micro {
   // One chunk of N numbers in equal pages, with each page's bytes kept
   // separately so any page can be decompressed on its own.
   fn chunk(case: &str) -> Chunk {
+    chunk_seeded(case, 0)
+  }
+
+  fn chunk_seeded(case: &str, seed: u64) -> Chunk {
     let (data, page_n) = case.split_once('/').unwrap();
     let page_n = page_n.parse().unwrap();
-    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(seed);
     let nums = (0..N)
       .map(|_| {
         let r = rng.next_u64();
@@ -305,6 +310,90 @@ mod micro {
             .page_decompressor_with_scratch(scratch, next_page(&chunk), page_n)
             .unwrap(),
           page_n,
+        )
+      })
+    });
+  }
+
+  // An index of many chunks serving point lookups: each lookup decompresses
+  // a random page of a random chunk.
+  const TABLE_CHUNKS: usize = 256;
+  static TABLE: LazyLock<Vec<Chunk>> = LazyLock::new(|| {
+    (0..TABLE_CHUNKS as u64)
+      .map(|seed| chunk_seeded("20bins/1024", seed))
+      .collect()
+  });
+
+  // a thread's clones of table chunk decompressors, direct-mapped by chunk id
+  type CloneCache = Vec<Option<(usize, ChunkDecompressor<u64>)>>;
+
+  thread_local! {
+    static LOOKUP_RNG: RefCell<Xoroshiro128PlusPlus> = RefCell::new({
+      static NEXT_SEED: AtomicU64 = AtomicU64::new(0);
+      Xoroshiro128PlusPlus::seed_from_u64(NEXT_SEED.fetch_add(1, Ordering::Relaxed))
+    });
+    static CLONE_CACHE: RefCell<CloneCache> = const { RefCell::new(Vec::new()) };
+  }
+
+  fn random_lookup() -> (&'static Chunk, &'static [u8]) {
+    let r = LOOKUP_RNG.with_borrow_mut(|rng| rng.next_u64());
+    let chunk = &TABLE[r as usize % TABLE_CHUNKS];
+    let page = &chunk.pages[(r >> 32) as usize % chunk.pages.len()];
+    (chunk, page)
+  }
+
+  /// Point lookups across a table, cloning the chunk decompressor per page.
+  #[divan::bench(threads = [1, 8, 32])]
+  fn table_clone_per_decode(bencher: Bencher) {
+    LazyLock::force(&TABLE);
+    bencher.counter(ItemsCount::new(MAX_PAGE_N)).bench(|| {
+      let (chunk, page) = random_lookup();
+      let mut cd = chunk.cd.clone();
+      read_page(
+        cd.page_decompressor(page, chunk.page_n).unwrap(),
+        chunk.page_n,
+      )
+    });
+  }
+
+  /// Point lookups across a table, with each thread keeping clones of up to
+  /// SLOTS chunk decompressors and cloning on a miss.
+  #[divan::bench(threads = [1, 8, 32], consts = [16, 64, 256])]
+  fn table_clone_cache<const SLOTS: usize>(bencher: Bencher) {
+    LazyLock::force(&TABLE);
+    bencher.counter(ItemsCount::new(MAX_PAGE_N)).bench(|| {
+      let (chunk, page) = random_lookup();
+      CLONE_CACHE.with_borrow_mut(|cache| {
+        if cache.len() != SLOTS {
+          *cache = (0..SLOTS).map(|_| None).collect();
+        }
+        let slot = &mut cache[chunk.id % SLOTS];
+        if slot.as_ref().is_none_or(|(id, _)| *id != chunk.id) {
+          *slot = Some((chunk.id, chunk.cd.clone()));
+        }
+        let (_, cd) = slot.as_mut().unwrap();
+        read_page(
+          cd.page_decompressor(page, chunk.page_n).unwrap(),
+          chunk.page_n,
+        )
+      })
+    });
+  }
+
+  /// Point lookups across a table, sharing every chunk decompressor, with one
+  /// scratch per thread.
+  #[divan::bench(threads = [1, 8, 32])]
+  fn table_shared_with_scratch(bencher: Bencher) {
+    LazyLock::force(&TABLE);
+    bencher.counter(ItemsCount::new(MAX_PAGE_N)).bench(|| {
+      let (chunk, page) = random_lookup();
+      SCRATCH.with_borrow_mut(|scratch| {
+        read_page(
+          chunk
+            .cd
+            .page_decompressor_with_scratch(scratch, page, chunk.page_n)
+            .unwrap(),
+          chunk.page_n,
         )
       })
     });
