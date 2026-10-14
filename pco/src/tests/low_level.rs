@@ -258,6 +258,54 @@ fn test_scratch_reused_across_chunks() -> PcoResult<()> {
 }
 
 #[test]
+fn test_scratch_reused_across_lookback_chunks() -> PcoResult<()> {
+  // A lookback chunk with a large window, then one with a small window whose
+  // pages end in partial batches. The second chunk must not see the first
+  // chunk's lookbacks past the ones it read.
+  let chunks = [
+    Chunk {
+      nums: pseudo_random(2000, 11, 1 << 30).repeat(10),
+      config: ChunkConfig {
+        delta_spec: DeltaSpec::TryLookback,
+        paging_spec: PagingSpec::EqualPagesUpTo(20000),
+        ..Default::default()
+      },
+    },
+    Chunk {
+      nums: pseudo_random(3, 12, 1 << 30).repeat(100),
+      config: ChunkConfig {
+        delta_spec: DeltaSpec::TryLookback,
+        paging_spec: PagingSpec::EqualPagesUpTo(200),
+        ..Default::default()
+      },
+    },
+  ];
+  let mut compressed = Vec::new();
+  test_wrapped_compress(&chunks, &mut compressed)?;
+
+  let mut scratch = DecompressorScratch::new();
+  let (fd, mut src) = FileDecompressor::new(compressed.as_slice())?;
+  for chunk in &chunks {
+    let (cd, new_src) = fd.chunk_decompressor::<u32, _>(src)?;
+    src = new_src;
+    assert!(cd.meta().per_latent_var.delta.is_some());
+
+    let mut page_start = 0;
+    for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {
+      let mut pd = cd.page_decompressor_with_scratch(&mut scratch, src, page_n)?;
+      let page_nums = decompress_by_batch(&mut pd, page_n)?;
+      src = pd.into_src();
+      assert_eq!(
+        &page_nums,
+        &chunk.nums[page_start..page_start + page_n]
+      );
+      page_start += page_n;
+    }
+  }
+  Ok(())
+}
+
+#[test]
 fn test_concurrent_pages_from_shared_chunk() -> PcoResult<()> {
   let nums = pseudo_random(20_000, 5, 1 << 24);
   let chunk = Chunk {

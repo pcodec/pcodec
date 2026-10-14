@@ -62,10 +62,14 @@ define_latent_enum!(
 
 impl DynLatentScratch {
   pub fn latents(&self) -> DynLatentSlice<'_> {
+    self.latents_prefix(FULL_BATCH_N)
+  }
+
+  pub fn latents_prefix(&self, n: usize) -> DynLatentSlice<'_> {
     match_latent_enum!(
       self,
       DynLatentScratch<L>(inner) => {
-        DynLatentSlice::new(&*inner.latents)
+        DynLatentSlice::new(&inner.latents[..n])
       }
     )
   }

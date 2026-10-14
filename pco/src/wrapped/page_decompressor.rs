@@ -140,11 +140,11 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     } = scratch;
 
     // DELTA LATENTS
+    let delta_n = min(
+      n_remaining.saturating_sub(cd.n_latents_per_delta_state()),
+      batch_n,
+    );
     if let Some(dyn_pld) = self.latent_decompressors.delta.as_mut() {
-      let limit = min(
-        n_remaining.saturating_sub(cd.n_latents_per_delta_state()),
-        batch_n,
-      );
       self
         .reader_builder
         .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
@@ -157,7 +157,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
               // skip straight to the pre-delta routine.
               pld.read_batch_pre_delta(
                 reader,
-                limit,
+                delta_n,
                 cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
                 delta_scratch.as_mut().unwrap().downcast_mut::<L>().unwrap(),
               )
@@ -168,10 +168,18 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     }
 
     // PRIMARY AND SECONDARY LATENTS
+    // only the delta latents this batch read, and only if this chunk has a
+    // delta latent var: the scratch may hold another chunk's
+    let has_delta = self.latent_decompressors.delta.is_some();
     let delta_scratch = delta_scratch.as_ref();
+    let delta_latents = || {
+      delta_scratch
+        .filter(|_| has_delta)
+        .map(|scratch| scratch.latents_prefix(delta_n))
+    };
     let primary = read_primary_or_secondary(
       &mut self.reader_builder,
-      delta_scratch.map(DynLatentScratch::latents),
+      delta_latents(),
       n_remaining,
       &cd.per_latent_var.primary,
       primary_scratch.as_mut().unwrap(),
@@ -181,7 +189,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     let secondary = match self.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(read_primary_or_secondary(
         &mut self.reader_builder,
-        delta_scratch.map(DynLatentScratch::latents),
+        delta_latents(),
         n_remaining,
         cd.per_latent_var.secondary.as_ref().unwrap(),
         secondary_scratch.as_mut().unwrap(),
