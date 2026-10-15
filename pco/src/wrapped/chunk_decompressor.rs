@@ -264,7 +264,9 @@ mod micro {
   }
 
   // An index of many chunks serving point lookups: each lookup decompresses
-  // a random page of a random chunk.
+  // a random page of a random chunk. The table benches run for a minimum
+  // time, since a per-thread clone cache only warms up after a few hundred
+  // lookups and by default divan takes 100 samples of one lookup each.
   const TABLE_CHUNKS: usize = 256;
   const TABLE_PAGE_N: usize = 1024;
   static TABLE: LazyLock<Vec<Chunk>> = LazyLock::new(|| {
@@ -294,7 +296,7 @@ mod micro {
   }
 
   /// Point lookups across a table, cloning the chunk decompressor per page.
-  #[divan::bench(threads = [1, 8, 32])]
+  #[divan::bench(threads = [1, 8, 32], min_time = 2)]
   fn table_clone_per_decode(bencher: Bencher) {
     LazyLock::force(&TABLE);
     bencher.counter(ItemsCount::new(TABLE_PAGE_N)).bench(|| {
@@ -309,7 +311,7 @@ mod micro {
 
   /// Point lookups across a table, with each thread keeping clones of up to
   /// SLOTS chunk decompressors and cloning on a miss.
-  #[divan::bench(threads = [1, 8, 32], consts = [16, 64, 256])]
+  #[divan::bench(threads = [1, 8, 32], consts = [16, 64, 256], min_time = 2)]
   fn table_clone_cache<const SLOTS: usize>(bencher: Bencher) {
     LazyLock::force(&TABLE);
     bencher.counter(ItemsCount::new(TABLE_PAGE_N)).bench(|| {
@@ -333,7 +335,7 @@ mod micro {
 
   /// Point lookups across a table, sharing every chunk decompressor, with one
   /// scratch per thread.
-  #[divan::bench(threads = [1, 8, 32])]
+  #[divan::bench(threads = [1, 8, 32], min_time = 2)]
   fn table_shared_with_scratch(bencher: Bencher) {
     LazyLock::force(&TABLE);
     bencher.counter(ItemsCount::new(TABLE_PAGE_N)).bench(|| {
