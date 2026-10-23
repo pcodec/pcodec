@@ -478,6 +478,11 @@ mod test {
     );
 
     assert_eq!(
+      choose_config_by_powers_of_ten(&[f64::MAX, f64::MIN, 0.01].repeat(30)),
+      None,
+    );
+
+    assert_eq!(
       choose_config_by_powers_of_ten(&[47.1234567, 49.7654321, 32.2345678, 55.8765432].repeat(20)),
       Some(FloatMultConfig::from_base(0.0000001)),
     );
