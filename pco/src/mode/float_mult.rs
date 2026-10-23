@@ -1,3 +1,4 @@
+use core::f64::consts::LOG10_2;
 use std::cmp::{max, min};
 use std::mem;
 
@@ -10,8 +11,8 @@ use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::mode::int_mult;
-use crate::sampling;
 use crate::sampling::PrimaryLatentAndSavings;
+use crate::{sampling, sort_utils};
 
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
@@ -80,7 +81,10 @@ const SNAP_THRESHOLD_ABSOLUTE: f64 = 0.02;
 const SNAP_THRESHOLD_DECIMAL_RELATIVE: f64 = 0.01;
 const INTERESTING_TRAILING_ZEROS: u32 = 5;
 const REQUIRED_TRAILING_ZEROS_FREQUENCY: f64 = 0.5;
+const REQUIRED_POWER_OF_TEN_FREQUENCY: f64 = 0.5;
 const REQUIRED_GCD_PAIR_FREQUENCY: f64 = 0.001;
+const POWER_OF_TEN_MAX_SAMPLE_N: usize = 200;
+const POWER_OF_TEN_P_VALUE: f64 = 0.01;
 
 fn insignificant_float_to<F: Float>(x: F) -> F {
   let spare_precision_bits = F::PRECISION_BITS.saturating_sub(REQUIRED_PRECISION_BITS) as i32;
@@ -139,6 +143,50 @@ fn approx_pair_gcd<F: Float>(greater: F, lesser: F) -> Option<F> {
 
     mem::swap(&mut p_greater, &mut p_lesser);
   }
+}
+
+#[inline(never)]
+fn choose_config_by_powers_of_ten<F: Float>(sample: &[F]) -> Option<FloatMultConfig<F>> {
+  // This method is pretty simple so we don't need the full sample.
+  // We can rely on our euclidean GCD algorithm to find GCDs as low as
+  // `x * 2^-(MANTISSA_BITS / 2)`, so we only need to check powers of ten
+  // between that and machine epsilon.
+  let sample: Vec<_> = sample
+    .iter()
+    .copied()
+    .filter(|&x| x != F::ZERO)
+    .take(POWER_OF_TEN_MAX_SAMPLE_N)
+    .collect();
+
+  if sample.len() < sampling::MIN_SAMPLE {
+    return None;
+  }
+
+  let typical_num = sort_utils::choose_pivot(&sample);
+  let typical_log10 = typical_num.to_f64().log10() as i32;
+  // +1 to min because actual machine epsilon is uselss, and +1 to max to be
+  // generous in case our typical num is smaller than usual.
+  let min_log = (typical_log10 - (F::PRECISION_BITS as f64 * LOG10_2) as i32 + 1).min(-1);
+  let max_log = (typical_log10 - (F::PRECISION_BITS as f64 * LOG10_2 / 2.0) as i32 + 1).min(-1);
+  let sample_n = sample.len() as f64;
+
+  for log in (min_log..=max_log).rev() {
+    let inv_base = F::from_f64(10.0_f64.powi(-log));
+    let mut amenable_n = 0;
+    for &x in &sample {
+      let mult = x * inv_base;
+      if (mult - mult.round()).abs() < F::from_f64(POWER_OF_TEN_P_VALUE) {
+        amenable_n += 1;
+      }
+    }
+
+    if amenable_n as f64 >= sample_n * REQUIRED_POWER_OF_TEN_FREQUENCY {
+      let base = inv_base.inv();
+      return Some(FloatMultConfig { base, inv_base });
+    }
+  }
+
+  None
 }
 
 #[inline(never)]
@@ -337,6 +385,7 @@ impl<F: Float> FloatMultConfig<F> {
 
 pub(crate) fn compute_bid<F: Float>(sample: &[F]) -> Option<Bid<F>> {
   let candidates = [
+    choose_config_by_powers_of_ten(sample),
     choose_config_by_trailing_zeros(sample),
     choose_config_by_euclidean(sample),
   ];
@@ -359,7 +408,7 @@ pub(crate) fn compute_bid<F: Float>(sample: &[F]) -> Option<Bid<F>> {
 
 #[cfg(test)]
 mod test {
-  use std::f32::consts::TAU;
+  use std::f32::consts::{E, SQRT_2, TAU};
 
   use rand::{Rng, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
@@ -413,6 +462,29 @@ mod test {
     assert_eq!(
       insignificant_float_to(32.0_f32),
       1.0 / ((1_u64 << 12) as f32)
+    );
+  }
+
+  #[test]
+  fn test_powers_of_ten() {
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[0.0, 0.0, 0.0, 0.0, 0.0].repeat(20)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[TAU, E, SQRT_2].repeat(30)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[f64::MAX, f64::MIN, 0.01].repeat(30)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[47.1234567, 49.7654321, 32.2345678, 55.8765432].repeat(20)),
+      Some(FloatMultConfig::from_base(0.0000001)),
     );
   }
 
