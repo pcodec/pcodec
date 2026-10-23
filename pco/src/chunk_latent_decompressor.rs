@@ -1,6 +1,6 @@
 use crate::ans::{self, Spec};
 use crate::constants::Bitlen;
-use crate::data_types::Latent;
+use crate::data_types::{Latent, LatentType};
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
@@ -9,68 +9,57 @@ use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
 use crate::scratch_array::ScratchArray;
 use crate::{read_write_uint, FULL_BATCH_N};
 
-/// Per-batch working memory for decompressing one latent variable. It holds
-/// no information about any chunk beyond the single-bin offsets it may be
-/// prefilled with, so one scratch can serve pages of any chunk with the same
-/// latent type.
 #[derive(Clone, Debug)]
-pub struct LatentScratch<L: Latent> {
+pub struct ChunkLatentDecompressorScratch<L: Latent> {
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
   pub latents: ScratchArray<L>,
-  // The offset bit width that offset_bits and offset_bits_csum are currently
-  // filled with for a single-bin chunk, or None after ANS decoding wrote
-  // per-symbol widths into them.
-  pub prefilled_offset_bits: Option<Bitlen>,
 }
 
-impl<L: Latent> LatentScratch<L> {
+impl<L: Latent> ChunkLatentDecompressorScratch<L> {
   pub fn new() -> Box<Self> {
     Box::new(Self {
       offset_bits_csum: ScratchArray([0; FULL_BATCH_N]),
       offset_bits: ScratchArray([0; FULL_BATCH_N]),
       latents: ScratchArray([L::ZERO; FULL_BATCH_N]),
-      prefilled_offset_bits: None,
     })
-  }
-
-  // A single-bin chunk has the same offset width for every latent, so we set
-  // the offset state once and keep it for as long as the same width is used.
-  #[inline]
-  pub fn prefill_single_bin(&mut self, offset_bits: Bitlen) {
-    if self.prefilled_offset_bits == Some(offset_bits) {
-      return;
-    }
-
-    let mut csum = 0;
-    for i in 0..FULL_BATCH_N {
-      self.offset_bits[i] = offset_bits;
-      self.offset_bits_csum[i] = csum;
-      csum += offset_bits;
-    }
-    self.prefilled_offset_bits = Some(offset_bits);
   }
 }
 
-// we allocate these on the heap because they're enormous
-type BoxedScratch<L> = Box<LatentScratch<L>>;
+// a scratch is up to 4KB, boxed so DecompressorScratch stays 48 bytes
+type BoxedScratch<L> = Box<ChunkLatentDecompressorScratch<L>>;
 
 define_latent_enum!(
   #[derive(Clone, Debug)]
-  pub DynLatentScratch(BoxedScratch)
+  pub DynChunkLatentDecompressorScratch(BoxedScratch)
 );
 
-impl DynLatentScratch {
-  /// The first `n` latents. Past what the current batch wrote, the scratch
-  /// may hold another chunk's latents.
+impl DynChunkLatentDecompressorScratch {
+  pub fn latent_type(&self) -> LatentType {
+    match_latent_enum!(
+      self,
+      DynChunkLatentDecompressorScratch<L>(_inner) => { LatentType::new::<L>() }
+    )
+  }
+
+  // past the first n, a scratch may hold latents of another chunk
   pub fn latents(&self, n: usize) -> DynLatentSlice<'_> {
     match_latent_enum!(
       self,
-      DynLatentScratch<L>(inner) => {
+      DynChunkLatentDecompressorScratch<L>(inner) => {
         DynLatentSlice::new(&inner.latents[..n])
       }
     )
   }
+}
+
+// a ChunkLatentDecompressor's read-only parts, borrowed apart from its scratch
+pub struct ChunkLatentDecompressorView<'a, L: Latent> {
+  pub delta_encoding: &'a LatentVarDeltaEncoding,
+  pub bytes_per_offset: usize,
+  pub state_lowers: &'a [L],
+  pub n_bins: usize,
+  pub decoder: &'a ans::Decoder,
 }
 
 #[derive(Clone, Debug)]
@@ -80,8 +69,7 @@ pub struct ChunkLatentDecompressor<L: Latent> {
   pub state_lowers: Vec<L>,
   pub n_bins: usize,
   pub decoder: ans::Decoder,
-  // Some iff the chunk has exactly one bin, whose offsets need no ANS
-  pub single_bin_offset_bits: Option<Bitlen>,
+  pub scratch: ChunkLatentDecompressorScratch<L>,
 }
 
 impl<L: Latent> ChunkLatentDecompressor<L> {
@@ -101,10 +89,22 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       .collect();
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
 
-    let single_bin_offset_bits = match bins {
-      [bin] => Some(bin.offset_bits),
-      _ => None,
-    };
+    let only_bin = if bins.len() == 1 { Some(bins[0]) } else { None };
+
+    let mut offset_bits_csum = ScratchArray([0; FULL_BATCH_N]);
+    let mut offset_bits = ScratchArray([0; FULL_BATCH_N]);
+    let mut latents = ScratchArray([L::ZERO; FULL_BATCH_N]);
+
+    if let Some(bin) = &only_bin {
+      // we optimize performance by setting state once and never again
+      let mut csum = 0;
+      for i in 0..FULL_BATCH_N {
+        offset_bits[i] = bin.offset_bits;
+        offset_bits_csum[i] = csum;
+        latents[i] = bin.lower;
+        csum += bin.offset_bits;
+      }
+    }
 
     Ok(Box::new(Self {
       bytes_per_offset,
@@ -112,8 +112,38 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       n_bins: bins.len(),
       decoder,
       delta_encoding,
-      single_bin_offset_bits,
+      scratch: ChunkLatentDecompressorScratch {
+        offset_bits_csum,
+        offset_bits,
+        latents,
+      },
     }))
+  }
+
+  pub fn split(
+    &mut self,
+  ) -> (
+    ChunkLatentDecompressorView<'_, L>,
+    &mut ChunkLatentDecompressorScratch<L>,
+  ) {
+    let cld = ChunkLatentDecompressorView {
+      delta_encoding: &self.delta_encoding,
+      bytes_per_offset: self.bytes_per_offset,
+      state_lowers: &self.state_lowers,
+      n_bins: self.n_bins,
+      decoder: &self.decoder,
+    };
+    (cld, &mut self.scratch)
+  }
+
+  pub fn view(&self) -> ChunkLatentDecompressorView<'_, L> {
+    ChunkLatentDecompressorView {
+      delta_encoding: &self.delta_encoding,
+      bytes_per_offset: self.bytes_per_offset,
+      state_lowers: &self.state_lowers,
+      n_bins: self.n_bins,
+      decoder: &self.decoder,
+    }
   }
 }
 
@@ -144,20 +174,34 @@ impl DynChunkLatentDecompressor {
     Ok(res)
   }
 
-  pub fn new_scratch(&self) -> DynLatentScratch {
+  pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
     match_latent_enum!(
       self,
-      DynChunkLatentDecompressor<L>(_inner) => {
-        DynLatentScratch::new(LatentScratch::<L>::new())
+      DynChunkLatentDecompressor<L>(inner) => {
+        DynLatentSlice::new(&*inner.scratch.latents)
       }
     )
   }
 
-  pub fn scratch_matches(&self, scratch: &DynLatentScratch) -> bool {
+  pub fn new_scratch(&self) -> DynChunkLatentDecompressorScratch {
     match_latent_enum!(
       self,
       DynChunkLatentDecompressor<L>(_inner) => {
-        scratch.downcast_ref::<L>().is_some()
+        DynChunkLatentDecompressorScratch::new(ChunkLatentDecompressorScratch::<L>::new())
+      }
+    )
+  }
+
+  // single bin -> decoders never write offset widths -> copy in new()'s prefilled ones
+  pub fn prepopulate(&self, dyn_scratch: &mut DynChunkLatentDecompressorScratch) {
+    match_latent_enum!(
+      self,
+      DynChunkLatentDecompressor<L>(inner) => {
+        if inner.n_bins == 1 {
+          let scratch = dyn_scratch.downcast_mut::<L>().unwrap();
+          scratch.offset_bits_csum.0 = inner.scratch.offset_bits_csum.0;
+          scratch.offset_bits.0 = inner.scratch.offset_bits.0;
+        }
       }
     )
   }

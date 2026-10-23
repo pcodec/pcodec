@@ -1,7 +1,7 @@
 use crate::chunk_latent_compressor::{ChunkLatentCompressor, DynChunkLatentCompressor};
-use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
+use crate::chunk_latent_decompressor::{ChunkLatentDecompressor, ChunkLatentDecompressorScratch};
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
-use crate::wrapped::{ChunkCompressor, ChunkDecompressor, PageDecompressor};
+use crate::wrapped::{ChunkCompressor, ChunkDecompressor, DecompressorScratch, PageDecompressor};
 
 #[test]
 fn test_stack_sizes() {
@@ -21,8 +21,14 @@ fn test_stack_sizes() {
   );
   assert_eq!(
     size_of::<ChunkLatentDecompressor<u64>>(),
-    112
+    4224
   );
   assert_eq!(size_of::<DynChunkLatentCompressor>(), 16);
-  assert_eq!(size_of::<ChunkDecompressor<u64>>(), 288);
+  assert_eq!(size_of::<ChunkDecompressor<u64>>(), 240);
+  // plus a boxed ChunkLatentDecompressorScratch per latent variable
+  assert_eq!(size_of::<DecompressorScratch>(), 48);
+  assert_eq!(
+    size_of::<ChunkLatentDecompressorScratch<u64>>(),
+    4096
+  );
 }

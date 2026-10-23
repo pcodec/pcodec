@@ -2,7 +2,9 @@ use std::fmt::Debug;
 
 use crate::ans::AnsState;
 use crate::bit_reader::BitReader;
-use crate::chunk_latent_decompressor::{ChunkLatentDecompressor, LatentScratch};
+use crate::chunk_latent_decompressor::{
+  ChunkLatentDecompressor, ChunkLatentDecompressorScratch, ChunkLatentDecompressorView,
+};
 use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
 use crate::dyn_slices::DynLatentSlice;
@@ -89,8 +91,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
   unsafe fn read_full_ans_symbols(
     &mut self,
     reader: &mut BitReader,
-    cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentScratch<L>,
+    cld: &ChunkLatentDecompressorView<L>,
+    scratch: &mut ChunkLatentDecompressorScratch<L>,
   ) {
     // At each iteration, this loads a single u64 and has all ANS decoders
     // read a single symbol from it.
@@ -101,10 +103,9 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
-    scratch.prefilled_offset_bits = None;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] = self.ans_state_idxs;
     let ans_nodes = cld.decoder.nodes.as_slice();
-    let lowers = cld.state_lowers.as_slice();
+    let lowers = cld.state_lowers;
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
@@ -147,14 +148,13 @@ impl<L: Latent> PageLatentDecompressor<L> {
     &mut self,
     reader: &mut BitReader,
     batch_n: usize,
-    cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentScratch<L>,
+    cld: &ChunkLatentDecompressorView<L>,
+    scratch: &mut ChunkLatentDecompressorScratch<L>,
   ) {
     let src = reader.src;
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
-    scratch.prefilled_offset_bits = None;
     let mut state_idxs = self.ans_state_idxs;
     for i in 0..batch_n {
       let j = i % ANS_INTERLEAVING;
@@ -186,8 +186,18 @@ impl<L: Latent> PageLatentDecompressor<L> {
     &mut self,
     reader: &mut BitReader,
     batch_n: usize,
-    cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentScratch<L>,
+    cld: &mut ChunkLatentDecompressor<L>,
+  ) {
+    let (cld, scratch) = cld.split();
+    self.read_batch_pre_delta_into(reader, batch_n, &cld, scratch)
+  }
+
+  pub unsafe fn read_batch_pre_delta_into(
+    &mut self,
+    reader: &mut BitReader,
+    batch_n: usize,
+    cld: &ChunkLatentDecompressorView<L>,
+    scratch: &mut ChunkLatentDecompressorScratch<L>,
   ) {
     if batch_n == 0 {
       return;
@@ -201,10 +211,6 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.read_ans_symbols(reader, batch_n, cld, scratch);
       }
     } else {
-      // with no bins there are no offsets to read
-      if let Some(offset_bits) = cld.single_bin_offset_bits {
-        scratch.prefill_single_bin(offset_bits);
-      }
       scratch.latents[..batch_n].fill(cld.state_lowers[0]);
     }
 
@@ -248,17 +254,34 @@ impl<L: Latent> PageLatentDecompressor<L> {
     reader: &mut BitReader,
     delta_latents: Option<DynLatentSlice>,
     n_remaining_in_page: usize,
-    cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentScratch<L>,
+    cld: &mut ChunkLatentDecompressor<L>,
+  ) -> PcoResult<()> {
+    let (cld, scratch) = cld.split();
+    self.read_batch_into(
+      reader,
+      delta_latents,
+      n_remaining_in_page,
+      &cld,
+      scratch,
+    )
+  }
+
+  pub unsafe fn read_batch_into(
+    &mut self,
+    reader: &mut BitReader,
+    delta_latents: Option<DynLatentSlice>,
+    n_remaining_in_page: usize,
+    cld: &ChunkLatentDecompressorView<L>,
+    scratch: &mut ChunkLatentDecompressorScratch<L>,
   ) -> PcoResult<()> {
     let n_remaining_pre_delta =
       n_remaining_in_page.saturating_sub(cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
-    self.read_batch_pre_delta(reader, pre_delta_len, cld, scratch);
+    self.read_batch_pre_delta_into(reader, pre_delta_len, cld, scratch);
     let dst = &mut scratch.latents[..n_remaining_in_page.min(FULL_BATCH_N)];
 
     delta::decode_in_place(
-      &cld.delta_encoding,
+      cld.delta_encoding,
       delta_latents,
       &mut self.delta_state_pos,
       &mut self.delta_state,
@@ -332,35 +355,33 @@ mod micro {
     let src = random_page_body(BENCH_N * ANS_SIZE_LOG as usize);
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
-      .with_inputs(|| {
-        (
-          reader(&src),
-          pld::<L>(),
-          ans_cld::<L>(),
-          LatentScratch::<L>::new(),
-        )
-      })
-      .bench_local_refs(|(reader, pld, cld, scratch)| unsafe {
+      .with_inputs(|| (reader(&src), pld::<L>(), ans_cld::<L>()))
+      .bench_local_refs(|(reader, pld, cld)| unsafe {
+        let (cld, scratch) = cld.split();
         for _ in 0..BENCH_BATCHES {
-          pld.read_full_ans_symbols(reader, cld, scratch);
+          pld.read_full_ans_symbols(reader, &cld, scratch);
         }
       });
   }
 
   /// A single bin means no ANS, so the page body is nothing but offsets and
-  /// the scratch is prefilled with this bin's widths.
-  fn offset_scratch<L: Latent>(n_bits: Bitlen) -> Box<LatentScratch<L>> {
-    let mut scratch = LatentScratch::<L>::new();
-    scratch.prefill_single_bin(n_bits);
-    scratch
+  /// the decompressor's scratch is prefilled with this bin's widths.
+  fn offset_cld<L: Latent>(n_bits: Bitlen) -> Box<ChunkLatentDecompressor<L>> {
+    let bins = vec![Bin {
+      weight: 1,
+      lower: L::ZERO,
+      offset_bits: n_bits,
+    }];
+    ChunkLatentDecompressor::new(0, &bins, LatentVarDeltaEncoding::NoOp).unwrap()
   }
 
   fn bench_read_offsets<L: Latent, const READ_BYTES: usize>(bencher: Bencher, n_bits: Bitlen) {
     let src = random_page_body(BENCH_N * n_bits as usize);
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
-      .with_inputs(|| (reader(&src), offset_scratch::<L>(n_bits)))
-      .bench_local_refs(|(reader, scratch)| unsafe {
+      .with_inputs(|| (reader(&src), offset_cld::<L>(n_bits)))
+      .bench_local_refs(|(reader, cld)| unsafe {
+        let scratch = &mut cld.scratch;
         for _ in 0..BENCH_BATCHES {
           read_offsets::<L, READ_BYTES>(
             reader,

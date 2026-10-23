@@ -6,12 +6,11 @@ use better_io::{BetterBufRead, BetterBufReader};
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec, ModeSpec};
 use crate::data_types::Number;
-use crate::errors::PcoResult;
+use crate::errors::{ErrorKind, PcoResult};
 use crate::macros::match_latent_enum;
-use crate::metadata::{DynBins, Mode};
-use crate::wrapped::{
-  ChunkDecompressor, DecompressorScratch, FileCompressor, FileDecompressor, PageDecompressor,
-};
+use crate::metadata::{DeltaEncoding, DynBins, Mode};
+use crate::wrapped::ChunkDecompressor;
+use crate::wrapped::{FileCompressor, FileDecompressor, PageDecompressor};
 use crate::{PagingSpec, FULL_BATCH_N};
 
 struct Chunk {
@@ -145,314 +144,245 @@ fn pseudo_random(n: usize, seed: u64, modulus: u64) -> Vec<u32> {
     .collect()
 }
 
-// mostly small numbers with an occasional large one, so several bins
-fn mixed_magnitudes(n: usize) -> Vec<u32> {
-  let small = pseudo_random(n, 6, 1 << 3);
-  let large = pseudo_random(n, 7, 1 << 28);
-  (0..n)
-    .map(|i| if i % 7 == 0 { large[i] } else { small[i] })
-    .collect()
+fn config(mode_spec: ModeSpec, delta_spec: DeltaSpec, page_n: usize) -> ChunkConfig {
+  ChunkConfig {
+    mode_spec,
+    delta_spec,
+    paging_spec: PagingSpec::EqualPagesUpTo(page_n),
+    ..Default::default()
+  }
 }
 
-// (number of bins, offset bits of the first bin) of the primary latent var
-fn primary_bins(cd: &ChunkDecompressor<u32>) -> (usize, u32) {
-  match_latent_enum!(
-    &cd.meta().per_latent_var.primary.bins,
-    DynBins<L>(bins) => { (bins.len(), bins.first().map_or(0, |bin| bin.offset_bits)) }
-  )
+// (chunk decompressor, [(page bytes, page's numbers)])
+type ChunkWithPages<'a, T> = (ChunkDecompressor<T>, Vec<(Vec<u8>, &'a [T])>);
+
+fn chunk_with_pages<'a, T: Number>(
+  nums: &'a [T],
+  config: &ChunkConfig,
+) -> PcoResult<ChunkWithPages<'a, T>> {
+  let fc = FileCompressor::default();
+  let header = fc.write_header(Vec::new())?;
+  let mut cc = fc.chunk_compressor(nums, config)?;
+  let meta = cc.write_meta(Vec::new())?;
+  let mut pages = Vec::new();
+  let mut page_start = 0;
+  for (page_idx, &page_n) in cc.n_per_page().iter().enumerate() {
+    let page = cc.write_page(page_idx, Vec::new())?;
+    pages.push((page, &nums[page_start..page_start + page_n]));
+    page_start += page_n;
+  }
+  let (fd, _) = FileDecompressor::new(header.as_slice())?;
+  let (cd, _) = fd.chunk_decompressor(meta.as_slice())?;
+  Ok((cd, pages))
+}
+
+// one scratch, made for the first chunk, for every page of every chunk
+fn decompress_reusing_scratch(chunks: &[Chunk]) -> PcoResult<Vec<ChunkDecompressor<u32>>> {
+  let mut scratch = None;
+  let mut cds = Vec::new();
+  for chunk in chunks {
+    let (cd, pages) = chunk_with_pages(&chunk.nums, &chunk.config)?;
+    let scratch = scratch.get_or_insert_with(|| cd.new_scratch());
+    for (page, nums) in pages {
+      let mut pd = cd.page_decompressor_with_scratch(scratch, page.as_slice(), nums.len())?;
+      assert_eq!(
+        decompress_by_batch(&mut pd, nums.len())?,
+        nums
+      );
+    }
+    cds.push(cd);
+  }
+  Ok(cds)
 }
 
 #[test]
 fn test_scratch_reused_across_chunks() -> PcoResult<()> {
-  let paging_spec = PagingSpec::EqualPagesUpTo(300);
-  let chunks = [
-    Chunk {
-      nums: mixed_magnitudes(1000),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: paging_spec.clone(),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: pseudo_random(1000, 1, 1 << 4),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: paging_spec.clone(),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: pseudo_random(1000, 2, 1 << 20),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: paging_spec.clone(),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: mixed_magnitudes(1000),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: paging_spec.clone(),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: pseudo_random(1000, 3, 1 << 20),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: paging_spec.clone(),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: pseudo_random(40, 4, 1 << 30).repeat(25),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::TryLookback,
-        paging_spec: paging_spec.clone(),
-        ..Default::default()
-      },
-    },
-  ];
-  let mut compressed = Vec::new();
-  test_wrapped_compress(&chunks, &mut compressed)?;
-
-  // One scratch across every chunk: single-bin chunks with different offset
-  // widths, multi-bin chunks between them, a single-bin chunk returning to an
-  // earlier width, and a chunk with a delta latent var.
-  let mut scratch = DecompressorScratch::new();
-  let (fd, mut src) = FileDecompressor::new(compressed.as_slice())?;
-  let mut shapes = Vec::new();
-  for chunk in &chunks {
-    let (cd, new_src) = fd.chunk_decompressor::<u32, _>(src)?;
-    src = new_src;
-    shapes.push((
-      primary_bins(&cd),
-      cd.meta().per_latent_var.delta.is_some(),
-    ));
-
-    let mut page_start = 0;
-    for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {
-      let mut pd = cd.page_decompressor_with_scratch(&mut scratch, src, page_n)?;
-      let page_nums = decompress_by_batch(&mut pd, page_n)?;
-      src = pd.into_src();
-      assert_eq!(
-        &page_nums,
-        &chunk.nums[page_start..page_start + page_n]
-      );
-      page_start += page_n;
-    }
-  }
-
-  // make sure the chunks have the shapes this test is about
-  assert!(shapes[0].0 .0 > 1);
-  assert_eq!(shapes[1].0 .0, 1);
-  assert_eq!(shapes[2].0 .0, 1);
-  assert_ne!(shapes[1].0 .1, shapes[2].0 .1);
-  assert!(shapes[3].0 .0 > 1);
-  // the same single-bin width as chunk 2, after a multi-bin chunk overwrote
-  // the scratch's offset widths
-  assert_eq!(shapes[4].0, shapes[2].0);
-  assert!(shapes[5].1);
-  Ok(())
-}
-
-#[test]
-fn test_scratch_reused_across_lookback_chunks() -> PcoResult<()> {
-  // A lookback chunk with a large window, then one with a small window whose
-  // pages end in partial batches. The second chunk must not see the first
-  // chunk's lookbacks past the ones it read.
-  let chunks = [
-    Chunk {
-      nums: pseudo_random(2000, 11, 1 << 30).repeat(10),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::TryLookback,
-        paging_spec: PagingSpec::EqualPagesUpTo(20000),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: pseudo_random(3, 12, 1 << 30).repeat(100),
-      config: ChunkConfig {
-        delta_spec: DeltaSpec::TryLookback,
-        paging_spec: PagingSpec::EqualPagesUpTo(150),
-        ..Default::default()
-      },
-    },
-  ];
-  let mut compressed = Vec::new();
-  test_wrapped_compress(&chunks, &mut compressed)?;
-
-  let mut scratch = DecompressorScratch::new();
-  let (fd, mut src) = FileDecompressor::new(compressed.as_slice())?;
-  for chunk in &chunks {
-    let (cd, new_src) = fd.chunk_decompressor::<u32, _>(src)?;
-    src = new_src;
-    assert!(cd.meta().per_latent_var.delta.is_some());
-
-    let mut page_start = 0;
-    for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {
-      let mut pd = cd.page_decompressor_with_scratch(&mut scratch, src, page_n)?;
-      let page_nums = decompress_by_batch(&mut pd, page_n)?;
-      src = pd.into_src();
-      assert_eq!(
-        &page_nums,
-        &chunk.nums[page_start..page_start + page_n]
-      );
-      page_start += page_n;
-    }
-  }
-  Ok(())
-}
-
-#[test]
-fn test_scratch_reused_across_dict_chunks() -> PcoResult<()> {
-  // A dict chunk with a large dict, then one with a small dict whose pages
-  // end in partial batches. The second chunk must not see the first chunk's
-  // dict indices past the ones it read.
-  let big_dict = pseudo_random(1000, 21, 1 << 30);
-  let small_dict = pseudo_random(4, 22, 1 << 30);
-  let chunks = [
-    Chunk {
-      nums: (0..20000).map(|i| big_dict[(i * 7919) % 1000]).collect(),
-      config: ChunkConfig {
-        mode_spec: ModeSpec::TryDict,
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: PagingSpec::EqualPagesUpTo(20000),
-        ..Default::default()
-      },
-    },
-    Chunk {
-      nums: (0..300).map(|i| small_dict[(i * 3) % 4]).collect(),
-      config: ChunkConfig {
-        mode_spec: ModeSpec::TryDict,
-        delta_spec: DeltaSpec::NoOp,
-        paging_spec: PagingSpec::EqualPagesUpTo(150),
-        ..Default::default()
-      },
-    },
-  ];
-  let mut compressed = Vec::new();
-  test_wrapped_compress(&chunks, &mut compressed)?;
-
-  let mut scratch = DecompressorScratch::new();
-  let (fd, mut src) = FileDecompressor::new(compressed.as_slice())?;
-  for chunk in &chunks {
-    let (cd, new_src) = fd.chunk_decompressor::<u32, _>(src)?;
-    src = new_src;
-    assert!(matches!(cd.meta().mode, Mode::Dict(_)));
-
-    let mut page_start = 0;
-    for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {
-      let mut pd = cd.page_decompressor_with_scratch(&mut scratch, src, page_n)?;
-      let page_nums = decompress_by_batch(&mut pd, page_n)?;
-      src = pd.into_src();
-      assert_eq!(
-        &page_nums,
-        &chunk.nums[page_start..page_start + page_n]
-      );
-      page_start += page_n;
-    }
-  }
-  Ok(())
-}
-
-fn round_trip_with_scratch<T: Number>(
-  nums: &[T],
-  scratch: &mut DecompressorScratch,
-) -> PcoResult<()> {
-  let config = ChunkConfig::default().with_paging_spec(PagingSpec::EqualPagesUpTo(300));
-  let fc = FileCompressor::default();
-  let mut compressed = fc.write_header(Vec::new())?;
-  let mut cc = fc.chunk_compressor(nums, &config)?;
-  compressed = cc.write_meta(compressed)?;
-  for page_idx in 0..cc.n_per_page().len() {
-    compressed = cc.write_page(page_idx, compressed)?;
-  }
-
-  let (fd, src) = FileDecompressor::new(compressed.as_slice())?;
-  let (cd, mut src) = fd.chunk_decompressor::<T, _>(src)?;
-  let mut decompressed = Vec::new();
-  for page_n in config.paging_spec.n_per_page(nums.len())? {
-    let mut page = vec![T::default(); page_n];
-    let mut pd = cd.page_decompressor_with_scratch(scratch, src, page_n)?;
-    pd.read(&mut page)?;
-    src = pd.into_src();
-    decompressed.extend(page);
-  }
-  assert_eq!(decompressed, nums);
-  Ok(())
-}
-
-#[test]
-fn test_scratch_reused_across_number_types() -> PcoResult<()> {
-  // u32 and i32 share a latent type, as do u64 and f64; u16 has its own
-  let ints = pseudo_random(1000, 31, 1 << 20);
-  let mut scratch = DecompressorScratch::new();
-  round_trip_with_scratch(&ints, &mut scratch)?;
-  let u64s = ints.iter().map(|&x| (x as u64) << 20).collect::<Vec<_>>();
-  round_trip_with_scratch(&u64s, &mut scratch)?;
-  let f64s = ints.iter().map(|&x| x as f64 / 7.0).collect::<Vec<_>>();
-  round_trip_with_scratch(&f64s, &mut scratch)?;
-  let i32s = ints
-    .iter()
-    .map(|&x| x as i32 - (1 << 19))
+  // multi-bin batches (full or partial) leave offset widths in the scratch
+  //   -> the next single-bin chunk must not read them
+  let classic = |nums, page_n| Chunk {
+    nums,
+    config: config(ModeSpec::Classic, DeltaSpec::NoOp, page_n),
+  };
+  let mixed = (0..1000)
+    .map(|i| if i % 7 == 0 { i << 20 } else { i % 8 })
     .collect::<Vec<_>>();
-  round_trip_with_scratch(&i32s, &mut scratch)?;
-  let u16s = ints.iter().map(|&x| x as u16).collect::<Vec<_>>();
-  round_trip_with_scratch(&u16s, &mut scratch)?;
-  round_trip_with_scratch(&ints, &mut scratch)
+  let cds = decompress_reusing_scratch(&[
+    classic(pseudo_random(1000, 1, 1 << 4), 300),
+    classic(mixed[..768].to_vec(), 256),
+    classic(pseudo_random(1000, 2, 1 << 20), 300),
+    classic(mixed, 300),
+    classic(pseudo_random(1000, 3, 1 << 20), 300),
+  ])?;
+  let multi_bin = |cd: &ChunkDecompressor<u32>| {
+    match_latent_enum!(
+      &cd.meta().per_latent_var.primary.bins,
+      DynBins<L>(bins) => { bins.len() > 1 }
+    )
+  };
+  assert_eq!(
+    cds.iter().map(multi_bin).collect::<Vec<_>>(),
+    [false, true, false, true, false]
+  );
+
+  // big lookback window / dict, then a small one with partial final batches
+  //   -> the small one must not see the big one's lookbacks / indices
+  let lookback = |nums, page_n| Chunk {
+    nums,
+    config: config(
+      ModeSpec::Classic,
+      DeltaSpec::TryLookback,
+      page_n,
+    ),
+  };
+  let cds = decompress_reusing_scratch(&[
+    lookback(
+      pseudo_random(2000, 11, 1 << 30).repeat(10),
+      20000,
+    ),
+    lookback(
+      pseudo_random(3, 12, 1 << 30).repeat(100),
+      150,
+    ),
+  ])?;
+  assert!(cds
+    .iter()
+    .all(|cd| cd.meta().per_latent_var.delta.is_some()));
+  let dict = |dict: Vec<u32>, n, page_n| Chunk {
+    nums: (0..n).map(|i| dict[(i * 7919) % dict.len()]).collect(),
+    config: config(ModeSpec::TryDict, DeltaSpec::NoOp, page_n),
+  };
+  let cds = decompress_reusing_scratch(&[
+    dict(
+      pseudo_random(1000, 21, 1 << 30),
+      20000,
+      20000,
+    ),
+    dict(pseudo_random(4, 22, 1 << 30), 300, 150),
+  ])?;
+  assert!(cds.iter().all(|cd| matches!(cd.meta().mode, Mode::Dict(_))));
+
+  // a secondary latent var, and delta encodings without a delta latent var
+  let int_mult = |seed| Chunk {
+    nums: pseudo_random(1000, seed, 1 << 20)
+      .iter()
+      .map(|&x| x * 1000 + x % 3)
+      .collect(),
+    config: config(
+      ModeSpec::TryIntMult(1000),
+      DeltaSpec::NoOp,
+      300,
+    ),
+  };
+  let cds = decompress_reusing_scratch(&[int_mult(31), int_mult(32)])?;
+  assert!(cds
+    .iter()
+    .all(|cd| cd.meta().per_latent_var.secondary.is_some()));
+  let smooth = |seed, delta_spec| Chunk {
+    nums: pseudo_random(1000, seed, 1 << 4)
+      .iter()
+      .enumerate()
+      .map(|(i, &x)| (i * i) as u32 + x)
+      .collect(),
+    config: config(ModeSpec::Classic, delta_spec, 300),
+  };
+  let consecutive = DeltaSpec::TryConsecutive(2);
+  let cds =
+    decompress_reusing_scratch(&[smooth(41, consecutive.clone()), smooth(42, consecutive)])?;
+  assert!(cds.iter().all(|cd| matches!(
+    cd.meta().delta_encoding,
+    DeltaEncoding::Consecutive { .. }
+  )));
+  let conv1 = DeltaSpec::TryConv1(2);
+  let cds = decompress_reusing_scratch(&[smooth(43, conv1.clone()), smooth(44, conv1)])?;
+  assert!(cds.iter().all(|cd| matches!(
+    cd.meta().delta_encoding,
+    DeltaEncoding::Conv1(_)
+  )));
+  Ok(())
+}
+
+#[test]
+fn test_scratch_compatibility() -> PcoResult<()> {
+  // same number type, other mode / delta -> other latent vars, and Auto specs
+  // pick them per chunk
+  let random = pseudo_random(1000, 41, 1 << 30);
+  let u64s = random.iter().map(|&x| x as u64).collect::<Vec<_>>();
+  let f64s = random.iter().map(|&x| x as f64 / 7.0).collect::<Vec<_>>();
+  let mults = u64s.iter().map(|&x| x * 1000 + x % 3).collect::<Vec<_>>();
+  let few = (0..1000).map(|i| u64s[i % 8] << 20).collect::<Vec<_>>();
+  let repeats = u64s[..40].repeat(25);
+  let classic = config(ModeSpec::Classic, DeltaSpec::NoOp, 1000);
+  let (u64_cd, _) = chunk_with_pages(&u64s, &classic)?;
+  let (f64_cd, f64_pages) = chunk_with_pages(&f64s, &classic)?;
+  let (u32_cd, _) = chunk_with_pages(&random, &classic)?;
+  let (lookback, _) = chunk_with_pages(
+    &repeats,
+    &config(
+      ModeSpec::Classic,
+      DeltaSpec::TryLookback,
+      1000,
+    ),
+  )?;
+  let (int_mult, _) = chunk_with_pages(
+    &mults,
+    &config(
+      ModeSpec::TryIntMult(1000),
+      DeltaSpec::NoOp,
+      1000,
+    ),
+  )?;
+  let (dict, _) = chunk_with_pages(
+    &few,
+    &config(ModeSpec::TryDict, DeltaSpec::NoOp, 1000),
+  )?;
+  // make sure the chunks have the latent vars this test is about
+  assert!(lookback.meta().per_latent_var.delta.is_some());
+  assert!(int_mult.meta().per_latent_var.secondary.is_some());
+  // dict mode's primary latents are u32 indices even for u64 numbers
+  assert!(matches!(dict.meta().mode, Mode::Dict(_)));
+
+  // classic u64 scratch -> f64 (u64 latents too): fits
+  //                     -> u32, or other latent vars: rejected
+  let mut scratch = u64_cd.new_scratch();
+  assert!(f64_cd.is_compatible_with_scratch(&scratch));
+  let mut nums = vec![0.0; 1000];
+  f64_cd
+    .page_decompressor_with_scratch(&mut scratch, f64_pages[0].0.as_slice(), 1000)?
+    .read(&mut nums)?;
+  assert_eq!(nums, f64s);
+  assert!(!u32_cd.is_compatible_with_scratch(&scratch));
+  for cd in [&lookback, &int_mult, &dict] {
+    assert!(!cd.is_compatible_with_scratch(&scratch));
+    assert!(!u64_cd.is_compatible_with_scratch(&cd.new_scratch()));
+    let res = cd.page_decompressor_with_scratch(&mut scratch, &[][..], 1000);
+    assert!(matches!(
+      res.err().map(|err| err.kind),
+      Some(ErrorKind::InvalidArgument)
+    ));
+  }
+  Ok(())
 }
 
 #[test]
 fn test_concurrent_pages_from_shared_chunk() -> PcoResult<()> {
   let nums = pseudo_random(20_000, 5, 1 << 24);
-  let chunk = Chunk {
-    nums,
-    config: ChunkConfig {
-      paging_spec: PagingSpec::EqualPagesUpTo(1000),
-      ..Default::default()
-    },
-  };
-  let mut compressed = Vec::new();
-  test_wrapped_compress(std::slice::from_ref(&chunk), &mut compressed)?;
-
-  let (fd, src) = FileDecompressor::new(compressed.as_slice())?;
-  let (cd, mut src) = fd.chunk_decompressor::<u32, _>(src)?;
-  let mut scratch = DecompressorScratch::new();
-  let mut pages = Vec::new();
-  let mut page_start = 0;
-  for page_n in chunk.config.paging_spec.n_per_page(chunk.nums.len())? {
-    // find where this page ends by decompressing it once
-    let mut pd = cd.page_decompressor_with_scratch(&mut scratch, src, page_n)?;
-    decompress_by_batch(&mut pd, page_n)?;
-    let rest = pd.into_src();
-    pages.push((
-      &src[..src.len() - rest.len()],
-      page_start,
-      page_n,
-    ));
-    src = rest;
-    page_start += page_n;
-  }
-
-  let cd = &cd;
-  let pages = &pages;
-  let nums = &chunk.nums;
+  let (cd, pages) = chunk_with_pages(
+    &nums,
+    &config(ModeSpec::Auto, DeltaSpec::Auto, 1000),
+  )?;
+  let (cd, pages) = (&cd, &pages);
   std::thread::scope(|s| {
     for t in 0..8 {
       s.spawn(move || {
-        let mut scratch = DecompressorScratch::new();
+        let mut scratch = cd.new_scratch();
         for i in 0..pages.len() {
-          let (page, page_start, page_n) = pages[(i + t) % pages.len()];
+          let (page, nums) = pages[(i + t) % pages.len()].clone();
           let mut pd = cd
-            .page_decompressor_with_scratch(&mut scratch, page, page_n)
+            .page_decompressor_with_scratch(&mut scratch, page.as_slice(), nums.len())
             .unwrap();
-          let page_nums = decompress_by_batch(&mut pd, page_n).unwrap();
           assert_eq!(
-            &page_nums,
-            &nums[page_start..page_start + page_n]
+            decompress_by_batch(&mut pd, nums.len()).unwrap(),
+            nums
           );
         }
       });
