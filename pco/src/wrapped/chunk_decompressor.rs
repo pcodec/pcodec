@@ -1,7 +1,9 @@
 use better_io::BetterBufRead;
 use std::marker::PhantomData;
 
-use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
+use crate::chunk_latent_decompressor::{
+  DynChunkLatentDecompressor, DynChunkLatentDecompressorScratch,
+};
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
@@ -33,6 +35,14 @@ impl ChunkDecompressorInner {
       .for_latent_var(LatentVarKey::Primary)
       .n_latents_per_state()
   }
+}
+
+/// Working memory for decompressing pages of a shared `ChunkDecompressor`,
+/// one per thread. It works for any chunk with the same latent variables and
+/// latent types as the chunk that made it.
+#[derive(Clone, Debug)]
+pub struct DecompressorScratch {
+  pub(crate) per_latent_var: PerLatentVar<DynChunkLatentDecompressorScratch>,
 }
 
 /// Holds metadata about a chunk and can produce page decompressors.
@@ -77,5 +87,47 @@ impl<T: Number> ChunkDecompressor<T> {
     n: usize,
   ) -> PcoResult<PageDecompressor<'_, T, R>> {
     PageDecompressor::<T, R>::new(src, self, n)
+  }
+
+  pub fn new_scratch(&self) -> DecompressorScratch {
+    let per_latent_var = self
+      .inner
+      .per_latent_var
+      .as_ref()
+      .map(|_key, cld| cld.new_scratch());
+    DecompressorScratch { per_latent_var }
+  }
+
+  /// Returns whether the scratch has this chunk's latent variables and latent
+  /// types.
+  pub fn is_compatible_with_scratch(&self, scratch: &DecompressorScratch) -> bool {
+    let chunk_types = self
+      .meta()
+      .per_latent_var
+      .as_ref()
+      .map(|_key, latent_var| latent_var.latent_type());
+    let scratch_types = scratch
+      .per_latent_var
+      .as_ref()
+      .map(|_key, scratch| scratch.latent_type());
+    chunk_types == scratch_types
+  }
+
+  /// Like `page_decompressor`, but decompresses into the given scratch, so it
+  /// only needs `&self` and threads can share this chunk decompressor.
+  ///
+  /// Will return an error if the scratch is not compatible with this chunk.
+  pub fn page_decompressor_with_scratch<'a, R: BetterBufRead>(
+    &'a self,
+    scratch: &'a mut DecompressorScratch,
+    src: R,
+    n: usize,
+  ) -> PcoResult<PageDecompressor<'a, T, R>> {
+    if !self.is_compatible_with_scratch(scratch) {
+      return Err(PcoError::invalid_argument(
+        "scratch is not compatible with this chunk; create one for it with new_scratch",
+      ));
+    }
+    PageDecompressor::<T, R>::new_with_scratch(src, self, scratch, n)
   }
 }
