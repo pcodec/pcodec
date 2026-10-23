@@ -408,7 +408,7 @@ pub(crate) fn compute_bid<F: Float>(sample: &[F]) -> Option<Bid<F>> {
 
 #[cfg(test)]
 mod test {
-  use std::f32::consts::TAU;
+  use std::f32::consts::{E, SQRT_2, TAU};
 
   use rand::{Rng, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
@@ -462,6 +462,24 @@ mod test {
     assert_eq!(
       insignificant_float_to(32.0_f32),
       1.0 / ((1_u64 << 12) as f32)
+    );
+  }
+
+  #[test]
+  fn test_powers_of_ten() {
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[0.0, 0.0, 0.0, 0.0, 0.0].repeat(20)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[TAU, E, SQRT_2].repeat(30)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[47.1234567, 49.7654321, 32.2345678, 55.8765432].repeat(20)),
+      Some(FloatMultConfig::from_base(0.0000001)),
     );
   }
 
