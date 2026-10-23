@@ -77,12 +77,95 @@ cleanup:
 }
 
 /* -------------------------------------------------------------------------
+ * Non-default paging spec
+ *
+ * pco_standalone_guarantee_file_size assumes the default paging spec. Setting
+ * max_page_n splits the file into one chunk per page, each with its own
+ * overhead, so the bound to allocate is the one from
+ * pco_standalone_guarantee_file_size_with_config -- following the sequence
+ * with the config-free bound used to fail here.
+ * ------------------------------------------------------------------------- */
+
+static int test_non_default_paging(void) {
+  long long input[21];
+  int num_elems = sizeof(input) / sizeof(input[0]);
+  for (int i = 0; i < num_elems; i++)
+    input[i] = i;
+
+  printf("\n=== Non-default paging spec ===\n");
+
+  struct PcoChunkConfig config;
+  config.compression_level = 11;
+  config.max_page_n = 1;
+
+  size_t bound = pco_standalone_guarantee_file_size_with_config(num_elems, PCO_TYPE_I64,
+                                                                &config);
+  size_t default_bound = pco_standalone_guarantee_file_size(num_elems, PCO_TYPE_I64);
+  if (bound == 0) {
+    printf("FAIL: guarantee_file_size_with_config returned 0\n");
+    return 1;
+  }
+  printf("Bound with max_page_n=1: %zu bytes (default spec would say %zu)\n",
+         bound, default_bound);
+
+  unsigned char *cbuf = (unsigned char *)malloc(bound);
+  if (!cbuf) { printf("FAIL: malloc\n"); return 1; }
+
+  size_t compressed_len = 0;
+  enum PcoError res = pco_standalone_simple_compress_into(input, num_elems,
+                                                          PCO_TYPE_I64, &config,
+                                                          cbuf, bound,
+                                                          &compressed_len);
+  if (res != PcoSuccess) {
+    printf("FAIL: compress_into error %d into the size the library gave us\n", res);
+    free(cbuf);
+    return 1;
+  }
+  printf("Compressed %d i64s to %zu bytes\n", num_elems, compressed_len);
+
+  if (compressed_len <= default_bound) {
+    printf("FAIL: the paged file (%zu bytes) did not outgrow the default-spec "
+           "bound (%zu), so this test proves nothing\n",
+           compressed_len, default_bound);
+    free(cbuf);
+    return 1;
+  }
+
+  long long *dbuf = (long long *)malloc(num_elems * sizeof(long long));
+  if (!dbuf) { printf("FAIL: malloc\n"); free(cbuf); return 1; }
+
+  size_t decompressed_n = 0;
+  res = pco_standalone_simple_decompress_into(cbuf, compressed_len, PCO_TYPE_I64,
+                                              dbuf, num_elems, &decompressed_n);
+  int retcode = 0;
+  if (res != PcoSuccess || (int)decompressed_n != num_elems) {
+    printf("FAIL: decompress_into error %d, %zu elements\n", res, decompressed_n);
+    retcode = 1;
+  } else {
+    for (int i = 0; i < num_elems; i++) {
+      if (input[i] != dbuf[i]) {
+        printf("FAIL: value mismatch at index %d\n", i);
+        retcode = 1;
+        break;
+      }
+    }
+    if (retcode == 0)
+      printf("Values match\n");
+  }
+
+  free(dbuf);
+  free(cbuf);
+  return retcode;
+}
+
+/* -------------------------------------------------------------------------
  * main
  * ------------------------------------------------------------------------- */
 
 int main(void) {
   int rc = 0;
   rc |= test_caller_alloc_api();
+  rc |= test_non_default_paging();
   if (rc == 0)
     printf("\nAll tests passed.\n");
   else
