@@ -3,6 +3,7 @@ name = "pco_python"
 version = "1.0.4"
 edition = "2021"
 publish = false
+license-file = "../LICENSE"
 
 [lib]
 # The name of the native library. This is the name which will be used in Python to import the
