@@ -33,11 +33,11 @@ hound = "3.5.1"
 indicatif = "0.17.8"
 jni = "0.21.1"
 libc = "0.2.132"
-numpy = "0.27.1"
+numpy = "0.30.0"
 once_cell = "1.21.3"
 parquet = { version = "54.3.1", default-features = false }
 pco = { version = "1.0.3", path = "./pco" }
-pyo3 = "0.27.2"
+pyo3 = "0.30.1"
 q_compress = { version = "0.11.7", path = "./quantile-compression/q_compress" }
 rand_xoshiro = "0.6.0"
 rayon = "1.10.0"
