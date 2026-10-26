@@ -138,7 +138,7 @@ fn test_read_uninit_float_modes() -> PcoResult<()> {
     .collect();
   let expected_bits: Vec<u64> = values.iter().map(|v| v.to_bits()).collect();
   for mode in [ModeSpec::TryFloatMult(0.25), ModeSpec::TryFloatQuant(20)] {
-    let mult = matches!(mode, ModeSpec::TryFloatMult(_));
+    let mult = matches!(&mode, ModeSpec::TryFloatMult(_));
     let (mut cd, page) = compressed_page(&values, mode)?;
     // These public metadata checks ensure both output modes are exercised.
     assert!(if mult {
