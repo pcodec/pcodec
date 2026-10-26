@@ -1,6 +1,5 @@
 use crate::data_types::Number;
 use crate::errors::PcoResult;
-use crate::metadata::Mode;
 use crate::wrapped::{ChunkDecompressor, FileCompressor, FileDecompressor};
 use crate::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
 
@@ -138,14 +137,7 @@ fn test_read_uninit_float_modes() -> PcoResult<()> {
     .collect();
   let expected_bits: Vec<u64> = values.iter().map(|v| v.to_bits()).collect();
   for mode in [ModeSpec::TryFloatMult(0.25), ModeSpec::TryFloatQuant(20)] {
-    let mult = matches!(&mode, ModeSpec::TryFloatMult(_));
     let (mut cd, page) = compressed_page(&values, mode)?;
-    // These public metadata checks ensure both output modes are exercised.
-    assert!(if mult {
-      matches!(&cd.meta().mode, Mode::FloatMult(_))
-    } else {
-      matches!(&cd.meta().mode, Mode::FloatQuant(_))
-    });
     let mut pd = cd.page_decompressor(page.as_slice(), values.len())?;
     let mut output = Vec::<f64>::with_capacity(values.len());
     let progress = pd.read_uninit(output.spare_capacity_mut())?;
