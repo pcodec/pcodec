@@ -93,6 +93,7 @@ pub fn join_latents<T: Number>(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::dyn_slices::as_uninit_mut;
   use crate::dyn_slices::DynLatentSlice;
   use crate::metadata::DynLatents;
 
@@ -104,7 +105,9 @@ mod tests {
     // guard and panics on dict[3]; after the fix it must return Err
     let idxs = [0_u32, 1_u32, 3_u32];
     let mut dst = vec![0_u32; 3];
-    let result = join_latents::<u32>(&dict, DynLatentSlice::new(&idxs), &mut dst);
+    // SAFETY: the joiner only overwrites slots with initialized numbers.
+    let slots = unsafe { as_uninit_mut(&mut dst) };
+    let result = join_latents::<u32>(&dict, DynLatentSlice::new(&idxs), slots);
     assert!(
       result.is_err(),
       "expected Err for out-of-range dict index"

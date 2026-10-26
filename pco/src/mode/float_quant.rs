@@ -160,6 +160,7 @@ pub(crate) fn estimate_best_k_and_bits_saved<F: Float>(sample: &[F]) -> (Bitlen,
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::dyn_slices::as_uninit_mut;
 
   #[test]
   fn test_estimate_best_k() {
@@ -255,11 +256,13 @@ mod test {
     let mut primary = primary.downcast::<u64>().unwrap();
     let mut secondary = secondary.unwrap().downcast::<u64>().unwrap();
     let mut dst = vec![0.0; nums.len()];
+    // SAFETY: the joiner only overwrites slots with initialized numbers.
+    let slots = unsafe { as_uninit_mut(&mut dst) };
     join_latents::<f64>(
       k,
       DynLatentSlice::U64(&mut primary),
       Some(DynLatentSlice::U64(&mut secondary)),
-      &mut dst,
+      slots,
     )
     .unwrap();
 
