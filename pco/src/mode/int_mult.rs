@@ -268,11 +268,13 @@ mod tests {
     assert_eq!(&secondary, &vec![0_u32, 1, 1]);
 
     // JOIN
+    // SAFETY: the joiner only overwrites slots with initialized numbers.
+    let dst_slots = unsafe { as_uninit_mut(&mut dst) };
     join_latents(
       DynLatent::new(base),
       DynLatentSlice::U32(&mut primary),
       Some(DynLatentSlice::U32(&mut secondary)),
-      as_uninit_mut(&mut dst),
+      dst_slots,
     )
     .unwrap();
 
@@ -357,11 +359,13 @@ mod micro {
       .bench_local(|| {
         for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
           let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          // SAFETY: the joiner only overwrites slots with initialized numbers.
+          let dst_batch = unsafe { as_uninit_mut(dst_batch) };
           super::join_latents(
             black_box(DynLatent::new(base)),
             DynLatentSlice::new(&mults[range.clone()]),
             Some(DynLatentSlice::new(&adjs[range])),
-            as_uninit_mut(dst_batch),
+            dst_batch,
           )
           .unwrap();
         }

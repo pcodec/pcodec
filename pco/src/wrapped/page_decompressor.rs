@@ -241,9 +241,12 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+    // SAFETY: the decoder only overwrites slots with initialized numbers.
+    // Untouched slots remain initialized, including on error or unwind.
+    let dst = unsafe { as_uninit_mut(dst) };
     self.state.read(
       &mut self.cd.inner,
-      DynNumberSliceMut::new(as_uninit_mut(dst)),
+      DynNumberSliceMut::new(dst),
     )
   }
 

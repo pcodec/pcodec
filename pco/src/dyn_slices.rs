@@ -54,9 +54,13 @@ impl<'a> DynNumberSliceMut<'a> {
   }
 }
 
-/// An initialized number is also a valid MaybeUninit of that number.
+/// View initialized numbers as possibly uninitialized slots.
+///
+/// # Safety
+/// Every slot must remain initialized when the returned borrow ends, including
+/// on error or unwind. Callers must not use the view to deinitialize a value.
 #[inline]
-pub(crate) fn as_uninit_mut<T: Number>(values: &mut [T]) -> &mut [MaybeUninit<T>] {
+pub(crate) unsafe fn as_uninit_mut<T: Number>(values: &mut [T]) -> &mut [MaybeUninit<T>] {
   // SAFETY: MaybeUninit<T> has the same size and alignment as T and permits
   // initialized values. The exclusive borrow and length are unchanged.
   unsafe { slice::from_raw_parts_mut(values.as_mut_ptr().cast(), values.len()) }

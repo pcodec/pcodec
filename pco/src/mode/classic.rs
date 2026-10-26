@@ -46,9 +46,11 @@ mod micro {
       .bench_local(|| {
         for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
           let start = batch_idx * FULL_BATCH_N;
+          // SAFETY: the joiner only overwrites slots with initialized numbers.
+          let dst_batch = unsafe { as_uninit_mut(dst_batch) };
           super::join_latents(
             DynLatentSlice::new(&primary[start..start + dst_batch.len()]),
-            as_uninit_mut(dst_batch),
+            dst_batch,
           )
           .unwrap();
         }
