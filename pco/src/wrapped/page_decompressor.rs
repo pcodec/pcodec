@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::mem::MaybeUninit;
 use std::ops::Range;
 
 use better_io::BetterBufRead;
@@ -8,7 +9,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
 use crate::data_types::number_priv::NumberPriv;
 use crate::data_types::Number;
-use crate::dyn_slices::{DynLatentSlice, DynNumberSliceMut};
+use crate::dyn_slices::{as_uninit_mut, DynLatentSlice, DynNumberSliceMut};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::{match_latent_enum, match_number_enum};
 use crate::metadata::page::PageMeta;
@@ -240,6 +241,21 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+    self.state.read(
+      &mut self.cd.inner,
+      DynNumberSliceMut::new(as_uninit_mut(dst)),
+    )
+  }
+
+  /// Reads the next decompressed numbers into potentially uninitialized memory.
+  ///
+  /// On success, the first `progress.n_processed` elements are initialized,
+  /// and `progress.n_processed <= dst.len()`. The remaining elements have
+  /// unspecified contents. On error or panic, no initialized prefix is promised.
+  ///
+  /// `dst` must have length either a multiple of 256 or be at least the count
+  /// of numbers remaining in the page.
+  pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     self.state.read(
       &mut self.cd.inner,
       DynNumberSliceMut::new(dst),

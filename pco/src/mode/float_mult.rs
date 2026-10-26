@@ -1,6 +1,7 @@
 use core::f64::consts::LOG10_2;
 use std::cmp::{max, min};
 use std::mem;
+use std::mem::MaybeUninit;
 
 use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, MULT_REQUIRED_BITS_SAVED_PER_NUM};
@@ -19,18 +20,18 @@ pub(crate) fn join_latents<F: Float>(
   base: F,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [F],
+  dst: &mut [MaybeUninit<F>],
 ) -> PcoResult<()> {
   let primary = primary.downcast::<F::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     let unadjusted = F::int_float_from_latent(mult) * base;
-    *dst = F::from_latent_ordered(
+    dst.write(F::from_latent_ordered(
       unadjusted
         .to_latent_ordered()
         .wrapping_add(adj)
         .toggle_center(),
-    );
+    ));
   }
 
   Ok(())
@@ -728,6 +729,7 @@ mod test {
 
 #[cfg(feature = "bench")]
 mod micro {
+  use crate::dyn_slices::as_uninit_mut;
   use divan::{black_box, Bencher};
   use half::f16;
   use rand_xoshiro::rand_core::{RngCore, SeedableRng};
@@ -762,7 +764,7 @@ mod micro {
             black_box(base),
             DynLatentSlice::new(&mults[range.clone()]),
             Some(DynLatentSlice::new(&adjs[range])),
-            dst_batch,
+            as_uninit_mut(dst_batch),
           )
           .unwrap();
         }

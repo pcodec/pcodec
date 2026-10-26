@@ -1,4 +1,5 @@
 use half::f16;
+use std::mem::MaybeUninit;
 
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
@@ -400,7 +401,7 @@ macro_rules! impl_float_number {
         mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
+        dst: &mut [MaybeUninit<Self>],
       ) -> PcoResult<()> {
         match mode {
           Mode::Classic => classic::join_latents(primary, dst),

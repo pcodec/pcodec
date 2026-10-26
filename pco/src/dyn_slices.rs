@@ -1,9 +1,12 @@
+use std::mem::MaybeUninit;
 use std::ops::Range;
+use std::slice;
 
 use crate::data_types::{Latent, Number};
 use crate::macros::{define_latent_enum, define_number_enum, match_number_enum};
 
 type Arr<T> = [T];
+type UninitArr<T> = [MaybeUninit<T>];
 
 define_latent_enum!(
   #[derive()]
@@ -37,7 +40,7 @@ impl<'a> DynNumberSlice<'a> {
 
 define_number_enum!(
   #[derive()]
-  pub DynNumberSliceMut(&mut Arr)
+  pub DynNumberSliceMut(&mut UninitArr)
 );
 
 impl<'a> DynNumberSliceMut<'a> {
@@ -49,4 +52,12 @@ impl<'a> DynNumberSliceMut<'a> {
       }
     )
   }
+}
+
+/// An initialized number is also a valid MaybeUninit of that number.
+#[inline]
+pub(crate) fn as_uninit_mut<T: Number>(values: &mut [T]) -> &mut [MaybeUninit<T>] {
+  // SAFETY: MaybeUninit<T> has the same size and alignment as T and permits
+  // initialized values. The exclusive borrow and length are unchanged.
+  unsafe { slice::from_raw_parts_mut(values.as_mut_ptr().cast(), values.len()) }
 }

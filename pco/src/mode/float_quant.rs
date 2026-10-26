@@ -8,13 +8,14 @@ use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
 use std::cmp;
+use std::mem::MaybeUninit;
 
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
   k: Bitlen,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [F],
+  dst: &mut [MaybeUninit<F>],
 ) -> PcoResult<()> {
   let primary = primary.downcast::<F::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
@@ -40,7 +41,7 @@ pub(crate) fn join_latents<F: Float>(
     } else {
       F::L::MID
     };
-    *dst = F::from_latent_bits((y << k) ^ m ^ flip);
+    dst.write(F::from_latent_bits((y << k) ^ m ^ flip));
   }
 
   Ok(())
@@ -294,6 +295,7 @@ mod test {
 
 #[cfg(feature = "bench")]
 mod micro {
+  use crate::dyn_slices::as_uninit_mut;
   use divan::{black_box, Bencher};
   use half::f16;
 
@@ -317,7 +319,7 @@ mod micro {
             black_box(k),
             DynLatentSlice::new(&ys[range.clone()]),
             Some(DynLatentSlice::new(&ms[range])),
-            dst_batch,
+            as_uninit_mut(dst_batch),
           )
           .unwrap();
         }

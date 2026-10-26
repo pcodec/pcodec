@@ -3,7 +3,7 @@ use better_io::BetterBufRead;
 use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::constants::{Bitlen, OVERSHOOT_PADDING};
 use crate::data_types::{Number, NumberType};
-use crate::dyn_slices::DynNumberSliceMut;
+use crate::dyn_slices::{as_uninit_mut, DynNumberSliceMut};
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::ChunkMeta;
@@ -304,7 +304,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
       &mut self.inner_cd.inner,
-      DynNumberSliceMut::new(dst),
+      DynNumberSliceMut::new(as_uninit_mut(dst)),
     )?;
 
     self.n_processed += progress.n_processed;

@@ -1,5 +1,6 @@
 use std::cmp;
 use std::collections::HashMap;
+use std::mem::MaybeUninit;
 
 use crate::compression_intermediates::Bid;
 use crate::data_types::{Latent, Number, SplitLatents};
@@ -70,7 +71,7 @@ pub fn compute_bid<T: Number>(nums: &[T]) -> Bid<T> {
 pub fn join_latents<T: Number>(
   dict: &DynLatents,
   primary: DynLatentSlice,
-  dst: &mut [T],
+  dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<()> {
   let dict = dict.downcast_ref::<T::L>().unwrap();
   let idxs = primary.downcast::<u32>().unwrap();
@@ -84,7 +85,7 @@ pub fn join_latents<T: Number>(
   }
 
   for (idx, num) in idxs.iter().zip(dst.iter_mut()) {
-    *num = T::from_latent_ordered(dict[*idx as usize]);
+    num.write(T::from_latent_ordered(dict[*idx as usize]));
   }
   Ok(())
 }
@@ -113,6 +114,7 @@ mod tests {
 
 #[cfg(feature = "bench")]
 mod micro {
+  use crate::dyn_slices::as_uninit_mut;
   use divan::Bencher;
   use rand_xoshiro::rand_core::{RngCore, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
@@ -145,7 +147,7 @@ mod micro {
           super::join_latents::<T>(
             &dict,
             DynLatentSlice::new(&idxs[start..start + dst_batch.len()]),
-            dst_batch,
+            as_uninit_mut(dst_batch),
           )
           .unwrap();
         }

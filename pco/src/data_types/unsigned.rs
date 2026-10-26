@@ -8,6 +8,7 @@ use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::mode::{classic, dict, int_mult};
 use crate::{describers, ChunkConfig, ModeSpec};
+use std::mem::MaybeUninit;
 
 fn classic_bid<T: Number>() -> Bid<T> {
   Bid {
@@ -50,7 +51,7 @@ pub fn join_latents<T: Number>(
   mode: &Mode,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [T],
+  dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<()> {
   match mode {
     Mode::Classic => classic::join_latents(primary, dst),
@@ -163,7 +164,7 @@ macro_rules! impl_unsigned_number {
         mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
+        dst: &mut [MaybeUninit<Self>],
       ) -> PcoResult<()> {
         join_latents(mode, primary, secondary, dst)
       }

@@ -2,6 +2,7 @@ use crate::data_types::{Number, SplitLatents};
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::DynLatents;
+use std::mem::MaybeUninit;
 
 pub(crate) fn split_latents<T: Number>(nums: &[T]) -> SplitLatents {
   let primary = DynLatents::new(nums.iter().map(|&x| x.to_latent_ordered()).collect());
@@ -11,20 +12,24 @@ pub(crate) fn split_latents<T: Number>(nums: &[T]) -> SplitLatents {
   }
 }
 
-pub(crate) fn join_latents<T: Number>(primary: DynLatentSlice, dst: &mut [T]) -> PcoResult<()> {
+pub(crate) fn join_latents<T: Number>(
+  primary: DynLatentSlice,
+  dst: &mut [MaybeUninit<T>],
+) -> PcoResult<()> {
   for (&l, num) in primary
     .downcast::<T::L>()
     .unwrap()
     .iter()
     .zip(dst.iter_mut())
   {
-    *num = T::from_latent_ordered(l);
+    num.write(T::from_latent_ordered(l));
   }
   Ok(())
 }
 
 #[cfg(feature = "bench")]
 mod micro {
+  use crate::dyn_slices::as_uninit_mut;
   use divan::Bencher;
 
   use super::*;
@@ -43,7 +48,7 @@ mod micro {
           let start = batch_idx * FULL_BATCH_N;
           super::join_latents(
             DynLatentSlice::new(&primary[start..start + dst_batch.len()]),
-            dst_batch,
+            as_uninit_mut(dst_batch),
           )
           .unwrap();
         }

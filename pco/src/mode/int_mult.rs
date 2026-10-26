@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::mem;
+use std::mem::MaybeUninit;
 
 use crate::constants::MULT_REQUIRED_BITS_SAVED_PER_NUM;
 use crate::data_types::latent_priv::LatentPriv;
@@ -39,7 +40,7 @@ pub(crate) fn join_latents<T: Number>(
   dyn_base: DynLatent,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [T],
+  dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<()> {
   let base = *dyn_base.downcast_ref::<T::L>().unwrap();
   let primary = primary.downcast::<T::L>().unwrap();
@@ -47,7 +48,9 @@ pub(crate) fn join_latents<T: Number>(
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     // Both operands come off the wire; the neighbouring add is already
     // wrapping, so the multiply must be too.
-    *dst = T::from_latent_ordered(mult.wrapping_mul(base).wrapping_add(adj));
+    dst.write(T::from_latent_ordered(
+      mult.wrapping_mul(base).wrapping_add(adj),
+    ));
   }
 
   Ok(())
@@ -229,6 +232,7 @@ pub fn choose_base<T: Number>(nums: &[T]) -> Option<T::L> {
 
 #[cfg(test)]
 mod tests {
+  use crate::dyn_slices::as_uninit_mut;
   use rand::Rng;
   use rand_xoshiro::rand_core::SeedableRng;
 
@@ -268,7 +272,7 @@ mod tests {
       DynLatent::new(base),
       DynLatentSlice::U32(&mut primary),
       Some(DynLatentSlice::U32(&mut secondary)),
-      &mut dst,
+      as_uninit_mut(&mut dst),
     )
     .unwrap();
 
@@ -333,6 +337,7 @@ mod tests {
 
 #[cfg(feature = "bench")]
 mod micro {
+  use crate::dyn_slices::as_uninit_mut;
   use divan::{black_box, Bencher};
 
   use super::*;
@@ -356,7 +361,7 @@ mod micro {
             black_box(DynLatent::new(base)),
             DynLatentSlice::new(&mults[range.clone()]),
             Some(DynLatentSlice::new(&adjs[range])),
-            dst_batch,
+            as_uninit_mut(dst_batch),
           )
           .unwrap();
         }
