@@ -46,11 +46,16 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
     })
   }
 
-  pub fn new_scratch(&self) -> LatentDecompressorScratch {
-    let mut offset_bits_csum = ScratchArray([0; FULL_BATCH_N]);
-    let mut offset_bits = ScratchArray([0; FULL_BATCH_N]);
-    let mut latents = ScratchArray([L::ZERO; FULL_BATCH_N]);
+  pub fn new_scratch(&self) -> Box<LatentDecompressorScratch> {
+    let mut res = Box::new(LatentDecompressorScratch {
+      offset_bits_csum: ScratchArray([0; FULL_BATCH_N]),
+      offset_bits: ScratchArray([0; FULL_BATCH_N]),
+      latents: DynScratchArray::new(ScratchArray([L::ZERO; FULL_BATCH_N])),
+    });
 
+    let offset_bits_csum = &mut res.offset_bits_csum;
+    let offset_bits = &mut res.offset_bits;
+    let latents = res.latents.downcast_mut::<L>().unwrap();
     if let Some(bin) = &self.only_bin {
       // we optimize performance by setting state once and never again
       let mut csum = 0;
@@ -62,11 +67,7 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       }
     }
 
-    LatentDecompressorScratch {
-      offset_bits_csum,
-      offset_bits,
-      latents: DynScratchArray::new(latents),
-    }
+    res
   }
 }
 
@@ -94,7 +95,7 @@ impl DynChunkLatentDecompressor {
     Ok(res)
   }
 
-  pub fn new_scratch(&self) -> LatentDecompressorScratch {
+  pub fn new_scratch(&self) -> Box<LatentDecompressorScratch> {
     match_latent_enum!(
       self,
       DynChunkLatentDecompressor<L>(cld) => {

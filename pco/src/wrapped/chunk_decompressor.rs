@@ -39,7 +39,7 @@ impl ChunkDecompressorInner {
     let per_latent_var = self
       .per_latent_var
       .as_ref()
-      .map(|_key, dyn_cld| Box::new(dyn_cld.new_scratch()));
+      .map(|_key, dyn_cld| dyn_cld.new_scratch());
     // let per_latent_var = Box::new(
     //   self
     //     .per_latent_var
