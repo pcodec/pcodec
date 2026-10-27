@@ -9,7 +9,8 @@ use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
-use crate::{PagingSpec, WritableDst, FULL_BATCH_N};
+use crate::writable_dst::{self, WritableDst};
+use crate::{PagingSpec, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and a configuration and writes compressed bytes
 /// to the destination.
@@ -98,14 +99,26 @@ pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResu
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
+#[inline]
 pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
   src: &[u8],
   dst: &mut D,
 ) -> PcoResult<Progress> {
+  // We keep this wrapper thin so that each type of dst does not duplicate the
+  // whole decompression loop.
+  simple_decompress_into_uninit(
+    src,
+    writable_dst::as_maybe_uninit_slice_mut(dst),
+  )
+}
+
+fn simple_decompress_into_uninit<T: Number>(
+  src: &[u8],
+  mut dst: &mut [MaybeUninit<T>],
+) -> PcoResult<Progress> {
   let (file_decompressor, mut src) = FileDecompressor::new(src)?;
 
-  let mut dst = dst.as_maybe_uninit_slice_mut();
-  // MaybeUninit<T>: Copy always, so this array init is fine even for non-Copy T.
+  // T: Number is Copy, so MaybeUninit<T> is Copy and this array init is valid.
   let mut incomplete_batch_buffer = [MaybeUninit::<T>::uninit(); FULL_BATCH_N];
   let mut progress = Progress::default();
   loop {

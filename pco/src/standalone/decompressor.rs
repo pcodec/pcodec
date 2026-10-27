@@ -10,7 +10,8 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
-use crate::WritableDst;
+use crate::writable_dst::{self, WritableDst};
+use std::mem::MaybeUninit;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -284,10 +285,15 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   ///
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
+  #[inline]
   pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
+    self.read_uninit(writable_dst::as_maybe_uninit_slice_mut(dst))
+  }
+
+  fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
       &mut self.inner_cd.inner,
-      DynNumberSliceMut::new(dst.as_maybe_uninit_slice_mut()),
+      DynNumberSliceMut::new(dst),
     )?;
 
     self.n_processed += progress.n_processed;
@@ -305,7 +311,11 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     let initial_len = dst.len();
     let remaining = self.n - self.n_processed;
     dst.reserve(remaining);
-    let progress = self.read(&mut dst.spare_capacity_mut()[..remaining])?;
+    // Safety: reserve() guarantees at least `remaining` spare elements. Giving
+    // read() exactly `remaining` elements lets the compiler drop the code paths
+    // for a short dst.
+    let spare = unsafe { dst.spare_capacity_mut().get_unchecked_mut(..remaining) };
+    let progress = self.read_uninit(spare)?;
     debug_assert!(progress.finished);
     // Safety: read() just initialized all `remaining` elements.
     unsafe {

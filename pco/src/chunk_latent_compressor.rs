@@ -5,7 +5,7 @@ use crate::compression_table::CompressionTable;
 use crate::constants::{Bitlen, ANS_INTERLEAVING, MAX_BATCH_LATENT_VAR_SIZE};
 use crate::data_types::Latent;
 use crate::errors::PcoResult;
-use crate::macros::{define_latent_enum, match_latent_enum};
+use crate::macros::define_latent_enum;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
@@ -19,6 +19,15 @@ use std::ops::Range;
 pub struct ChunkLatentCompressorScratch<L: Latent> {
   lowers: ScratchArray<L>,
   symbols: ScratchArray<Symbol>,
+}
+
+// The not-yet-initialized buffers of a page that a batch writes into.
+struct PageDissectedSpare<'a, L: Latent> {
+  ans_vals: &'a mut [MaybeUninit<AnsState>],
+  ans_bits: &'a mut [MaybeUninit<Bitlen>],
+  offsets: &'a mut [MaybeUninit<L>],
+  offset_bits: &'a mut [MaybeUninit<Bitlen>],
+  ans_final_states: &'a mut [AnsState; ANS_INTERLEAVING],
 }
 
 // This would be very hard to combine with write_uints because it makes use of
@@ -191,9 +200,9 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     &mut self,
     page_start: usize,
     relative_batch_range: Range<usize>,
-    dst: &mut PageDissectedVar,
+    dst: PageDissectedSpare<L>,
   ) {
-    let PageDissectedVar {
+    let PageDissectedSpare {
       ans_vals,
       ans_bits,
       offsets,
@@ -210,45 +219,48 @@ impl<L: Latent> ChunkLatentCompressor<L> {
 
     self.dissect_bins(
       &search_idxs[..batch_n],
-      &mut offset_bits.spare_capacity_mut()[relative_batch_range.clone()],
+      &mut offset_bits[relative_batch_range.clone()],
     );
 
-    let offsets = offsets.downcast_mut::<L>().unwrap();
     self.set_offsets(
       &self.latents[absolute_batch_range],
-      &mut offsets.spare_capacity_mut()[relative_batch_range.clone()],
+      &mut offsets[relative_batch_range.clone()],
     );
 
     encode_ans_in_reverse(
       &self.encoder,
-      &mut ans_vals.spare_capacity_mut()[relative_batch_range.clone()],
-      &mut ans_bits.spare_capacity_mut()[relative_batch_range],
+      &mut ans_vals[relative_batch_range.clone()],
+      &mut ans_bits[relative_batch_range],
       ans_final_states,
       &mut self.scratch.symbols.0,
     );
   }
 
-  fn new_page_dissected_var(&self, capacity: usize) -> PageDissectedVar {
-    let ans_final_states = [self.encoder.default_state(); ANS_INTERLEAVING];
-    PageDissectedVar {
-      ans_vals: Vec::with_capacity(capacity),
-      ans_bits: Vec::with_capacity(capacity),
-      offsets: DynLatents::new(Vec::<L>::with_capacity(capacity)),
-      offset_bits: Vec::with_capacity(capacity),
-      ans_final_states,
-    }
-  }
-
   pub fn dissect_page(&mut self, page_range: Range<usize>) -> PageDissectedVar {
+    let mut ans_final_states = [self.encoder.default_state(); ANS_INTERLEAVING];
     if self.is_trivial {
-      return self.new_page_dissected_var(0);
+      return PageDissectedVar {
+        ans_vals: Vec::new(),
+        ans_bits: Vec::new(),
+        offsets: DynLatents::new(Vec::<L>::new()),
+        offset_bits: Vec::new(),
+        ans_final_states,
+      };
     }
 
     let page_n = page_range.len();
-    let mut page_dissected_var = self.new_page_dissected_var(page_n);
+    let mut ans_vals = Vec::with_capacity(page_n);
+    let mut ans_bits = Vec::with_capacity(page_n);
+    let mut offsets = Vec::<L>::with_capacity(page_n);
+    let mut offset_bits = Vec::with_capacity(page_n);
+
+    let ans_vals_spare = &mut ans_vals.spare_capacity_mut()[..page_n];
+    let ans_bits_spare = &mut ans_bits.spare_capacity_mut()[..page_n];
+    let offsets_spare = &mut offsets.spare_capacity_mut()[..page_n];
+    let offset_bits_spare = &mut offset_bits.spare_capacity_mut()[..page_n];
 
     // We go through in reverse for ANS!
-    // Here page_dissected_var is indexed from 0..page_n, whereas latents are
+    // Here the page buffers are indexed from 0..page_n, whereas latents are
     // indexed from 0..chunk_n, so we need both an absolute page start index and
     // a relative range for the batch within the page.
     let n_batches = page_n.div_ceil(FULL_BATCH_N);
@@ -258,21 +270,32 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       self.dissect_batch(
         page_range.start,
         relative_batch_range,
-        &mut page_dissected_var,
+        PageDissectedSpare {
+          ans_vals: ans_vals_spare,
+          ans_bits: ans_bits_spare,
+          offsets: offsets_spare,
+          offset_bits: offset_bits_spare,
+          ans_final_states: &mut ans_final_states,
+        },
       )
     }
 
+    // Safety: the batches above together initialized all page_n elements of
+    // each buffer.
     unsafe {
-      // now the whole page is initialized so we can safely increase len
-      page_dissected_var.ans_bits.set_len(page_n);
-      page_dissected_var.ans_vals.set_len(page_n);
-      match_latent_enum!(
-        &mut page_dissected_var.offsets,
-        DynLatents<L>(inner) => { inner.set_len(page_n); }
-      );
-      page_dissected_var.offset_bits.set_len(page_n);
+      ans_vals.set_len(page_n);
+      ans_bits.set_len(page_n);
+      offsets.set_len(page_n);
+      offset_bits.set_len(page_n);
     }
-    page_dissected_var
+
+    PageDissectedVar {
+      ans_vals,
+      ans_bits,
+      offsets: DynLatents::new(offsets),
+      offset_bits,
+      ans_final_states,
+    }
   }
 
   pub fn write_dissected_batch<W: Write>(
