@@ -52,7 +52,7 @@ mod page_latent_decompressor;
 mod progress;
 mod read_write_uint;
 mod sampling;
-mod scratch_array;
+mod scratch;
 mod sort_utils;
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
+use crate::scratch::DecompressorScratch;
 use crate::wrapped::PageDecompressor;
 
 #[derive(Clone, Debug)]
@@ -33,12 +34,23 @@ impl ChunkDecompressorInner {
       .for_latent_var(LatentVarKey::Primary)
       .n_latents_per_state()
   }
+
+  pub fn new_scratch(&self) -> DecompressorScratch {
+    let per_latent_var = self.per_latent_var.as_ref().map(|_key, dyn_cld| {
+      let scratch = dyn_cld.new_scratch();
+      Box::new(scratch)
+    });
+
+    DecompressorScratch { per_latent_var }
+  }
 }
 
 /// Holds metadata about a chunk and can produce page decompressors.
 #[derive(Clone, Debug)]
 pub struct ChunkDecompressor<T: Number> {
   pub(crate) inner: ChunkDecompressorInner,
+  // TODO in 2.0 consider removing owned scratch from ChunkDecompressor
+  pub(crate) scratch: DecompressorScratch,
   phantom: PhantomData<T>,
 }
 
@@ -52,8 +64,11 @@ impl<T: Number> ChunkDecompressor<T> {
       )));
     }
 
-    ChunkDecompressorInner::new(meta).map(|cd| Self {
+    let cd = ChunkDecompressorInner::new(meta)?;
+    let scratch = cd.new_scratch();
+    Ok(Self {
       inner: cd,
+      scratch,
       phantom: PhantomData,
     })
   }

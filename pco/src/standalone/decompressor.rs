@@ -303,7 +303,8 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// of numbers remaining in the chunk.
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
-      &mut self.inner_cd.inner,
+      &self.inner_cd.inner,
+      &mut self.inner_cd.scratch,
       DynNumberSliceMut::new(dst),
     )?;
 
