@@ -1,16 +1,12 @@
-use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
-use crate::ans::{self, Spec};
 use crate::constants::Bitlen;
 use crate::data_types::Latent;
 use crate::dyn_slices::DynLatentSlice;
-use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
 use crate::macros::match_latent_enum;
-use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
-use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins, PerLatentVar};
-use crate::{read_write_uint, FULL_BATCH_N};
+use crate::metadata::PerLatentVar;
+use crate::FULL_BATCH_N;
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
 // improve performance for SIMD operations. The primary goal here is to avoid

@@ -16,9 +16,8 @@ use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::progress::Progress;
-use crate::scratch::{self, DecompressorScratch, LatentDecompressorScratch};
+use crate::scratch::{DecompressorScratch, LatentDecompressorScratch};
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
-use crate::wrapped::ChunkDecompressor;
 
 pub(crate) struct PageDecompressorState<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
@@ -251,11 +250,15 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
 impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   #[inline(never)]
-  pub(crate) fn new(src: R, cd: &'a mut ChunkDecompressor<T>, n: usize) -> PcoResult<Self> {
-    let scratch = &mut cd.scratch;
-    let state = PageDecompressorState::new(src, &cd.inner, n)?;
+  pub(crate) fn new(
+    src: R,
+    cd: &'a ChunkDecompressorInner,
+    n: usize,
+    scratch: &'a mut DecompressorScratch,
+  ) -> PcoResult<Self> {
+    let state = PageDecompressorState::new(src, &cd, n)?;
     Ok(Self {
-      cd: &cd.inner,
+      cd,
       scratch,
       state,
       phantom: PhantomData,

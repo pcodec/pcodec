@@ -91,6 +91,23 @@ impl<T: Number> ChunkDecompressor<T> {
     src: R,
     n: usize,
   ) -> PcoResult<PageDecompressor<'_, T, R>> {
-    PageDecompressor::<T, R>::new(src, self, n)
+    PageDecompressor::<T, R>::new(src, &self.inner, n, &mut self.scratch)
+  }
+
+  /// Reads metadata for a page and returns a `PageDecompressor` and the
+  /// remaining input.
+  ///
+  /// Will return an error if corruptions or insufficient data are found.
+  ///
+  /// Even though this takes `&mut self`, the page decompressor only mutates the
+  /// chunk decompressor's scratch buffers and has no effect on the
+  /// decompression of later pages.
+  pub fn page_decompressor_with_scratch<'a, R: BetterBufRead>(
+    &'a mut self,
+    src: R,
+    n: usize,
+    scratch: &'a mut DecompressorScratch,
+  ) -> PcoResult<PageDecompressor<'a, T, R>> {
+    PageDecompressor::<T, R>::new(src, &self.inner, n, scratch)
   }
 }
