@@ -4,7 +4,6 @@ use crate::constants::Bitlen;
 use crate::data_types::Latent;
 use crate::dyn_slices::DynLatentSlice;
 use crate::macros::define_latent_enum;
-use crate::macros::match_latent_enum;
 use crate::metadata::PerLatentVar;
 use crate::FULL_BATCH_N;
 
@@ -29,29 +28,23 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
 }
 
 define_latent_enum!(
-  #[derive(Clone, Debug)]
-  pub DynScratchArray(ScratchArray)
+  #[derive()]
+  pub union UniversalScratchArray(ScratchArray)
 );
 
-#[derive(Clone, Debug)]
 pub struct LatentDecompressorScratch {
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
-  pub latents: DynScratchArray,
+  pub latents: UniversalScratchArray,
 }
 
 impl LatentDecompressorScratch {
-  pub fn latents<'a>(&'a mut self) -> DynLatentSlice<'a> {
-    match_latent_enum!(
-      &self.latents,
-      DynScratchArray<L>(latents) => {
-        DynLatentSlice::new(latents.as_slice())
-      }
-    )
+  pub fn latents<'a, L: Latent>(&'a mut self) -> DynLatentSlice<'a> {
+    DynLatentSlice::new(self.latents.downcast_mut::<L>().unwrap().as_mut_slice())
   }
 }
 
 #[derive(Clone, Debug)]
 pub struct DecompressorScratch {
-  pub(crate) per_latent_var: PerLatentVar<Box<LatentDecompressorScratch>>,
+  pub(crate) per_latent_var: Box<PerLatentVar<LatentDecompressorScratch>>,
 }

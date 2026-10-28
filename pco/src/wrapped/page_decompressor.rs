@@ -110,7 +110,7 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
           cld,
           scratch,
         )?;
-        Ok(scratch.latents())
+        Ok(scratch.latents::<L>())
       }
     )
   })
@@ -162,7 +162,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
         .per_latent_var
         .delta
         .as_mut()
-        .map(|scratch| scratch.latents()),
+        .map(|scratch| scratch.latents::<L>()),
       n_remaining,
       &cd.per_latent_var.primary,
       &mut self.latent_decompressors.primary,

@@ -5,7 +5,7 @@ use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
-use crate::scratch::{DynScratchArray, LatentDecompressorScratch, ScratchArray};
+use crate::scratch::{UniversalScratchArray, LatentDecompressorScratch, ScratchArray};
 use crate::{read_write_uint, FULL_BATCH_N};
 
 #[derive(Clone, Debug)]
@@ -46,12 +46,12 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
     })
   }
 
-  pub fn new_scratch(&self) -> Box<LatentDecompressorScratch> {
-    let mut res = Box::new(LatentDecompressorScratch {
+  pub fn new_scratch(&self) -> LatentDecompressorScratch {
+    let mut res = LatentDecompressorScratch {
       offset_bits_csum: ScratchArray([0; FULL_BATCH_N]),
       offset_bits: ScratchArray([0; FULL_BATCH_N]),
-      latents: DynScratchArray::new(ScratchArray([L::ZERO; FULL_BATCH_N])),
-    });
+      latents: UniversalScratchArray::new(ScratchArray([L::ZERO; FULL_BATCH_N])),
+    };
 
     let offset_bits_csum = &mut res.offset_bits_csum;
     let offset_bits = &mut res.offset_bits;
@@ -95,7 +95,7 @@ impl DynChunkLatentDecompressor {
     Ok(res)
   }
 
-  pub fn new_scratch(&self) -> Box<LatentDecompressorScratch> {
+  pub fn new_scratch(&self) -> LatentDecompressorScratch {
     match_latent_enum!(
       self,
       DynChunkLatentDecompressor<L>(cld) => {
