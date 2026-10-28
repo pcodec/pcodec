@@ -15,6 +15,8 @@ mod private {
 /// A `[T]`-resembling that can receive decompressed numbers.
 pub trait WritableDst<T: Number>: private::Sealed<T> {}
 
+impl<T: Number, D: private::Sealed<T> + ?Sized> WritableDst<T> for D {}
+
 pub(crate) fn as_maybe_uninit_slice_mut<T: Number, D: WritableDst<T> + ?Sized>(
   dst: &mut D,
 ) -> &mut [MaybeUninit<T>] {
@@ -28,18 +30,15 @@ impl<T: Number> private::Sealed<T> for [T] {
     unsafe { mem::transmute(self) }
   }
 }
-impl<T: Number> WritableDst<T> for [T] {}
 
 impl<T: Number> private::Sealed<T> for [MaybeUninit<T>] {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
     self
   }
 }
-impl<T: Number> WritableDst<T> for [MaybeUninit<T>] {}
 
 impl<T: Number> private::Sealed<T> for Vec<T> {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
     private::Sealed::as_maybe_uninit_slice_mut(self.as_mut_slice())
   }
 }
-impl<T: Number> WritableDst<T> for Vec<T> {}

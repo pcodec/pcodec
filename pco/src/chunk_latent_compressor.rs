@@ -200,7 +200,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     &mut self,
     page_start: usize,
     relative_batch_range: Range<usize>,
-    dst: PageDissectedSpare<L>,
+    dst: &mut PageDissectedSpare<L>,
   ) {
     let PageDissectedSpare {
       ans_vals,
@@ -254,10 +254,13 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     let mut offsets = Vec::<L>::with_capacity(page_n);
     let mut offset_bits = Vec::with_capacity(page_n);
 
-    let ans_vals_spare = &mut ans_vals.spare_capacity_mut()[..page_n];
-    let ans_bits_spare = &mut ans_bits.spare_capacity_mut()[..page_n];
-    let offsets_spare = &mut offsets.spare_capacity_mut()[..page_n];
-    let offset_bits_spare = &mut offset_bits.spare_capacity_mut()[..page_n];
+    let mut spare = PageDissectedSpare {
+      ans_vals: &mut ans_vals.spare_capacity_mut()[..page_n],
+      ans_bits: &mut ans_bits.spare_capacity_mut()[..page_n],
+      offsets: &mut offsets.spare_capacity_mut()[..page_n],
+      offset_bits: &mut offset_bits.spare_capacity_mut()[..page_n],
+      ans_final_states: &mut ans_final_states,
+    };
 
     // We go through in reverse for ANS!
     // Here the page buffers are indexed from 0..page_n, whereas latents are
@@ -267,17 +270,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     for batch_idx in (0..n_batches).rev() {
       let relative_batch_range =
         batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(page_n);
-      self.dissect_batch(
-        page_range.start,
-        relative_batch_range,
-        PageDissectedSpare {
-          ans_vals: ans_vals_spare,
-          ans_bits: ans_bits_spare,
-          offsets: offsets_spare,
-          offset_bits: offset_bits_spare,
-          ans_final_states: &mut ans_final_states,
-        },
-      )
+      self.dissect_batch(page_range.start, relative_batch_range, &mut spare)
     }
 
     // Safety: the batches above together initialized all page_n elements of

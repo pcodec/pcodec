@@ -99,7 +99,6 @@ pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResu
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
-#[inline]
 pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
   src: &[u8],
   dst: &mut D,
