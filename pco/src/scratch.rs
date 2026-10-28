@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
 use crate::constants::Bitlen;
@@ -32,6 +33,24 @@ define_latent_enum!(
   pub union UniversalScratchArray(ScratchArray)
 );
 
+impl Debug for UniversalScratchArray {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "<UniversalScratchArray>")
+  }
+}
+
+impl Clone for UniversalScratchArray {
+  fn clone(&self) -> Self {
+    // Safety: U64 is the largest variant, so contains all others.
+    unsafe {
+      Self {
+        U64: self.U64.clone(),
+      }
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
 pub struct LatentDecompressorScratch {
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
@@ -40,7 +59,7 @@ pub struct LatentDecompressorScratch {
 
 impl LatentDecompressorScratch {
   pub fn latents<'a, L: Latent>(&'a mut self) -> DynLatentSlice<'a> {
-    DynLatentSlice::new(self.latents.downcast_mut::<L>().unwrap().as_mut_slice())
+    DynLatentSlice::new(self.latents.downcast_mut::<L>().as_mut_slice())
   }
 }
 

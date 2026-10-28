@@ -5,7 +5,7 @@ use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
-use crate::scratch::{UniversalScratchArray, LatentDecompressorScratch, ScratchArray};
+use crate::scratch::{LatentDecompressorScratch, ScratchArray, UniversalScratchArray};
 use crate::{read_write_uint, FULL_BATCH_N};
 
 #[derive(Clone, Debug)]
@@ -55,7 +55,7 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
 
     let offset_bits_csum = &mut res.offset_bits_csum;
     let offset_bits = &mut res.offset_bits;
-    let latents = res.latents.downcast_mut::<L>().unwrap();
+    let latents = res.latents.downcast_mut::<L>();
     if let Some(bin) = &self.only_bin {
       // we optimize performance by setting state once and never again
       let mut csum = 0;

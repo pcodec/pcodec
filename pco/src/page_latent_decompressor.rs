@@ -101,7 +101,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let src = reader.src;
     let scratch_offset_bits_csum = &mut scratch.offset_bits_csum;
     let scratch_offset_bits = &mut scratch.offset_bits;
-    let scratch_latents = &mut scratch.latents.downcast_mut::<L>().unwrap();
+    let scratch_latents = &mut scratch.latents.downcast_mut::<L>();
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
@@ -156,7 +156,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let src = reader.src;
     let scratch_offset_bits_csum = &mut scratch.offset_bits_csum;
     let scratch_offset_bits = &mut scratch.offset_bits;
-    let scratch_latents = &mut scratch.latents.downcast_mut::<L>().unwrap();
+    let scratch_latents = &mut scratch.latents.downcast_mut::<L>();
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
@@ -206,7 +206,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.read_ans_symbols(reader, batch_n, cld, scratch);
       }
     } else {
-      scratch.latents.downcast_mut::<L>().unwrap()[..batch_n].fill(cld.state_lowers[0]);
+      scratch.latents.downcast_mut::<L>()[..batch_n].fill(cld.state_lowers[0]);
     }
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -223,7 +223,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
           reader,
           &scratch.offset_bits_csum.0,
           &scratch.offset_bits.0,
-          &mut scratch.latents.downcast_mut::<L>().unwrap().0,
+          &mut scratch.latents.downcast_mut::<L>().0,
           batch_n,
         )
       };
@@ -256,8 +256,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       n_remaining_in_page.saturating_sub(cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
     self.read_batch_pre_delta(reader, pre_delta_len, cld, scratch);
-    let dst =
-      &mut scratch.latents.downcast_mut::<L>().unwrap()[..n_remaining_in_page.min(FULL_BATCH_N)];
+    let dst = &mut scratch.latents.downcast_mut::<L>()[..n_remaining_in_page.min(FULL_BATCH_N)];
 
     delta::decode_in_place(
       &cld.delta_encoding,
@@ -371,7 +370,7 @@ mod micro {
             reader,
             &scratch.offset_bits_csum.0,
             &scratch.offset_bits.0,
-            &mut scratch.latents.downcast_mut::<L>().unwrap().0,
+            &mut scratch.latents.downcast_mut::<L>().0,
             FULL_BATCH_N,
           );
         }
