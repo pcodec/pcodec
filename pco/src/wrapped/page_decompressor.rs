@@ -92,7 +92,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
 fn read_primary_or_secondary<'a, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
-  delta_latents: Option<&mut LatentDecompressorScratch>,
+  delta_latents: &mut LatentDecompressorScratch,
   n_remaining: usize,
   dyn_cld: &'a DynChunkLatentDecompressor,
   dyn_pld: &'a mut DynPageLatentDecompressor,
@@ -105,7 +105,7 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
         let cld = dyn_cld.downcast_ref::<L>().unwrap();
         pld.read_batch(
           reader,
-          delta_latents.map(|scratch| scratch.latents::<L>()),
+          delta_latents.latents::<L>(),
           n_remaining,
           cld,
           scratch,
@@ -147,7 +147,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
                 reader,
                 limit,
                 cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
-                scratch.per_latent_var.delta.as_mut().unwrap(),
+                &mut scratch.per_latent_var.delta,
               )
             }
           );
@@ -158,7 +158,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     // PRIMARY AND SECONDARY LATENTS
     let primary = read_primary_or_secondary(
       &mut self.reader_builder,
-      scratch.per_latent_var.delta.as_mut(),
+      &mut scratch.per_latent_var.delta,
       n_remaining,
       &cd.per_latent_var.primary,
       &mut self.latent_decompressors.primary,
@@ -168,11 +168,11 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     let secondary = match self.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(read_primary_or_secondary(
         &mut self.reader_builder,
-        scratch.per_latent_var.delta.as_mut(),
+        &mut scratch.per_latent_var.delta,
         n_remaining,
         cd.per_latent_var.secondary.as_ref().unwrap(),
         dyn_pld,
-        scratch.per_latent_var.secondary.as_mut().unwrap(),
+        &mut scratch.per_latent_var.secondary,
       )?),
       None => None,
     };

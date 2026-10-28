@@ -124,7 +124,7 @@ pub fn encode_in_place<L: Latent>(
 
 pub fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
-  delta_latents: Option<DynLatentSlice>,
+  delta_latents: DynLatentSlice,
   state_pos: &mut usize,
   state: &mut [L],
   latents: &mut [L],
@@ -138,7 +138,7 @@ pub fn decode_in_place<L: Latent>(
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
-        delta_latents.unwrap().downcast::<DeltaLookback>().unwrap(),
+        delta_latents.downcast::<DeltaLookback>().unwrap(),
         state_pos,
         state,
         latents,

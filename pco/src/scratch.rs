@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 use crate::constants::Bitlen;
@@ -57,6 +58,16 @@ pub struct LatentDecompressorScratch {
   pub latents: UniversalScratchArray,
 }
 
+impl Default for LatentDecompressorScratch {
+  fn default() -> Self {
+    Self {
+      offset_bits_csum: ScratchArray([0; 256]),
+      offset_bits: ScratchArray([0; 256]),
+      latents: UniversalScratchArray::new(ScratchArray([0_u8; 256])),
+    }
+  }
+}
+
 impl LatentDecompressorScratch {
   pub fn latents<'a, L: Latent>(&'a mut self) -> DynLatentSlice<'a> {
     DynLatentSlice::new(self.latents.downcast_mut::<L>().as_mut_slice())
@@ -64,6 +75,13 @@ impl LatentDecompressorScratch {
 }
 
 #[derive(Clone, Debug)]
+pub struct DecompressorScratchInner {
+  pub delta: LatentDecompressorScratch,
+  pub primary: LatentDecompressorScratch,
+  pub secondary: LatentDecompressorScratch,
+}
+
+#[derive(Clone, Debug)]
 pub struct DecompressorScratch {
-  pub(crate) per_latent_var: Box<PerLatentVar<LatentDecompressorScratch>>,
+  pub(crate) per_latent_var: Box<DecompressorScratchInner>,
 }

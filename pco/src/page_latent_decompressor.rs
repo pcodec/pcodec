@@ -247,7 +247,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
   pub unsafe fn read_batch(
     &mut self,
     reader: &mut BitReader,
-    delta_latents: Option<DynLatentSlice>,
+    delta_latents: DynLatentSlice,
     n_remaining_in_page: usize,
     cld: &ChunkLatentDecompressor<L>,
     scratch: &mut LatentDecompressorScratch,
