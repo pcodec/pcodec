@@ -144,7 +144,7 @@ fn simple_decompress_into_uninit<T: Number>(
     // If we're near the end of dst, we do one possibly incomplete batch
     // of numbers and copy them over.
     if !dst.is_empty() {
-      let new_progress = chunk_decompressor.read(&mut incomplete_batch_buffer[..])?;
+      let new_progress = chunk_decompressor.read(incomplete_batch_buffer.as_mut_slice())?;
       let n_processed = min(dst.len(), new_progress.n_processed);
       dst[..n_processed].copy_from_slice(&incomplete_batch_buffer[..n_processed]);
       dst = &mut dst[n_processed..];

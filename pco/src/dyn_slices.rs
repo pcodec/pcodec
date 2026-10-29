@@ -17,11 +17,6 @@ define_number_enum!(
   pub DynNumberSlice(&Arr)
 );
 
-define_number_enum!(
-  #[derive()]
-  pub DynNumberSliceMut(&mut UninitArr)
-);
-
 impl<'a> DynNumberSlice<'a> {
   pub fn len(&self) -> usize {
     match_number_enum!(
@@ -41,6 +36,11 @@ impl<'a> DynNumberSlice<'a> {
     )
   }
 }
+
+define_number_enum!(
+  #[derive()]
+  pub DynNumberSliceMut(&mut UninitArr)
+);
 
 impl<'a> DynNumberSliceMut<'a> {
   pub fn len(&self) -> usize {

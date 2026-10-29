@@ -3,7 +3,6 @@ use std::mem::MaybeUninit;
 
 use crate::compression_intermediates::Bid;
 use crate::data_types::latent_priv::LatentPriv;
-use crate::data_types::ModeAndLatents;
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::Mode;

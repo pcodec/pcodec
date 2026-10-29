@@ -1,6 +1,5 @@
 use std::mem::MaybeUninit;
 
-use super::ModeAndLatents;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
 use crate::data_types::{Latent, LatentPriv, Number, NumberPriv};

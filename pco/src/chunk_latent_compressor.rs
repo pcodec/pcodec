@@ -102,7 +102,6 @@ fn encode_ans_in_reverse(
   if encoder.size_log() == 0 {
     // trivial case: there's only one symbol. ANS values and states don't
     // matter.
-    ans_bits.fill(MaybeUninit::new(0));
     return;
   }
 
@@ -270,7 +269,11 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     for batch_idx in (0..n_batches).rev() {
       let relative_batch_range =
         batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(page_n);
-      self.dissect_batch(page_range.start, relative_batch_range, &mut spare)
+      self.dissect_batch(
+        page_range.start,
+        relative_batch_range,
+        &mut spare,
+      )
     }
 
     // Safety: the batches above together initialized all page_n elements of
