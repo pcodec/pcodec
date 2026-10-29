@@ -23,21 +23,26 @@ pub(crate) fn join_latents<F: Float>(
   // For any float `num` such that `split_latents([num], k) == [[y], [m]]`, we have
   //     num.is_sign_positive() == (y >= sign_cutoff)
   let sign_cutoff = F::L::MID >> k;
-  let lowest_k_bits_max = (F::L::ONE << k) - F::L::ONE;
+  // mask for the bits the shifted primary will occupy
+  let high_mask = !((F::L::ONE << k) - F::L::ONE);
+
+  // `y << k` and the low k bits never overlap, so the add that rejoins them is
+  // a xor, and both remaining steps are xors by a sign-dependent constant too:
+  // `split_latents` flipped the low k bits of negative floats, and
+  // `from_latent_ordered` flips either every bit below the sign (negative) or
+  // just the sign (positive). Folding all of it into one xor chain can reduce
+  // the number of instructions required.
+  //   positive: (y << k | m) ^ MID
+  //   negative: !(y << k | (m ^ !high_mask)) == (y << k) ^ m ^ high_mask
   for ((&y, &m), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
-    debug_assert!(
-      m >> k == F::L::ZERO,
-      "Invalid input to FloatQuant: m must be a k-bit integer"
-    );
-    let is_pos_as_float = y >= sign_cutoff;
-    let lowest_k_bits = if is_pos_as_float {
-      m
+    // `m` is untrusted, so it may exceed k bits, in which case the xors below
+    // collide and we decode to garbage (but never panic).
+    let flip = if y < sign_cutoff {
+      high_mask
     } else {
-      lowest_k_bits_max - m
+      F::L::MID
     };
-    dst.write(F::from_latent_ordered(
-      (y << k) + lowest_k_bits,
-    ));
+    dst.write(F::from_latent_bits((y << k) ^ m ^ flip));
   }
 
   Ok(())
@@ -56,11 +61,17 @@ pub(crate) fn split_latents<F: Float>(page_nums: &[F], k: Bitlen) -> SplitLatent
     // In the common case where `num` is exactly quantized, we want the secondary to always be
     // zero.  But when `num` is negative, `lowest_k_bits == lowest_k_bits_max`.  So we manually
     // flip it here, and un-flip it in `join_latents`.
-    secondary.push(if num.is_sign_positive_() {
+    let secondary_latent = if num.is_sign_positive_() {
       lowest_k_bits
     } else {
       lowest_k_bits_max - lowest_k_bits
-    });
+    };
+    // `join_latents` relies on this, so it's worth asserting that we uphold it
+    debug_assert!(
+      secondary_latent >> k == F::L::ZERO,
+      "Invalid FloatQuant secondary latent: m must be a k-bit integer"
+    );
+    secondary.push(secondary_latent);
   }
 
   SplitLatents {
@@ -283,5 +294,38 @@ mod test {
     let sample = [0.0_f32, 1.0].repeat(50);
     let bid = compute_bid(&sample);
     assert!(bid.is_none());
+  }
+}
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::{black_box, Bencher};
+  use half::f16;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+
+  #[divan::bench(types = [f16, f32, f64])]
+  fn join_latents<F: Float>(bencher: Bencher) {
+    // An `F` holding values from a type with half its precision.
+    let k = F::PRECISION_BITS / 2;
+    let ys = uniform_latents::<F::L>(F::L::BITS - k);
+    let ms = uniform_latents::<F::L>(k);
+    let mut dst = vec![F::ZERO; ys.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents::<F>(
+            black_box(k),
+            DynLatentSlice::new(&ys[range.clone()]),
+            Some(DynLatentSlice::new(&ms[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
   }
 }

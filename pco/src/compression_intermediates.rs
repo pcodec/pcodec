@@ -1,6 +1,7 @@
 use crate::ans::{AnsState, Symbol};
 use crate::constants::{Bitlen, Weight, ANS_INTERLEAVING};
-use crate::data_types::{Latent, Number, SplitLatents};
+use crate::data_types::number_priv::NumberPriv;
+use crate::data_types::{Latent, SplitLatents};
 use crate::delta::DeltaState;
 use crate::metadata::per_latent_var::{LatentVarKey, PerLatentVar};
 use crate::metadata::{DynLatents, Mode};
@@ -65,7 +66,7 @@ impl<L: Latent> Default for BinCompressionInfo<L> {
 }
 
 #[allow(clippy::type_complexity)]
-pub struct Bid<T: Number> {
+pub struct Bid<T: NumberPriv> {
   pub mode: Mode,
   pub bits_saved_per_num: f64,
   // we include a split_fn since modes like FloatMult can benefit from extra
@@ -73,6 +74,13 @@ pub struct Bid<T: Number> {
   // information is an implementation detail of the compressor, not part of the
   // format itself, and is not / does not need to be known to the decompressor.
   pub split_fn: Box<dyn FnOnce(&[T]) -> SplitLatents>,
+}
+
+pub fn choose_winning_bid<T: NumberPriv>(bids: Vec<Bid<T>>) -> Bid<T> {
+  bids
+    .into_iter()
+    .max_by(|bid0, bid1| bid0.bits_saved_per_num.total_cmp(&bid1.bits_saved_per_num))
+    .expect("bids must be nonempty")
 }
 
 #[derive(Default)]

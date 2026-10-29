@@ -7,7 +7,6 @@ mod arrow_handlers;
 mod bench;
 mod chunk_config_opt;
 mod compress;
-mod core_handlers;
 mod decompress;
 mod dtypes;
 mod input;

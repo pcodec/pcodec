@@ -81,42 +81,30 @@ impl LatentVarDeltaEncoding {
 /// How Pco did
 /// [delta encoding](https://en.wikipedia.org/wiki/Delta_encoding) on a chunk.
 ///
-/// Delta encoding optionally takes differences between nearby numbers,
-/// greatly reducing the entropy of the data distribution in some cases.
+/// Delta encoding optionally predicts numbers based on previously decoded
+/// numbers, greatly reducing the entropy of the data distribution in some
+/// cases.
 /// This stage of processing happens after applying the
 /// [`Mode`][crate::metadata::Mode] during compression.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DeltaEncoding {
   /// No delta encoding; the values are encoded as-is.
-  ///
-  /// This is best if your data is in random order.
   NoOp,
   /// Encodes the differences between consecutive values (or differences
   /// between those, etc.).
-  ///
-  /// This is best if your numbers have high variance overall, but adjacent
-  /// numbers are close in value, e.g. an arithmetic sequence.
   Consecutive {
     order: usize,
     secondary_uses_delta: bool,
   },
   /// Encodes an extra "lookback" latent variable and the differences
   /// `x[i] - x[i - lookback[i]]` between values.
-  ///
-  /// This is best if your numbers have complex repeating patterns
-  /// beyond just adjacent elements.
-  /// It is in spirit similar to LZ77 compression, but only stores lookbacks
-  /// (AKA match offsets) and no match lengths.
   Lookback {
     config: DeltaLookbackConfig,
     secondary_uses_delta: bool,
   },
   /// Encodes the difference between each value and a convolution of the
   /// preceding few elements.
-  ///
-  /// This is best if your numbers have local trends that aren't captured by
-  /// simply taking differences.
   Conv1(DeltaConv1Config),
 }
 
@@ -166,6 +154,14 @@ impl DeltaEncoding {
       2 => {
         let window_n_log = 1 + reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_WINDOW_N_LOG);
         let state_n_log = reader.read_bitlen(BITS_TO_ENCODE_DELTA_LOOKBACK_STATE_N_LOG);
+        // The window buffer is allocated from this, so an unbounded value here
+        // is an allocation the file has not earned.
+        if window_n_log > MAX_DELTA_LOOKBACK_WINDOW_N_LOG {
+          return Err(PcoError::corruption(format!(
+            "LZ delta encoding window size log of {} exceeds max of {}",
+            window_n_log, MAX_DELTA_LOOKBACK_WINDOW_N_LOG,
+          )));
+        }
         if state_n_log > window_n_log {
           return Err(PcoError::corruption(format!(
             "LZ delta encoding state size log exceeded window size log: {} vs {}",
@@ -314,6 +310,34 @@ impl DeltaEncoding {
 mod tests {
   use super::*;
   use crate::bit_writer::BitWriter;
+
+  #[test]
+  fn test_oversized_lookback_window_is_rejected() {
+    for window_n_log in [MAX_DELTA_LOOKBACK_WINDOW_N_LOG + 1, 31, 32] {
+      let encoding = DeltaEncoding::Lookback {
+        config: DeltaLookbackConfig {
+          window_n_log,
+          state_n_log: 0,
+        },
+        secondary_uses_delta: false,
+      };
+      let mut bytes = Vec::new();
+      let mut writer = BitWriter::new(&mut bytes, DeltaEncoding::MAX_BIT_SIZE);
+      unsafe { encoding.write_to(&mut writer) };
+      writer.finish_byte();
+      writer.flush().unwrap();
+      bytes.resize(bytes.len() + OVERSHOOT_PADDING, 0);
+
+      let mut reader = BitReader::new(&bytes, bytes.len(), 0);
+      let res = unsafe { DeltaEncoding::read_from(&mut reader, &FormatVersion::max_supported()) };
+
+      assert!(
+        res.is_err(),
+        "window_n_log={} should be rejected",
+        window_n_log
+      );
+    }
+  }
 
   fn check_bit_size(encoding: DeltaEncoding) {
     let mut bytes = Vec::new();

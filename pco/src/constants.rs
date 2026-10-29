@@ -37,6 +37,12 @@ pub const MAX_CONSECUTIVE_DELTA_ORDER: usize = 7;
 pub const MAX_CONV1_DELTA_ORDER: usize = 32;
 pub const MAX_CONV1_DELTA_QUANTIZATION: Bitlen = (1 << BITS_TO_ENCODE_DELTA_CONV_QUANTIZATION) - 1;
 pub const MAX_ENTRIES: usize = 1 << 24;
+// The window_n_log field on the wire is wider than any window we are willing to
+// allocate on read, so reads are capped here. This is deliberately looser than
+// what the encoder emits (ENCODING_LOOKBACK_MAX_WINDOW_N_LOG), leaving room for
+// future encoders; a chunk can hold no more than MAX_ENTRIES numbers, so a
+// larger window could never be fully used anyway.
+pub const MAX_DELTA_LOOKBACK_WINDOW_N_LOG: Bitlen = MAX_ENTRIES.ilog2() as Bitlen;
 pub const MAX_SUPPORTED_PRECISION: Bitlen = 128;
 pub const MAX_SUPPORTED_PRECISION_BYTES: usize = (MAX_SUPPORTED_PRECISION / 8) as usize;
 pub const MULT_REQUIRED_BITS_SAVED_PER_NUM: f64 = 0.5;

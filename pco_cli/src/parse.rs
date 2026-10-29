@@ -3,6 +3,8 @@ use arrow::datatypes::{DataType, TimeUnit};
 
 use pco::{DeltaSpec, ModeSpec};
 
+use crate::dtypes::{self, ArrowDataTypes};
+
 pub fn delta_spec(s: &str) -> anyhow::Result<DeltaSpec> {
   let spec = match s.to_lowercase().as_str() {
     "auto" => DeltaSpec::Auto,
@@ -92,13 +94,16 @@ pub fn arrow_dtype(s: &str) -> anyhow::Result<DataType> {
   ))
 }
 
-pub fn boolean(s: &str) -> anyhow::Result<bool> {
+pub fn arrow_dtypes(s: &str) -> anyhow::Result<ArrowDataTypes> {
   match s.to_lowercase().as_str() {
-    "0" | "f" | "n" | "false" => Ok(false),
-    "1" | "t" | "y" | "true" => Ok(true),
-    _ => Err(anyhow!(
-      "unable to parse boolean: {}. try 't' or 'f'",
-      s
-    )),
+    "all_except_8_bit" => return Ok(dtypes::all_arrow_except_8_bit()),
+    "all_including_8_bit" => return Ok(dtypes::all_arrow()),
+    _ => {}
   }
+
+  let mut res = vec![];
+  for s in s.split(",") {
+    res.push(arrow_dtype(s)?);
+  }
+  Ok(ArrowDataTypes(res))
 }

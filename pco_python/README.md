@@ -35,5 +35,5 @@ For pcodec's uses, design, and benchmarks, [see the main repo](https://github.co
 
 Documentation is served
 [on readthedocs](https://pcodec.readthedocs.io/en/latest/).
-It's sometimes incomplete, but the types and functions largely mirror those of
-the better-documented Rust API.
+It is sometimes incomplete; the types and functions largely mirror those of the
+more thoroughly documented Rust API.

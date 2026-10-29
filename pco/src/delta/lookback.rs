@@ -69,26 +69,25 @@ fn find_best_lookback<L: Latent>(
   i: usize,
   latents: &[L],
   proposed_lookbacks: &[usize; PROPOSED_LOOKBACKS],
-  lookback_counts: &mut [u32],
+  lookback_goodnesses: &[u8],
 ) -> usize {
   let mut best_goodness = 0;
   let mut best_lookback: usize = 0;
   for &lookback in proposed_lookbacks {
     // SAFETY: each `lookback` comes from `proposed_lookbacks`, whose entries
     // are initialised to `(k+1).min(state_n) >= 1` and subsequently updated
-    // only to values in `[1, window_n]`.  `window_n <= lookback_counts.len()`,
-    // so `lookback - 1 < lookback_counts.len()`.  `i >= state_n >= lookback`,
+    // only to values in `[1, window_n]`.  `window_n <= lookback_goodnesses.len()`,
+    // so `lookback - 1 < lookback_goodnesses.len()`.  `i >= state_n >= lookback`,
     // so `i - lookback` doesn't underflow and stays in `[0, latents.len())`.
-    let (lookback_count, other) = unsafe {
+    let (lookback_goodness, other) = unsafe {
       (
-        *lookback_counts.get_unchecked(lookback - 1),
+        *lookback_goodnesses.get_unchecked(lookback - 1),
         *latents.get_unchecked(i - lookback),
       )
     };
-    let lookback_goodness = Bitlen::BITS - lookback_count.leading_zeros();
     let delta = L::min(l.wrapping_sub(other), other.wrapping_sub(l));
     let delta_goodness = delta.leading_zeros();
-    let goodness = lookback_goodness + delta_goodness;
+    let goodness = lookback_goodness as Bitlen + delta_goodness;
     if goodness > best_goodness {
       best_goodness = goodness;
       best_lookback = lookback;
@@ -116,7 +115,12 @@ pub fn choose_lookbacks<L: Latent>(
     "we do not support tiny windows during compression"
   );
 
-  let mut lookback_counts = vec![1_u32; window_n.min(latents.len())];
+  let n_lookbacks = window_n.min(latents.len());
+  let mut lookback_counts = vec![1_u32; n_lookbacks];
+  // `lookback_goodnesses[j]` is always the bit width of `lookback_counts[j]`,
+  // which only changes when the count crosses a power of two. Maintaining it
+  // there keeps a `leading_zeros` out of the hot loop below.
+  let mut lookback_goodnesses = vec![1_u8; n_lookbacks];
   let mut lookbacks = Vec::with_capacity(latents.len() - state_n);
   let uninit_lookbacks = lookbacks.spare_capacity_mut();
   let mut idx_hash_table = vec![0_usize; COARSENESSES.len() * hash_table_n];
@@ -142,7 +146,7 @@ pub fn choose_lookbacks<L: Latent>(
       i,
       latents,
       &proposed_lookbacks,
-      &mut lookback_counts,
+      &lookback_goodnesses,
     );
     if new_best_lookback != best_lookback {
       repeating_lookback_idx += 1;
@@ -151,7 +155,11 @@ pub fn choose_lookbacks<L: Latent>(
       new_best_lookback;
     best_lookback = new_best_lookback;
     uninit_lookbacks[i - state_n] = MaybeUninit::new(best_lookback as DeltaLookback);
-    lookback_counts[best_lookback - 1] += 1;
+    let count = &mut lookback_counts[best_lookback - 1];
+    *count += 1;
+    if count.is_power_of_two() {
+      lookback_goodnesses[best_lookback - 1] += 1;
+    }
   }
 
   unsafe { lookbacks.set_len(latents.len() - state_n) };
@@ -321,5 +329,44 @@ mod tests {
       &mut latents,
     );
     assert!(has_oob_lookbacks);
+  }
+}
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::Bencher;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::metadata::DeltaLookbackConfig;
+
+  // Interleaved subsequences: each latent's predecessor sits this far back, so
+  // every lookback reaches the same distance into the window.
+  const N_SUBSEQS: DeltaLookback = 16;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn decode_in_place<L: Latent>(bencher: Bencher) {
+    let config = DeltaLookbackConfig {
+      window_n_log: 8,
+      state_n_log: 0,
+    };
+    let lookbacks = vec![N_SUBSEQS; BENCH_N];
+    let mut latents = uniform_latents::<L>(L::BITS);
+    let (mut window_buffer, mut pos) = new_window_buffer_and_pos::<L>(config, &[]);
+
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, batch) in latents.chunks_mut(FULL_BATCH_N).enumerate() {
+          let start = batch_idx * FULL_BATCH_N;
+          super::decode_in_place(
+            config,
+            &lookbacks[start..start + batch.len()],
+            &mut pos,
+            &mut window_buffer,
+            batch,
+          );
+        }
+      });
   }
 }

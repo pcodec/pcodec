@@ -11,8 +11,10 @@ pub trait LatentPriv:
   + AddAssign
   + BitAnd<Output = Self>
   + BitOr<Output = Self>
+  + BitXor<Output = Self>
   + BitAndAssign
   + BitOrAssign
+  + Not<Output = Self>
   + Display
   + Div<Output = Self>
   + DivAssign
@@ -56,6 +58,7 @@ pub trait LatentPriv:
 
   fn wrapping_add(self, other: Self) -> Self;
   fn wrapping_sub(self, other: Self) -> Self;
+  fn wrapping_mul(self, other: Self) -> Self;
 
   fn toggle_center(self) -> Self {
     self.wrapping_add(Self::MID)

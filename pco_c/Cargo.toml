@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "cpcodec"
-crate-type = ["dylib"]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 half = { workspace = true, features = ["std"] }

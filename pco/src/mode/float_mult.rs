@@ -1,3 +1,4 @@
+use core::f64::consts::LOG10_2;
 use std::cmp::{max, min};
 use std::mem;
 use std::mem::MaybeUninit;
@@ -11,8 +12,8 @@ use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::mode::int_mult;
-use crate::sampling;
 use crate::sampling::PrimaryLatentAndSavings;
+use crate::{sampling, sort_utils};
 
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
@@ -81,7 +82,10 @@ const SNAP_THRESHOLD_ABSOLUTE: f64 = 0.02;
 const SNAP_THRESHOLD_DECIMAL_RELATIVE: f64 = 0.01;
 const INTERESTING_TRAILING_ZEROS: u32 = 5;
 const REQUIRED_TRAILING_ZEROS_FREQUENCY: f64 = 0.5;
+const REQUIRED_POWER_OF_TEN_FREQUENCY: f64 = 0.5;
 const REQUIRED_GCD_PAIR_FREQUENCY: f64 = 0.001;
+const POWER_OF_TEN_MAX_SAMPLE_N: usize = 200;
+const POWER_OF_TEN_P_VALUE: f64 = 0.01;
 
 fn insignificant_float_to<F: Float>(x: F) -> F {
   let spare_precision_bits = F::PRECISION_BITS.saturating_sub(REQUIRED_PRECISION_BITS) as i32;
@@ -140,6 +144,50 @@ fn approx_pair_gcd<F: Float>(greater: F, lesser: F) -> Option<F> {
 
     mem::swap(&mut p_greater, &mut p_lesser);
   }
+}
+
+#[inline(never)]
+fn choose_config_by_powers_of_ten<F: Float>(sample: &[F]) -> Option<FloatMultConfig<F>> {
+  // This method is pretty simple so we don't need the full sample.
+  // We can rely on our euclidean GCD algorithm to find GCDs as low as
+  // `x * 2^-(MANTISSA_BITS / 2)`, so we only need to check powers of ten
+  // between that and machine epsilon.
+  let sample: Vec<_> = sample
+    .iter()
+    .copied()
+    .filter(|&x| x != F::ZERO)
+    .take(POWER_OF_TEN_MAX_SAMPLE_N)
+    .collect();
+
+  if sample.len() < sampling::MIN_SAMPLE {
+    return None;
+  }
+
+  let typical_num = sort_utils::choose_pivot(&sample);
+  let typical_log10 = typical_num.to_f64().log10() as i32;
+  // +1 to min because actual machine epsilon is uselss, and +1 to max to be
+  // generous in case our typical num is smaller than usual.
+  let min_log = (typical_log10 - (F::PRECISION_BITS as f64 * LOG10_2) as i32 + 1).min(-1);
+  let max_log = (typical_log10 - (F::PRECISION_BITS as f64 * LOG10_2 / 2.0) as i32 + 1).min(-1);
+  let sample_n = sample.len() as f64;
+
+  for log in (min_log..=max_log).rev() {
+    let inv_base = F::from_f64(10.0_f64.powi(-log));
+    let mut amenable_n = 0;
+    for &x in &sample {
+      let mult = x * inv_base;
+      if (mult - mult.round()).abs() < F::from_f64(POWER_OF_TEN_P_VALUE) {
+        amenable_n += 1;
+      }
+    }
+
+    if amenable_n as f64 >= sample_n * REQUIRED_POWER_OF_TEN_FREQUENCY {
+      let base = inv_base.inv();
+      return Some(FloatMultConfig { base, inv_base });
+    }
+  }
+
+  None
 }
 
 #[inline(never)]
@@ -336,24 +384,32 @@ impl<F: Float> FloatMultConfig<F> {
   }
 }
 
-fn choose_config<F: Float>(sample: &[F]) -> Option<FloatMultConfig<F>> {
-  choose_config_by_trailing_zeros(sample).or_else(|| choose_config_by_euclidean(sample))
-}
-
 pub(crate) fn compute_bid<F: Float>(sample: &[F]) -> Option<Bid<F>> {
-  choose_config(sample).and_then(|config| {
-    let bits_saved_per_num = bits_saved_per_num_over_classic(config, sample)?;
-    Some(Bid {
-      mode: Mode::float_mult(config.base),
-      bits_saved_per_num,
-      split_fn: Box::new(move |nums| split_latents(nums, config)),
+  let candidates = [
+    choose_config_by_powers_of_ten(sample),
+    choose_config_by_trailing_zeros(sample),
+    choose_config_by_euclidean(sample),
+  ];
+
+  let (config, bits_saved_per_num) = candidates
+    .into_iter()
+    .flatten()
+    .filter_map(|config| {
+      let bits_saved_per_num = bits_saved_per_num_over_classic(config, sample)?;
+      Some((config, bits_saved_per_num))
     })
+    .max_by(|(_, a), (_, b)| a.total_cmp(b))?;
+
+  Some(Bid {
+    mode: Mode::float_mult(config.base),
+    bits_saved_per_num,
+    split_fn: Box::new(move |nums| split_latents(nums, config)),
   })
 }
 
 #[cfg(test)]
 mod test {
-  use std::f32::consts::TAU;
+  use std::f32::consts::{E, SQRT_2, TAU};
 
   use rand::{Rng, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
@@ -407,6 +463,29 @@ mod test {
     assert_eq!(
       insignificant_float_to(32.0_f32),
       1.0 / ((1_u64 << 12) as f32)
+    );
+  }
+
+  #[test]
+  fn test_powers_of_ten() {
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[0.0, 0.0, 0.0, 0.0, 0.0].repeat(20)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[TAU, E, SQRT_2].repeat(30)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[f64::MAX, f64::MIN, 0.01].repeat(30)),
+      None,
+    );
+
+    assert_eq!(
+      choose_config_by_powers_of_ten(&[47.1234567, 49.7654321, 32.2345678, 55.8765432].repeat(20)),
+      Some(FloatMultConfig::from_base(0.0000001)),
     );
   }
 
@@ -629,34 +708,65 @@ mod test {
     let sevenths_sample = &sevenths[..50];
 
     assert_eq!(
-      choose_config(&sevenths),
-      Some(FloatMultConfig {
-        base: 1.0 / 7.0,
-        inv_base: 7.0,
-      })
+      compute_bid(sevenths_sample).unwrap().mode,
+      Mode::float_mult(1.0_f32 / 7.0),
     );
     assert_eq!(
-      choose_config(&ones),
-      Some(FloatMultConfig {
-        base: 1.0,
-        inv_base: 1.0,
-      })
+      compute_bid(&noisy_decimals).unwrap().mode,
+      Mode::float_mult(1.0_f32 / 10.0),
     );
-    assert_eq!(
-      choose_config(&noisy_decimals),
-      Some(FloatMultConfig {
-        base: 1.0 / 10.0,
-        inv_base: 10.0,
-      })
-    );
-    // just check this last one terminates
+
+    // just check this terminates
     let mut big_nums = vec![f32::MAX; 10];
     big_nums.resize(20, f32::MAX * 0.6);
-    choose_config(&big_nums);
+    compute_bid(&big_nums);
 
-    assert!(compute_bid(sevenths_sample).is_some());
     // not enough distinct mults
     assert!(compute_bid(&ones).is_none());
     assert!(compute_bid(&junk).is_none());
+  }
+}
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::{black_box, Bencher};
+  use half::f16;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+
+  const BASE: f64 = 0.01;
+  const MAX_MULT: u64 = 1000;
+  const ADJ_BITS: Bitlen = 4;
+
+  #[divan::bench(types = [f16, f32, f64])]
+  fn join_latents<F: Float>(bencher: Bencher) {
+    let base = F::from_f64(BASE);
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let mults = (0..BENCH_N)
+      .map(|_| F::from_f64((rng.next_u64() % MAX_MULT) as f64).int_float_to_latent())
+      .collect::<Vec<_>>();
+    let adjs = uniform_latents::<F::L>(ADJ_BITS)
+      .into_iter()
+      .map(|ulps| F::L::MID.wrapping_add(ulps))
+      .collect::<Vec<_>>();
+    let mut dst = vec![F::ZERO; mults.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents(
+            black_box(base),
+            DynLatentSlice::new(&mults[range.clone()]),
+            Some(DynLatentSlice::new(&adjs[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
   }
 }

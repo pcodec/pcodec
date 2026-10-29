@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.pcodec</groupId>
   <artifactId>pco-jni</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.3</version>
 
   <packaging>jar</packaging>
   <name>${project.groupId}:${project.artifactId}</name>
@@ -118,7 +118,7 @@
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
-        <version>0.7.0</version>
+        <version>0.11.0</version>
         <extensions>true</extensions>
         <configuration>
           <publishingServerId>central</publishingServerId>
@@ -143,9 +143,6 @@
                   <goal>build</goal>
                 </goals>
                 <configuration>
-                  <environmentVariables>
-                    <RUSTFLAGS>-C lto=true -C embed-bitcode=true -Zdylib-lto</RUSTFLAGS>
-                  </environmentVariables>
                   <path>src/main/rust</path>
                   <copyTo>${project.build.directory}/classes/io/github/pcodec</copyTo>
                   <copyWithPlatformDir>true</copyWithPlatformDir>

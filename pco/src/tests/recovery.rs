@@ -4,6 +4,7 @@ use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::chunk_config::{ChunkConfig, DeltaSpec};
 use crate::constants::Bitlen;
+use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::number_priv::NumberPriv;
 use crate::data_types::{LatentType, Number};
 use crate::errors::PcoResult;
@@ -46,12 +47,24 @@ fn assert_nums_eq<T: Number>(decompressed: &[T], expected: &[T], name: &str) -> 
 }
 
 fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) -> PcoResult<()> {
-  for delta_encoding_order in [0, 1, 7] {
-    for mode_spec in [ModeSpec::Classic, ModeSpec::Auto] {
+  let mut delta_specs = vec![
+    DeltaSpec::NoOp,
+    DeltaSpec::TryConsecutive(0),
+    DeltaSpec::TryConsecutive(1),
+    DeltaSpec::TryConsecutive(7),
+    DeltaSpec::TryLookback,
+  ];
+  if T::L::BITS <= 32 {
+    delta_specs.push(DeltaSpec::TryConv1(2));
+    delta_specs.push(DeltaSpec::TryConv1(6)); // because there's a specialized path for it
+  }
+
+  for mode_spec in [ModeSpec::Classic, ModeSpec::Auto] {
+    for delta_spec in &delta_specs {
       let config = ChunkConfig {
         compression_level,
-        delta_spec: DeltaSpec::TryConsecutive(delta_encoding_order),
-        mode_spec,
+        delta_spec: delta_spec.clone(),
+        mode_spec: mode_spec.clone(),
         enable_8_bit: true,
         ..Default::default()
       };
@@ -61,8 +74,8 @@ fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) 
         &decompressed,
         nums,
         &format!(
-          "{} delta order={}",
-          name, delta_encoding_order
+          "{} mode={:?} delta={:?}",
+          name, mode_spec, delta_spec
         ),
       )?;
     }
@@ -346,6 +359,22 @@ fn test_decimals() -> PcoResult<()> {
 
 #[test]
 fn test_f16_mult() -> PcoResult<()> {
+  let nums = [100.1, 299.9, 200.0].map(f16::from_f64).repeat(100);
+  let config = ChunkConfig {
+    mode_spec: ModeSpec::TryFloatMult(100.0),
+    ..Default::default()
+  };
+  let (_, meta) = compress_w_meta(&nums, &config)?;
+  assert_eq!(
+    meta.mode,
+    Mode::float_mult(f16::from_f64(100.0))
+  );
+
+  assert_recovers(&nums, 1, "f16 mult mode")
+}
+
+#[test]
+fn test_f64_mult() -> PcoResult<()> {
   let nums = [100.1, 299.9, 200.0].repeat(100);
   let config = ChunkConfig {
     mode_spec: ModeSpec::TryFloatMult(100.0),
@@ -450,12 +479,19 @@ fn test_conv1_nominal() -> PcoResult<()> {
 #[test]
 fn test_conv1_degenerate() -> PcoResult<()> {
   fn check<T: Number>(nums: Vec<T>, name: &str) -> PcoResult<()> {
-    let (compressed, _) = compress_w_meta(
-      &nums,
-      &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(3)),
-    )?;
-    let decompressed = simple_decompress::<T>(&compressed)?;
-    assert_nums_eq(&decompressed, &nums, name)
+    for order in [2] {
+      let compressed = simple_compress(
+        &nums,
+        &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(order)),
+      )?;
+      let decompressed = simple_decompress::<T>(&compressed)?;
+      assert_nums_eq(
+        &decompressed,
+        &nums,
+        &format!("{} order {}", name, order),
+      )?;
+    }
+    Ok(())
   }
 
   check::<u16>(vec![3], "short")?;
@@ -466,5 +502,34 @@ fn test_conv1_degenerate() -> PcoResult<()> {
     nums.push(rng.gen_range(0..1000));
   }
   check::<u32>(nums, "no trend")?;
+
+  Ok(())
+}
+
+#[test]
+fn test_conv1_actually_applied() -> PcoResult<()> {
+  let mut nums = Vec::new();
+  for i in 0_u32..1000 {
+    nums.push((998 * 998_u32).saturating_sub(i * i));
+  }
+
+  for order in [3, 6] {
+    let (compressed, meta) = compress_w_meta(
+      &nums,
+      &ChunkConfig::default().with_delta_spec(DeltaSpec::TryConv1(order)),
+    )?;
+    let conv1_config = match &meta.delta_encoding {
+      DeltaEncoding::Conv1(config) => config,
+      _ => panic!("expected conv1 to be applied"),
+    };
+    assert!(conv1_config.weights::<i64>().len() == order);
+    let decompressed = simple_decompress::<u32>(&compressed)?;
+    assert_nums_eq(
+      &decompressed,
+      &nums,
+      &format!("conv1 actually applied order {}", order),
+    )?;
+  }
+
   Ok(())
 }

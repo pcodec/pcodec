@@ -46,8 +46,10 @@ pub(crate) fn join_latents<T: Number>(
   let primary = primary.downcast::<T::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<T::L>().unwrap();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
+    // Both operands come off the wire; the neighbouring add is already
+    // wrapping, so the multiply must be too.
     dst.write(T::from_latent_ordered(
-      (mult * base).wrapping_add(adj),
+      mult.wrapping_mul(base).wrapping_add(adj),
     ));
   }
 
@@ -214,7 +216,7 @@ pub fn choose_candidate_base<L: Latent>(sample: &mut [L]) -> Option<(L, f64)> {
 }
 
 pub fn choose_base<T: Number>(nums: &[T]) -> Option<T::L> {
-  let mut sample = sampling::choose_sample(nums, |num| Some(num.to_latent_ordered()))?;
+  let mut sample = sampling::choose_mode_sample(nums, |num| Some(num.to_latent_ordered()))?;
   let (candidate, bits_saved_per_adj) = choose_candidate_base(&mut sample)?;
 
   if sampling::est_bits_saved_per_num(&sample, |x| PrimaryLatentAndSavings {
@@ -330,5 +332,38 @@ mod tests {
       choose_candidate_base(&mut twos).unwrap().0,
       2
     );
+  }
+}
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::{black_box, Bencher};
+
+  use super::*;
+  use crate::bench_utils::{uniform_latents, BENCH_N};
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::Latent;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    // base, mults, adjs chosen to avoid overflow on all dtypes
+    let base = T::from_u64(3);
+    let mults = uniform_latents::<T>(6);
+    let adjs = uniform_latents::<T>(5);
+    let mut dst = vec![T::ZERO; mults.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let range = batch_idx * FULL_BATCH_N..batch_idx * FULL_BATCH_N + dst_batch.len();
+          super::join_latents(
+            black_box(DynLatent::new(base)),
+            DynLatentSlice::new(&mults[range.clone()]),
+            Some(DynLatentSlice::new(&adjs[range])),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
   }
 }

@@ -1,16 +1,27 @@
+use std::fmt::{Debug, Display};
 use std::mem::MaybeUninit;
+use std::ops::*;
 
+use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
-use crate::data_types::{unsigned, ModeAndLatents, Number, NumberPriv};
+use crate::data_types::{unsigned, Number, NumberPriv};
 use crate::describers::LatentDescriber;
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::{describers, ChunkConfig};
-use std::ops::*;
 
-pub trait Signed: AddAssign + Copy + Ord + Shr<Bitlen, Output = Self> + Mul<Output = Self> {
+pub trait Signed:
+  AddAssign
+  + Add<Output = Self>
+  + Copy
+  + Debug
+  + Display
+  + Ord
+  + Shr<Bitlen, Output = Self>
+  + Mul<Output = Self>
+{
   const ZERO: Self;
   const MAX: Self;
   const BITS: Bitlen;
@@ -29,11 +40,8 @@ macro_rules! impl_signed {
       fn mode_is_valid(mode: &Mode) -> bool {
         unsigned::mode_is_valid::<Self::L>(mode)
       }
-      fn choose_mode_and_split_latents(
-        nums: &[Self],
-        config: &ChunkConfig,
-      ) -> PcoResult<ModeAndLatents> {
-        unsigned::choose_mode_and_split_latents(&nums, config)
+      fn choose_mode_bids(nums: &[Self], config: &ChunkConfig) -> PcoResult<Vec<Bid<Self>>> {
+        unsigned::choose_mode_bids(nums, config)
       }
 
       #[inline]

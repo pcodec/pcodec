@@ -2,7 +2,6 @@ use std::mem::MaybeUninit;
 
 use half::f16;
 
-use super::ModeAndLatents;
 use crate::chunk_config::ModeSpec;
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
@@ -60,10 +59,36 @@ pub(crate) trait Float:
 
   /// This should use something like [`f32::to_bits()`]
   fn to_latent_bits(self) -> Self::L;
-  /// This should surjectively map the latent to the set of integers in its
-  /// floating point type. E.g. 3.0, Inf, and NaN are int floats, but 3.5 is
-  /// not.
-  fn int_float_from_latent(l: Self::L) -> Self;
+  /// This should be the inverse of `to_latent_bits`.
+  fn from_latent_bits(l: Self::L) -> Self;
+  /// Surjectively maps the latent to the set of integers in this floating
+  /// point type. E.g. 3.0, Inf, and NaN are int floats, but 3.5 is not.
+  ///
+  /// This is written branchlessly, treating the sign as arithmetic rather than
+  /// control flow, so that hot loops vectorize to a single int->float
+  /// conversion per number instead of one per sign case.
+  #[inline]
+  fn int_float_from_latent(l: Self::L) -> Self {
+    let sign = Self::L::MID;
+    let abs_mask = sign - Self::L::ONE;
+    let gpi = Self::L::ONE << (Self::PRECISION_BITS + 1);
+    // above gpi, int floats continue linearly in bit space rather than in value
+    let gpi_bits_offset = Self::from_latent_numerical(gpi)
+      .to_latent_bits()
+      .wrapping_sub(gpi);
+
+    // l >= MID means positive, with magnitude l - MID; below MID it's negative
+    // with magnitude MID - 1 - l. Both are `(l ^ neg) & abs_mask` for the right
+    // choice of `neg`.
+    let neg = !(Self::L::ZERO.wrapping_sub(l >> (Self::L::BITS - 1)));
+    let abs_int = (l ^ neg) & abs_mask;
+    let abs_float = if abs_int < gpi {
+      Self::from_latent_numerical(abs_int)
+    } else {
+      Self::from_latent_bits(abs_int.wrapping_add(gpi_bits_offset))
+    };
+    Self::from_latent_bits(abs_float.to_latent_bits() | (neg & sign))
+  }
   /// This should be the inverse of `int_float_from_latent`.
   fn int_float_to_latent(self) -> Self::L;
   /// This should map from e.g. 7_u32 -> 7.0_f32
@@ -82,57 +107,56 @@ fn filter_sample<F: Float>(num: &F) -> Option<F> {
   None
 }
 
-fn choose_mode_and_split_latents<F: Float>(
-  nums: &[F],
-  chunk_config: &ChunkConfig,
-) -> PcoResult<ModeAndLatents> {
-  match chunk_config.mode_spec {
+fn choose_mode_bids<F: Float>(nums: &[F], chunk_config: &ChunkConfig) -> PcoResult<Vec<Bid<F>>> {
+  let bids = match chunk_config.mode_spec {
     ModeSpec::Auto => {
       // up to 3 bids: classic, float mult, float quant modes
-      let mut bids: Vec<Bid<F>> = vec![];
-      bids.push(Bid {
+      let mut bids: Vec<Bid<F>> = vec![Bid {
         mode: Mode::Classic,
         bits_saved_per_num: 0.0,
         split_fn: Box::new(|nums| classic::split_latents(nums)),
-      });
+      }];
 
-      if let Some(sample) = sampling::choose_sample(nums, filter_sample) {
+      if let Some(sample) = sampling::choose_mode_sample(nums, filter_sample) {
         bids.extend(float_mult::compute_bid(&sample));
         bids.extend(float_quant::compute_bid(&sample));
       }
 
-      let winning_bid = choose_winning_bid(bids);
-      let latents = (winning_bid.split_fn)(nums);
-      Ok((winning_bid.mode, latents))
+      bids
     }
-    ModeSpec::Classic => Ok((Mode::Classic, classic::split_latents(nums))),
+    ModeSpec::Classic => vec![Bid {
+      mode: Mode::Classic,
+      bits_saved_per_num: 0.0,
+      split_fn: Box::new(|nums| classic::split_latents(nums)),
+    }],
     ModeSpec::TryFloatMult(base_f64) => {
       let base = F::from_f64(base_f64);
-      let mode = Mode::float_mult(base);
       let float_mult_config = FloatMultConfig {
         base,
         inv_base: base.inv(),
       };
-      let latents = float_mult::split_latents(nums, float_mult_config);
-      Ok((mode, latents))
+      vec![Bid {
+        mode: Mode::float_mult(base),
+        bits_saved_per_num: 0.0,
+        split_fn: Box::new(move |nums| float_mult::split_latents(nums, float_mult_config)),
+      }]
     }
-    ModeSpec::TryFloatQuant(k) => Ok((
-      Mode::FloatQuant(k),
-      float_quant::split_latents(nums, k),
-    )),
-    ModeSpec::TryIntMult(_) => Err(PcoError::invalid_argument(
-      "unable to use int mult mode on floats",
-    )),
-    ModeSpec::TryDict => dict::configure_and_split_latents(nums),
-  }
-}
+    ModeSpec::TryFloatQuant(k) => vec![Bid {
+      mode: Mode::FloatQuant(k),
+      bits_saved_per_num: 0.0,
+      // Note that this is only invoked after the mode is validated; k is a
+      // shift width, so splitting with an out-of-range one is UB-adjacent.
+      split_fn: Box::new(move |nums| float_quant::split_latents(nums, k)),
+    }],
+    ModeSpec::TryIntMult(_) => {
+      return Err(PcoError::invalid_argument(
+        "unable to use int mult mode on floats",
+      ))
+    }
+    ModeSpec::TryDict => vec![dict::compute_bid(nums)],
+  };
 
-// one day we might reuse this for int modes
-fn choose_winning_bid<T: Number>(bids: Vec<Bid<T>>) -> Bid<T> {
-  bids
-    .into_iter()
-    .max_by(|bid0, bid1| bid0.bits_saved_per_num.total_cmp(&bid1.bits_saved_per_num))
-    .expect("bids must be nonempty")
+  Ok(bids)
 }
 
 macro_rules! impl_float {
@@ -209,24 +233,8 @@ macro_rules! impl_float {
       }
 
       #[inline]
-      fn int_float_from_latent(l: Self::L) -> Self {
-        let mid = Self::L::MID;
-        let (negative, abs_int) = if l >= mid {
-          (false, l - mid)
-        } else {
-          (true, mid - 1 - l)
-        };
-        let gpi = 1 << Self::MANTISSA_DIGITS;
-        let abs_float = if abs_int < gpi {
-          abs_int as Self
-        } else {
-          Self::from_bits((gpi as Self).to_bits() + (abs_int - gpi))
-        };
-        if negative {
-          -abs_float
-        } else {
-          abs_float
-        }
+      fn from_latent_bits(l: Self::L) -> Self {
+        Self::from_bits(l)
       }
 
       #[inline]
@@ -325,24 +333,8 @@ impl Float for f16 {
   }
 
   #[inline]
-  fn int_float_from_latent(l: Self::L) -> Self {
-    let mid = Self::L::MID;
-    let (negative, abs_int) = if l >= mid {
-      (false, l - mid)
-    } else {
-      (true, mid - 1 - l)
-    };
-    let gpi = 1 << Self::MANTISSA_DIGITS;
-    let abs_float = if abs_int < gpi {
-      Self::from_f32(abs_int as f32)
-    } else {
-      Self::from_bits(Self::from_f32(gpi as f32).to_bits() + (abs_int - gpi))
-    };
-    if negative {
-      -abs_float
-    } else {
-      abs_float
-    }
+  fn from_latent_bits(l: Self::L) -> Self {
+    Self::from_bits(l)
   }
 
   #[inline]
@@ -388,33 +380,23 @@ macro_rules! impl_float_number {
           Mode::IntMult(_) => false,
         }
       }
-      fn choose_mode_and_split_latents(
-        nums: &[Self],
-        config: &ChunkConfig,
-      ) -> PcoResult<ModeAndLatents> {
-        choose_mode_and_split_latents(nums, config)
+      fn choose_mode_bids(nums: &[Self], config: &ChunkConfig) -> PcoResult<Vec<Bid<Self>>> {
+        choose_mode_bids(nums, config)
       }
 
       #[inline]
       fn from_latent_ordered(l: Self::L) -> Self {
-        if l & $sign_bit_mask > 0 {
-          // positive float
-          Self::from_bits(l ^ $sign_bit_mask)
-        } else {
-          // negative float
-          Self::from_bits(!l)
-        }
+        // sign bit set means a positive float, where we flip only that bit;
+        // otherwise it's a negative float and we flip everything
+        let flip_all = !(Self::L::ZERO.wrapping_sub(l >> (Self::L::BITS - 1)));
+        Self::from_bits(l ^ (flip_all | $sign_bit_mask))
       }
       #[inline]
       fn to_latent_ordered(self) -> Self::L {
         let mem_layout = self.to_bits();
-        if mem_layout & $sign_bit_mask > 0 {
-          // negative float
-          !mem_layout
-        } else {
-          // positive float
-          mem_layout ^ $sign_bit_mask
-        }
+        // flip everything for a negative float, else just the sign
+        let flip_all = Self::L::ZERO.wrapping_sub(mem_layout >> (Self::L::BITS - 1));
+        mem_layout ^ (flip_all | $sign_bit_mask)
       }
       fn join_latents(
         mode: &Mode,
@@ -455,13 +437,19 @@ impl_float_number!(f16, u16, 1_u16 << 15, 9);
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::compression_intermediates::choose_winning_bid;
   use crate::metadata::{DynLatent, DynLatents};
+
+  fn choose_mode<F: Float>(nums: &[F]) -> Mode {
+    let bids = choose_mode_bids(nums, &ChunkConfig::default()).unwrap();
+    choose_winning_bid(bids).mode
+  }
 
   #[test]
   fn test_choose_mult_mode() {
     let base = 1.5;
-    let nums = (0..1000).map(|i| (i as f64) * base).collect::<Vec<_>>();
-    let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
+    let nums = (0..2000).map(|i| (i as f64) * base).collect::<Vec<_>>();
+    let mode = choose_mode(&nums);
     assert_eq!(mode, Mode::float_mult(base));
     assert!(f64::mode_is_valid(&mode))
   }
@@ -517,7 +505,7 @@ mod tests {
     let nums = (0..1000)
       .map(|i| f64::from_bits(lowest_num_bits + (i << k)))
       .collect::<Vec<_>>();
-    let (mode, _) = choose_mode_and_split_latents(&nums, &ChunkConfig::default()).unwrap();
+    let mode = choose_mode(&nums);
     assert_eq!(mode, Mode::FloatQuant(k));
   }
 

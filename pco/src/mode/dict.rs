@@ -2,12 +2,13 @@ use std::cmp;
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
 
-use crate::data_types::{Latent, ModeAndLatents, Number, SplitLatents};
+use crate::compression_intermediates::Bid;
+use crate::data_types::{Latent, Number, SplitLatents};
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{DynLatents, Mode};
 
-fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> PcoResult<ModeAndLatents> {
+fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> (Mode, SplitLatents) {
   let mut count_by_unique = HashMap::new();
   for &num in &classic_nums {
     *count_by_unique.entry(num).or_insert(0_u32) += 1;
@@ -42,21 +43,29 @@ fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> PcoResult<Mode
     .map(|num| *dict_idx_by_unique.get(&num.to_latent_ordered()).unwrap())
     .collect();
   let latents = DynLatents::U32(indices);
-  Ok((
+  (
     mode,
     SplitLatents {
       primary: latents,
       secondary: None,
     },
-  ))
+  )
 }
 
-pub fn configure_and_split_latents<T: Number>(nums: &[T]) -> PcoResult<ModeAndLatents> {
+/// Unlike other modes, dict has to build its dictionary from all the numbers,
+/// which produces the latents as a byproduct. We keep them in the split_fn so
+/// that the bid interface stays uniform.
+pub fn compute_bid<T: Number>(nums: &[T]) -> Bid<T> {
   let classic_nums = nums
     .iter()
     .map(|&num| num.to_latent_ordered())
     .collect::<Vec<_>>();
-  configure_less_specialized(classic_nums)
+  let (mode, latents) = configure_less_specialized(classic_nums);
+  Bid {
+    mode,
+    bits_saved_per_num: 0.0,
+    split_fn: Box::new(move |_nums| latents),
+  }
 }
 
 pub fn join_latents<T: Number>(
@@ -100,5 +109,47 @@ mod tests {
       result.is_err(),
       "expected Err for out-of-range dict index"
     );
+  }
+}
+
+#[cfg(feature = "bench")]
+mod micro {
+  use divan::Bencher;
+  use rand_xoshiro::rand_core::{RngCore, SeedableRng};
+  use rand_xoshiro::Xoroshiro128PlusPlus;
+
+  use crate::bench_utils::BENCH_N;
+  use crate::constants::FULL_BATCH_N;
+  use crate::data_types::{Latent, Number};
+  use crate::dyn_slices::DynLatentSlice;
+  use crate::metadata::DynLatents;
+
+  const DICT_N: usize = 64;
+
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
+    let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
+    let dict = DynLatents::new(
+      (0..DICT_N)
+        .map(|_| T::from_u64(rng.next_u64()))
+        .collect::<Vec<T>>(),
+    );
+    let idxs = (0..BENCH_N)
+      .map(|_| (rng.next_u64() % DICT_N as u64) as u32)
+      .collect::<Vec<_>>();
+    let mut dst = vec![T::ZERO; idxs.len()];
+    bencher
+      .counter(divan::counter::ItemsCount::new(BENCH_N))
+      .bench_local(|| {
+        for (batch_idx, dst_batch) in dst.chunks_mut(FULL_BATCH_N).enumerate() {
+          let start = batch_idx * FULL_BATCH_N;
+          super::join_latents::<T>(
+            &dict,
+            DynLatentSlice::new(&idxs[start..start + dst_batch.len()]),
+            dst_batch,
+          )
+          .unwrap();
+        }
+      });
   }
 }

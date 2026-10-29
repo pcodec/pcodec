@@ -5,7 +5,7 @@ use crate::data_types::latent_priv::LatentPriv;
 use crate::data_types::number_priv::NumberPriv;
 use crate::describers::LatentDescriber;
 use crate::metadata::per_latent_var::PerLatentVar;
-use crate::metadata::{ChunkMeta, Mode};
+use crate::metadata::ChunkMeta;
 
 mod dynamic;
 pub(crate) mod float;
@@ -14,8 +14,6 @@ pub(crate) mod number_priv;
 pub(crate) mod signed;
 mod split_latents;
 pub(crate) mod unsigned;
-
-pub(crate) type ModeAndLatents = (Mode, SplitLatents);
 
 /// Trait for types that behave like unsigned integers.
 ///

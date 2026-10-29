@@ -1,4 +1,4 @@
-use pco::{ChunkConfig, DeltaSpec, ModeSpec};
+use pco::{DeltaSpec, ModeSpec};
 
 use crate::bench::codecs::CodecInternal;
 use crate::chunk_config_opt::ChunkConfigOpt;
@@ -38,18 +38,13 @@ impl CodecInternal for ChunkConfigOpt {
       ("delta", unparse_delta_spec(&self.delta)),
       ("mode", unparse_mode_spec(&self.mode)),
       ("chunk-n", self.chunk_n.to_string()),
-      (
-        "enable-8-bit",
-        match self.enable_8_bit() {
-          true => "t".to_string(),
-          false => "f".to_string(),
-        },
-      ),
     ]
   }
 
   fn compress<T: PcoNumber>(&self, nums: &[T]) -> Vec<u8> {
-    let chunk_config = ChunkConfig::from(self.clone());
+    let chunk_config = self.clone().into_chunk_config(
+      true, // enable 8 bit because we already filtered down to selected dtypes
+    );
     pco::standalone::simple_compress(nums, &chunk_config).expect("invalid config")
   }
 

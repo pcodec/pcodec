@@ -13,8 +13,10 @@ use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{DeltaEncoding, DeltaLookbackConfig};
 use std::ops::Range;
 
-const LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
-const LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
+// What the encoder is willing to emit; the reader accepts a looser bound (see
+// MAX_DELTA_LOOKBACK_WINDOW_N_LOG).
+const ENCODING_LOOKBACK_MAX_WINDOW_N_LOG: Bitlen = 15;
+const ENCODING_LOOKBACK_MIN_WINDOW_N_LOG: Bitlen = 4;
 
 pub type DeltaState = DynLatents;
 
@@ -36,8 +38,8 @@ pub fn new_lookback(n: usize) -> DeltaEncoding {
   DeltaEncoding::Lookback {
     config: DeltaLookbackConfig {
       window_n_log: bits::bits_to_encode_offset(n as u32 - 1).clamp(
-        LOOKBACK_MIN_WINDOW_N_LOG,
-        LOOKBACK_MAX_WINDOW_N_LOG,
+        ENCODING_LOOKBACK_MIN_WINDOW_N_LOG,
+        ENCODING_LOOKBACK_MAX_WINDOW_N_LOG,
       ),
       state_n_log: 0,
     },
