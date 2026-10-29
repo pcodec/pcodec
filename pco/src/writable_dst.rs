@@ -31,6 +31,14 @@ impl<T: Number> private::Sealed<T> for [T] {
   }
 }
 
+impl<T: Number, const N: usize> private::Sealed<T> for [T; N] {
+  fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
+    // Safety: MaybeUninit<T> has the same layout as T, and we only ever write
+    // initialized values through the result.
+    unsafe { mem::transmute(self.as_mut_slice()) }
+  }
+}
+
 impl<T: Number> private::Sealed<T> for [MaybeUninit<T>] {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
     self
