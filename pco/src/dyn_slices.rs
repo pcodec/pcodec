@@ -39,14 +39,14 @@ impl<'a> DynNumberSlice<'a> {
 
 define_number_enum!(
   #[derive()]
-  pub DynNumberSliceMut(&mut UninitArr)
+  pub DynNumberDst(&mut UninitArr)
 );
 
-impl<'a> DynNumberSliceMut<'a> {
+impl<'a> DynNumberDst<'a> {
   pub fn len(&self) -> usize {
     match_number_enum!(
       self,
-      DynNumberSliceMut<T>(inner) => {
+      DynNumberDst<T>(inner) => {
         inner.len()
       }
     )

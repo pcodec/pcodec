@@ -11,6 +11,7 @@ use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
 use crate::scratch_array::ScratchArray;
 use crate::{ans, bit_reader, bit_writer, bits, read_write_uint, FULL_BATCH_N};
+use std::debug_assert;
 use std::io::Write;
 use std::mem::MaybeUninit;
 use std::ops::Range;
@@ -99,12 +100,6 @@ fn encode_ans_in_reverse(
   ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
   dst: &mut [Symbol],
 ) {
-  if encoder.size_log() == 0 {
-    // trivial case: there's only one symbol. ANS values and states don't
-    // matter.
-    return;
-  }
-
   let final_base_i = (ans_vals.len() / ANS_INTERLEAVING) * ANS_INTERLEAVING;
   let final_j = ans_vals.len() % ANS_INTERLEAVING;
 
@@ -226,38 +221,32 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       &mut offsets[relative_batch_range.clone()],
     );
 
-    encode_ans_in_reverse(
-      &self.encoder,
-      &mut ans_vals[relative_batch_range.clone()],
-      &mut ans_bits[relative_batch_range],
-      ans_final_states,
-      &mut self.scratch.symbols.0,
-    );
+    if self.needs_ans {
+      encode_ans_in_reverse(
+        &self.encoder,
+        &mut ans_vals[relative_batch_range.clone()],
+        &mut ans_bits[relative_batch_range],
+        ans_final_states,
+        &mut self.scratch.symbols.0,
+      );
+    }
   }
 
   pub fn dissect_page(&mut self, page_range: Range<usize>) -> PageDissectedVar {
     let mut ans_final_states = [self.encoder.default_state(); ANS_INTERLEAVING];
-    if self.is_trivial {
-      return PageDissectedVar {
-        ans_vals: Vec::new(),
-        ans_bits: Vec::new(),
-        offsets: DynLatents::new(Vec::<L>::new()),
-        offset_bits: Vec::new(),
-        ans_final_states,
-      };
-    }
 
-    let page_n = page_range.len();
-    let mut ans_vals = Vec::with_capacity(page_n);
-    let mut ans_bits = Vec::with_capacity(page_n);
-    let mut offsets = Vec::<L>::with_capacity(page_n);
-    let mut offset_bits = Vec::with_capacity(page_n);
+    let offset_n = if self.is_trivial { 0 } else { page_range.len() };
+    let ans_n = if self.needs_ans { offset_n } else { 0 };
+    let mut ans_vals = Vec::with_capacity(ans_n);
+    let mut ans_bits = Vec::with_capacity(ans_n);
+    let mut offsets = Vec::<L>::with_capacity(offset_n);
+    let mut offset_bits = Vec::with_capacity(offset_n);
 
     let mut spare = PageDissectedSpare {
-      ans_vals: &mut ans_vals.spare_capacity_mut()[..page_n],
-      ans_bits: &mut ans_bits.spare_capacity_mut()[..page_n],
-      offsets: &mut offsets.spare_capacity_mut()[..page_n],
-      offset_bits: &mut offset_bits.spare_capacity_mut()[..page_n],
+      ans_vals: &mut ans_vals.spare_capacity_mut()[..ans_n],
+      ans_bits: &mut ans_bits.spare_capacity_mut()[..ans_n],
+      offsets: &mut offsets.spare_capacity_mut()[..offset_n],
+      offset_bits: &mut offset_bits.spare_capacity_mut()[..offset_n],
       ans_final_states: &mut ans_final_states,
     };
 
@@ -265,10 +254,10 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     // Here the page buffers are indexed from 0..page_n, whereas latents are
     // indexed from 0..chunk_n, so we need both an absolute page start index and
     // a relative range for the batch within the page.
-    let n_batches = page_n.div_ceil(FULL_BATCH_N);
+    let n_batches = offset_n.div_ceil(FULL_BATCH_N);
     for batch_idx in (0..n_batches).rev() {
       let relative_batch_range =
-        batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(page_n);
+        batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(offset_n);
       self.dissect_batch(
         page_range.start,
         relative_batch_range,
@@ -276,13 +265,12 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       )
     }
 
-    // Safety: the batches above together initialized all page_n elements of
-    // each buffer.
+    // Safety: the batches above together initialized all elements.
     unsafe {
-      ans_vals.set_len(page_n);
-      ans_bits.set_len(page_n);
-      offsets.set_len(page_n);
-      offset_bits.set_len(page_n);
+      ans_vals.set_len(ans_n);
+      ans_bits.set_len(ans_n);
+      offsets.set_len(offset_n);
+      offset_bits.set_len(offset_n);
     }
 
     PageDissectedVar {

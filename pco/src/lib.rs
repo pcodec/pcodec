@@ -59,6 +59,32 @@ mod writable_dst;
 #[cfg(test)]
 mod tests;
 
+// To ensure our tests surface uninitialized memory issues, since some default
+// allocators fill with 0, we make the allocator write uncommon values instead.
+#[cfg(test)]
+mod poisoning_allocator {
+  use std::alloc::{GlobalAlloc, Layout, System};
+
+  struct Poisoning;
+
+  unsafe impl GlobalAlloc for Poisoning {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+      let ptr = System.alloc(layout);
+      if !ptr.is_null() {
+        ptr.write_bytes(0xab, layout.size());
+      }
+      ptr
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+      System.dealloc(ptr, layout)
+    }
+  }
+
+  #[global_allocator]
+  static ALLOCATOR: Poisoning = Poisoning;
+}
+
 #[cfg(feature = "bench")]
 mod bench_utils;
 /// Exists so that the `micro` bench target can force the linker to pull in

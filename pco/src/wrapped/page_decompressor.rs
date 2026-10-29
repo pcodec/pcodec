@@ -8,7 +8,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
 use crate::data_types::number_priv::NumberPriv;
 use crate::data_types::Number;
-use crate::dyn_slices::{DynLatentSlice, DynNumberSliceMut};
+use crate::dyn_slices::{DynLatentSlice, DynNumberDst};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::{match_latent_enum, match_number_enum};
 use crate::metadata::page::PageMeta;
@@ -156,7 +156,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     &mut self,
     cd: &mut ChunkDecompressorInner,
     range: Range<usize>,
-    dst: &mut DynNumberSliceMut,
+    dst: &mut DynNumberDst,
   ) -> PcoResult<()> {
     let batch_n = range.len();
     let n_remaining = self.n_remaining;
@@ -192,7 +192,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
     match_number_enum!(
       dst,
-      DynNumberSliceMut<T>(dst) => {
+      DynNumberDst<T>(dst) => {
         T::join_latents(
           &cd.meta.mode,
           primary,
@@ -213,7 +213,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
   pub fn read(
     &mut self,
     cd: &mut ChunkDecompressorInner,
-    mut dst: DynNumberSliceMut,
+    mut dst: DynNumberDst,
   ) -> PcoResult<Progress> {
     let n_remaining = self.n_remaining;
     let dst_len = dst.len();
@@ -263,7 +263,7 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
     self.state.read(
       &mut self.cd.inner,
-      DynNumberSliceMut::new(writable_dst::as_maybe_uninit_slice_mut(dst)),
+      DynNumberDst::new(writable_dst::as_maybe_uninit_slice_mut(dst)),
     )
   }
 

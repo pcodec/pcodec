@@ -6,7 +6,7 @@ use better_io::BetterBufRead;
 use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::constants::{Bitlen, OVERSHOOT_PADDING};
 use crate::data_types::{Number, NumberType};
-use crate::dyn_slices::DynNumberSliceMut;
+use crate::dyn_slices::DynNumberDst;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::ChunkMeta;
@@ -312,7 +312,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
       &mut self.inner_cd.inner,
-      DynNumberSliceMut::new(dst),
+      DynNumberDst::new(dst),
     )?;
 
     self.n_processed += progress.n_processed;
@@ -333,7 +333,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     // Safety: reserve() guarantees at least `remaining` spare elements. Giving
     // read() exactly `remaining` elements lets the compiler drop the code paths
     // for a short dst.
-    let spare = unsafe { dst.spare_capacity_mut().get_unchecked_mut(..remaining) };
+    let spare = &mut dst.spare_capacity_mut()[..remaining];
     let progress = self.read_uninit(spare)?;
     debug_assert!(progress.finished);
     // Safety: read() just initialized all `remaining` elements.

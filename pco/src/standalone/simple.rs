@@ -117,7 +117,6 @@ fn simple_decompress_into_uninit<T: Number>(
 ) -> PcoResult<Progress> {
   let (file_decompressor, mut src) = FileDecompressor::new(src)?;
 
-  // T: Number is Copy, so MaybeUninit<T> is Copy and this array init is valid.
   let mut incomplete_batch_buffer = [MaybeUninit::<T>::uninit(); FULL_BATCH_N];
   let mut progress = Progress::default();
   loop {
