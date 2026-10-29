@@ -104,6 +104,10 @@ impl CodecInternal for PaginatedPcoConfig {
       }
     }
 
+    // Safety: the pages together wrote all `i` elements.
+    unsafe {
+      res.set_len(i);
+    }
     res
   }
 }
