@@ -5,7 +5,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
-use crate::scratch::{DecompressorScratch, LatentDecompressorScratch};
+use crate::scratch::DecompressorScratch;
 use crate::wrapped::PageDecompressor;
 
 #[derive(Clone, Debug)]

@@ -1,10 +1,8 @@
 use std::fmt::Debug;
-use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 use crate::constants::Bitlen;
 use crate::data_types::Latent;
-use crate::dyn_slices::DynLatentSlice;
 use crate::macros::define_latent_enum;
 use crate::metadata::PerLatentVar;
 use crate::FULL_BATCH_N;

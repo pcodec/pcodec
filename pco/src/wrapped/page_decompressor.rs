@@ -17,7 +17,7 @@ use crate::metadata::per_latent_var::PerLatentVar;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::progress::Progress;
 use crate::scratch::{
-  DecompressorScratch, DynLatentDecompressorScratch, LatentDecompressorScratch,
+  DecompressorScratch, DynLatentDecompressorScratch,
 };
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
 
