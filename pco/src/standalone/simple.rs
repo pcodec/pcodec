@@ -108,15 +108,9 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult
   }
 }
 
-/// Like `simple_decompress_into`, but writes into a possibly uninitialized
-/// destination.
-///
-/// Will return an error if there are any corruption or insufficient data
-/// issues.
-/// Does not error if dst is too short or too long, but that can be inferred
-/// from `Progress`. Every element Pco reports as processed in the returned
-/// `Progress` has been initialized.
-pub fn simple_decompress_into_uninit<T: Number>(
+// not exposing this in API for now because users who want anything this fancy
+// should probably be using a lower-level API
+fn simple_decompress_into_uninit<T: Number>(
   src: &[u8],
   mut dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<Progress> {
