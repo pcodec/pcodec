@@ -1,0 +1,476 @@
+pub mod pco
+pub mod pco::data_types
+#[non_exhaustive] pub enum pco::data_types::LatentType
+pub pco::data_types::LatentType::U16
+pub pco::data_types::LatentType::U32
+pub pco::data_types::LatentType::U64
+pub pco::data_types::LatentType::U8
+impl pco::data_types::LatentType
+pub fn pco::data_types::LatentType::new<T: pco::data_types::Latent>() -> Self
+impl core::clone::Clone for pco::data_types::LatentType
+pub fn pco::data_types::LatentType::clone(&self) -> Self
+impl core::cmp::Eq for pco::data_types::LatentType
+impl core::cmp::PartialEq for pco::data_types::LatentType
+pub fn pco::data_types::LatentType::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::data_types::LatentType
+pub fn pco::data_types::LatentType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::data_types::LatentType
+impl core::marker::StructuralPartialEq for pco::data_types::LatentType
+#[non_exhaustive] #[repr(u8)] pub enum pco::data_types::NumberType
+pub pco::data_types::NumberType::F16 = 9
+pub pco::data_types::NumberType::F32 = 5
+pub pco::data_types::NumberType::F64 = 6
+pub pco::data_types::NumberType::I16 = 8
+pub pco::data_types::NumberType::I32 = 3
+pub pco::data_types::NumberType::I64 = 4
+pub pco::data_types::NumberType::I8 = 11
+pub pco::data_types::NumberType::U16 = 7
+pub pco::data_types::NumberType::U32 = 1
+pub pco::data_types::NumberType::U64 = 2
+pub pco::data_types::NumberType::U8 = 10
+impl pco::data_types::NumberType
+pub fn pco::data_types::NumberType::from_descriminant(u8) -> core::option::Option<Self>
+pub fn pco::data_types::NumberType::new<T: pco::data_types::Number>() -> Self
+impl core::clone::Clone for pco::data_types::NumberType
+pub fn pco::data_types::NumberType::clone(&self) -> Self
+impl core::cmp::Eq for pco::data_types::NumberType
+impl core::cmp::PartialEq for pco::data_types::NumberType
+pub fn pco::data_types::NumberType::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::data_types::NumberType
+pub fn pco::data_types::NumberType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::data_types::NumberType
+impl core::marker::StructuralPartialEq for pco::data_types::NumberType
+pub trait pco::data_types::Latent: pco::data_types::latent_priv::LatentPriv
+impl<L: pco::data_types::latent_priv::LatentPriv> pco::data_types::Latent for L
+pub trait pco::data_types::Number: pco::data_types::number_priv::NumberPriv
+pub fn pco::data_types::Number::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for f32
+pub fn f32::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for f64
+pub fn f64::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for half::binary16::f16
+pub fn half::binary16::f16::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for i16
+pub fn i16::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for i32
+pub fn i32::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for i64
+pub fn i64::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for i8
+pub fn i8::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for u16
+pub fn u16::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for u32
+pub fn u32::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for u64
+pub fn u64::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+impl pco::data_types::Number for u8
+pub fn u8::get_latent_describers(&pco::metadata::ChunkMeta) -> pco::metadata::PerLatentVar<pco::describers::LatentDescriber>
+pub mod pco::describers
+pub trait pco::describers::DescribeLatent: pco::describers::private::Sealed
+pub fn pco::describers::DescribeLatent::latent(&self, pco::metadata::DynLatent) -> alloc::string::String
+pub fn pco::describers::DescribeLatent::latent_units(&self) -> alloc::string::String
+pub fn pco::describers::DescribeLatent::latent_var(&self) -> alloc::string::String
+pub type pco::describers::LatentDescriber = alloc::boxed::Box<dyn pco::describers::DescribeLatent>
+pub mod pco::errors
+#[non_exhaustive] pub enum pco::errors::ErrorKind
+pub pco::errors::ErrorKind::Corruption
+pub pco::errors::ErrorKind::InsufficientData
+pub pco::errors::ErrorKind::InvalidArgument
+pub pco::errors::ErrorKind::Io(core::io::error::ErrorKind)
+impl core::clone::Clone for pco::errors::ErrorKind
+pub fn pco::errors::ErrorKind::clone(&self) -> Self
+impl core::cmp::Eq for pco::errors::ErrorKind
+impl core::cmp::PartialEq for pco::errors::ErrorKind
+pub fn pco::errors::ErrorKind::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::errors::ErrorKind
+pub fn pco::errors::ErrorKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::errors::ErrorKind
+impl core::marker::StructuralPartialEq for pco::errors::ErrorKind
+pub struct pco::errors::PcoError
+pub pco::errors::PcoError::kind: pco::errors::ErrorKind
+pub pco::errors::PcoError::message: alloc::string::String
+impl core::clone::Clone for pco::errors::PcoError
+pub fn pco::errors::PcoError::clone(&self) -> Self
+impl core::cmp::Eq for pco::errors::PcoError
+impl core::cmp::PartialEq for pco::errors::PcoError
+pub fn pco::errors::PcoError::eq(&self, &Self) -> bool
+impl core::convert::From<core::io::error::Error> for pco::errors::PcoError
+pub fn pco::errors::PcoError::from(core::io::error::Error) -> Self
+impl core::error::Error for pco::errors::PcoError
+impl core::fmt::Debug for pco::errors::PcoError
+pub fn pco::errors::PcoError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for pco::errors::PcoError
+pub fn pco::errors::PcoError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::errors::PcoError
+pub type pco::errors::PcoResult<T> = core::result::Result<T, pco::errors::PcoError>
+pub mod pco::metadata
+#[non_exhaustive] pub enum pco::metadata::DeltaEncoding
+pub pco::metadata::DeltaEncoding::Consecutive
+pub pco::metadata::DeltaEncoding::Consecutive::order: usize
+pub pco::metadata::DeltaEncoding::Consecutive::secondary_uses_delta: bool
+pub pco::metadata::DeltaEncoding::Conv1(pco::metadata::DeltaConv1Config)
+pub pco::metadata::DeltaEncoding::Lookback
+pub pco::metadata::DeltaEncoding::Lookback::config: pco::metadata::DeltaLookbackConfig
+pub pco::metadata::DeltaEncoding::Lookback::secondary_uses_delta: bool
+pub pco::metadata::DeltaEncoding::NoOp
+impl core::clone::Clone for pco::metadata::DeltaEncoding
+pub fn pco::metadata::DeltaEncoding::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::DeltaEncoding
+impl core::cmp::PartialEq for pco::metadata::DeltaEncoding
+pub fn pco::metadata::DeltaEncoding::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::DeltaEncoding
+pub fn pco::metadata::DeltaEncoding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::DeltaEncoding
+#[non_exhaustive] pub enum pco::metadata::DynBins
+pub pco::metadata::DynBins::U16(alloc::vec::Vec<pco::metadata::Bin<u16>>)
+pub pco::metadata::DynBins::U32(alloc::vec::Vec<pco::metadata::Bin<u32>>)
+pub pco::metadata::DynBins::U64(alloc::vec::Vec<pco::metadata::Bin<u64>>)
+pub pco::metadata::DynBins::U8(alloc::vec::Vec<pco::metadata::Bin<u8>>)
+impl pco::metadata::DynBins
+pub fn pco::metadata::DynBins::downcast<T: pco::data_types::Latent>(self) -> core::option::Option<alloc::vec::Vec<pco::metadata::Bin<T>>>
+pub fn pco::metadata::DynBins::downcast_mut<T: pco::data_types::Latent>(&mut self) -> core::option::Option<&mut alloc::vec::Vec<pco::metadata::Bin<T>>>
+pub fn pco::metadata::DynBins::downcast_ref<T: pco::data_types::Latent>(&self) -> core::option::Option<&alloc::vec::Vec<pco::metadata::Bin<T>>>
+pub fn pco::metadata::DynBins::new<S: pco::data_types::Latent>(alloc::vec::Vec<pco::metadata::Bin<S>>) -> Self
+impl core::clone::Clone for pco::metadata::DynBins
+pub fn pco::metadata::DynBins::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::DynBins
+impl core::cmp::PartialEq for pco::metadata::DynBins
+pub fn pco::metadata::DynBins::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::DynBins
+pub fn pco::metadata::DynBins::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::DynBins
+#[non_exhaustive] pub enum pco::metadata::DynLatent
+pub pco::metadata::DynLatent::U16(u16)
+pub pco::metadata::DynLatent::U32(u32)
+pub pco::metadata::DynLatent::U64(u64)
+pub pco::metadata::DynLatent::U8(u8)
+impl pco::metadata::DynLatent
+pub fn pco::metadata::DynLatent::downcast<T: pco::data_types::Latent>(self) -> core::option::Option<T>
+pub fn pco::metadata::DynLatent::downcast_mut<T: pco::data_types::Latent>(&mut self) -> core::option::Option<&mut T>
+pub fn pco::metadata::DynLatent::downcast_ref<T: pco::data_types::Latent>(&self) -> core::option::Option<&T>
+pub fn pco::metadata::DynLatent::new<S: pco::data_types::Latent>(S) -> Self
+impl core::clone::Clone for pco::metadata::DynLatent
+pub fn pco::metadata::DynLatent::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::DynLatent
+impl core::cmp::PartialEq for pco::metadata::DynLatent
+pub fn pco::metadata::DynLatent::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::DynLatent
+pub fn pco::metadata::DynLatent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::metadata::DynLatent
+impl core::marker::StructuralPartialEq for pco::metadata::DynLatent
+#[non_exhaustive] pub enum pco::metadata::DynLatents
+pub pco::metadata::DynLatents::U16(alloc::vec::Vec<u16>)
+pub pco::metadata::DynLatents::U32(alloc::vec::Vec<u32>)
+pub pco::metadata::DynLatents::U64(alloc::vec::Vec<u64>)
+pub pco::metadata::DynLatents::U8(alloc::vec::Vec<u8>)
+impl pco::metadata::DynLatents
+pub fn pco::metadata::DynLatents::downcast<T: pco::data_types::Latent>(self) -> core::option::Option<alloc::vec::Vec<T>>
+pub fn pco::metadata::DynLatents::downcast_mut<T: pco::data_types::Latent>(&mut self) -> core::option::Option<&mut alloc::vec::Vec<T>>
+pub fn pco::metadata::DynLatents::downcast_ref<T: pco::data_types::Latent>(&self) -> core::option::Option<&alloc::vec::Vec<T>>
+pub fn pco::metadata::DynLatents::new<S: pco::data_types::Latent>(alloc::vec::Vec<S>) -> Self
+impl core::clone::Clone for pco::metadata::DynLatents
+pub fn pco::metadata::DynLatents::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::DynLatents
+impl core::cmp::PartialEq for pco::metadata::DynLatents
+pub fn pco::metadata::DynLatents::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::DynLatents
+pub fn pco::metadata::DynLatents::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::DynLatents
+pub enum pco::metadata::LatentVarKey
+pub pco::metadata::LatentVarKey::Delta
+pub pco::metadata::LatentVarKey::Primary
+pub pco::metadata::LatentVarKey::Secondary
+impl core::clone::Clone for pco::metadata::LatentVarKey
+pub fn pco::metadata::LatentVarKey::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::LatentVarKey
+impl core::cmp::PartialEq for pco::metadata::LatentVarKey
+pub fn pco::metadata::LatentVarKey::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::LatentVarKey
+pub fn pco::metadata::LatentVarKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::metadata::LatentVarKey
+impl core::marker::StructuralPartialEq for pco::metadata::LatentVarKey
+#[non_exhaustive] pub enum pco::metadata::Mode
+pub pco::metadata::Mode::Classic
+pub pco::metadata::Mode::Dict(pco::metadata::DynLatents)
+pub pco::metadata::Mode::FloatMult(pco::metadata::DynLatent)
+pub pco::metadata::Mode::FloatQuant(u32)
+pub pco::metadata::Mode::IntMult(pco::metadata::DynLatent)
+impl core::clone::Clone for pco::metadata::Mode
+pub fn pco::metadata::Mode::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::Mode
+impl core::cmp::PartialEq for pco::metadata::Mode
+pub fn pco::metadata::Mode::eq(&self, &Self) -> bool
+impl core::default::Default for pco::metadata::Mode
+pub fn pco::metadata::Mode::default() -> Self
+impl core::fmt::Debug for pco::metadata::Mode
+pub fn pco::metadata::Mode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::Mode
+pub struct pco::metadata::Bin<L: pco::data_types::Latent>
+pub pco::metadata::Bin::lower: L
+pub pco::metadata::Bin::offset_bits: u32
+pub pco::metadata::Bin::weight: u32
+impl<L: core::clone::Clone + pco::data_types::Latent> core::clone::Clone for pco::metadata::Bin<L>
+pub fn pco::metadata::Bin<L>::clone(&self) -> Self
+impl<L: core::cmp::Eq + pco::data_types::Latent> core::cmp::Eq for pco::metadata::Bin<L>
+impl<L: core::cmp::PartialEq + pco::data_types::Latent> core::cmp::PartialEq for pco::metadata::Bin<L>
+pub fn pco::metadata::Bin<L>::eq(&self, &Self) -> bool
+impl<L: core::cmp::PartialEq + pco::data_types::Latent> core::marker::StructuralPartialEq for pco::metadata::Bin<L>
+impl<L: core::fmt::Debug + pco::data_types::Latent> core::fmt::Debug for pco::metadata::Bin<L>
+pub fn pco::metadata::Bin<L>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<L: core::marker::Copy + pco::data_types::Latent> core::marker::Copy for pco::metadata::Bin<L>
+#[non_exhaustive] pub struct pco::metadata::ChunkLatentVarMeta
+pub pco::metadata::ChunkLatentVarMeta::ans_size_log: u32
+pub pco::metadata::ChunkLatentVarMeta::bins: pco::metadata::DynBins
+impl core::clone::Clone for pco::metadata::ChunkLatentVarMeta
+pub fn pco::metadata::ChunkLatentVarMeta::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::ChunkLatentVarMeta
+impl core::cmp::PartialEq for pco::metadata::ChunkLatentVarMeta
+pub fn pco::metadata::ChunkLatentVarMeta::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::ChunkLatentVarMeta
+pub fn pco::metadata::ChunkLatentVarMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::ChunkLatentVarMeta
+pub struct pco::metadata::ChunkMeta
+pub pco::metadata::ChunkMeta::delta_encoding: pco::metadata::DeltaEncoding
+pub pco::metadata::ChunkMeta::mode: pco::metadata::Mode
+pub pco::metadata::ChunkMeta::per_latent_var: pco::metadata::PerLatentVar<pco::metadata::ChunkLatentVarMeta>
+impl pco::metadata::ChunkMeta
+pub fn pco::metadata::ChunkMeta::new(pco::metadata::Mode, pco::metadata::DeltaEncoding, pco::metadata::PerLatentVar<pco::metadata::ChunkLatentVarMeta>) -> pco::errors::PcoResult<Self>
+impl core::clone::Clone for pco::metadata::ChunkMeta
+pub fn pco::metadata::ChunkMeta::clone(&self) -> Self
+impl core::fmt::Debug for pco::metadata::ChunkMeta
+pub fn pco::metadata::ChunkMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct pco::metadata::DeltaConv1Config
+pub pco::metadata::DeltaConv1Config::quantization: u32
+impl core::clone::Clone for pco::metadata::DeltaConv1Config
+pub fn pco::metadata::DeltaConv1Config::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::DeltaConv1Config
+impl core::cmp::PartialEq for pco::metadata::DeltaConv1Config
+pub fn pco::metadata::DeltaConv1Config::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::DeltaConv1Config
+pub fn pco::metadata::DeltaConv1Config::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::DeltaConv1Config
+#[non_exhaustive] pub struct pco::metadata::DeltaLookbackConfig
+pub pco::metadata::DeltaLookbackConfig::state_n_log: u32
+pub pco::metadata::DeltaLookbackConfig::window_n_log: u32
+impl core::clone::Clone for pco::metadata::DeltaLookbackConfig
+pub fn pco::metadata::DeltaLookbackConfig::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::DeltaLookbackConfig
+impl core::cmp::PartialEq for pco::metadata::DeltaLookbackConfig
+pub fn pco::metadata::DeltaLookbackConfig::eq(&self, &Self) -> bool
+impl core::fmt::Debug for pco::metadata::DeltaLookbackConfig
+pub fn pco::metadata::DeltaLookbackConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::metadata::DeltaLookbackConfig
+impl core::marker::StructuralPartialEq for pco::metadata::DeltaLookbackConfig
+#[non_exhaustive] pub struct pco::metadata::FormatVersion
+pub pco::metadata::FormatVersion::major: u8
+pub pco::metadata::FormatVersion::minor: u8
+impl pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::can_be_decompressed(&self) -> core::option::Option<bool>
+pub fn pco::metadata::FormatVersion::max_supported() -> Self
+impl core::clone::Clone for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::clone(&self) -> Self
+impl core::cmp::Eq for pco::metadata::FormatVersion
+impl core::cmp::Ord for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::default::Default for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::default() -> Self
+impl core::fmt::Debug for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for pco::metadata::FormatVersion
+pub fn pco::metadata::FormatVersion::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for pco::metadata::FormatVersion
+pub struct pco::metadata::PerLatentVar<T>
+pub pco::metadata::PerLatentVar::delta: core::option::Option<T>
+pub pco::metadata::PerLatentVar::primary: T
+pub pco::metadata::PerLatentVar::secondary: core::option::Option<T>
+impl<T> pco::metadata::PerLatentVar<T>
+pub fn pco::metadata::PerLatentVar<T>::as_ref(&self) -> pco::metadata::PerLatentVar<&T>
+pub fn pco::metadata::PerLatentVar<T>::enumerated(self) -> alloc::vec::Vec<(pco::metadata::LatentVarKey, T)>
+pub fn pco::metadata::PerLatentVar<T>::zip_exact<S>(self, pco::metadata::PerLatentVar<S>) -> pco::metadata::PerLatentVar<(T, S)>
+impl<T: core::clone::Clone> core::clone::Clone for pco::metadata::PerLatentVar<T>
+pub fn pco::metadata::PerLatentVar<T>::clone(&self) -> Self
+impl<T: core::cmp::Eq> core::cmp::Eq for pco::metadata::PerLatentVar<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for pco::metadata::PerLatentVar<T>
+pub fn pco::metadata::PerLatentVar<T>::eq(&self, &Self) -> bool
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for pco::metadata::PerLatentVar<T>
+impl<T: core::default::Default> core::default::Default for pco::metadata::PerLatentVar<T>
+pub fn pco::metadata::PerLatentVar<T>::default() -> Self
+impl<T: core::fmt::Debug> core::fmt::Debug for pco::metadata::PerLatentVar<T>
+pub fn pco::metadata::PerLatentVar<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod pco::standalone
+pub mod pco::standalone::guarantee
+pub fn pco::standalone::guarantee::chunk_size<L: pco::data_types::Latent>(usize) -> usize
+pub fn pco::standalone::guarantee::file_size<L: pco::data_types::Latent>(usize, &pco::PagingSpec) -> pco::errors::PcoResult<usize>
+pub fn pco::standalone::guarantee::header_size() -> usize
+pub enum pco::standalone::DecompressorItem<T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead>
+pub pco::standalone::DecompressorItem::Chunk(pco::standalone::ChunkDecompressor<T, R>)
+pub pco::standalone::DecompressorItem::EndOfData(R)
+pub struct pco::standalone::ChunkCompressor
+impl pco::standalone::ChunkCompressor
+pub fn pco::standalone::ChunkCompressor::meta(&self) -> &pco::metadata::ChunkMeta
+pub fn pco::standalone::ChunkCompressor::size_hint(&self) -> usize
+pub fn pco::standalone::ChunkCompressor::write<W: core::io::write::Write>(&mut self, W) -> pco::errors::PcoResult<W>
+impl core::clone::Clone for pco::standalone::ChunkCompressor
+pub fn pco::standalone::ChunkCompressor::clone(&self) -> Self
+impl core::fmt::Debug for pco::standalone::ChunkCompressor
+pub fn pco::standalone::ChunkCompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::standalone::ChunkDecompressor<T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead>
+impl<T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead> pco::standalone::ChunkDecompressor<T, R>
+pub fn pco::standalone::ChunkDecompressor<T, R>::into_src(self) -> R
+pub fn pco::standalone::ChunkDecompressor<T, R>::meta(&self) -> &pco::metadata::ChunkMeta
+pub fn pco::standalone::ChunkDecompressor<T, R>::n(&self) -> usize
+pub fn pco::standalone::ChunkDecompressor<T, R>::read(&mut self, &mut [T]) -> pco::errors::PcoResult<pco::Progress>
+pub struct pco::standalone::FileCompressor
+impl pco::standalone::FileCompressor
+pub fn pco::standalone::FileCompressor::chunk_compressor<T: pco::data_types::Number>(&self, &[T], &pco::ChunkConfig) -> pco::errors::PcoResult<pco::standalone::ChunkCompressor>
+pub fn pco::standalone::FileCompressor::with_n_hint(self, usize) -> Self
+pub fn pco::standalone::FileCompressor::with_uniform_type(self, core::option::Option<pco::data_types::NumberType>) -> Self
+pub fn pco::standalone::FileCompressor::write_footer<W: core::io::write::Write>(&self, W) -> pco::errors::PcoResult<W>
+pub fn pco::standalone::FileCompressor::write_header<W: core::io::write::Write>(&self, W) -> pco::errors::PcoResult<W>
+impl core::clone::Clone for pco::standalone::FileCompressor
+pub fn pco::standalone::FileCompressor::clone(&self) -> Self
+impl core::default::Default for pco::standalone::FileCompressor
+pub fn pco::standalone::FileCompressor::default() -> Self
+impl core::fmt::Debug for pco::standalone::FileCompressor
+pub fn pco::standalone::FileCompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::standalone::FileDecompressor
+impl pco::standalone::FileDecompressor
+pub fn pco::standalone::FileDecompressor::chunk_decompressor<T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead>(&self, R) -> pco::errors::PcoResult<pco::standalone::DecompressorItem<T, R>>
+pub fn pco::standalone::FileDecompressor::format_version(&self) -> &pco::metadata::FormatVersion
+pub fn pco::standalone::FileDecompressor::n_hint(&self) -> usize
+pub fn pco::standalone::FileDecompressor::new<R: better_io::buf_read::BetterBufRead>(R) -> pco::errors::PcoResult<(Self, R)>
+pub fn pco::standalone::FileDecompressor::peek_number_type_or_termination(&self, &[u8]) -> pco::errors::PcoResult<core::option::Option<pco::data_types::NumberType>>
+pub fn pco::standalone::FileDecompressor::simple_decompress<T: pco::data_types::Number>(&self, &[u8]) -> pco::errors::PcoResult<alloc::vec::Vec<T>>
+pub fn pco::standalone::FileDecompressor::uniform_type(&self) -> core::option::Option<pco::data_types::NumberType>
+pub fn pco::standalone::FileDecompressor::with_max_prealloc(self, usize) -> Self
+impl core::clone::Clone for pco::standalone::FileDecompressor
+pub fn pco::standalone::FileDecompressor::clone(&self) -> Self
+impl core::fmt::Debug for pco::standalone::FileDecompressor
+pub fn pco::standalone::FileDecompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn pco::standalone::simple_compress<T: pco::data_types::Number>(&[T], &pco::ChunkConfig) -> pco::errors::PcoResult<alloc::vec::Vec<u8>>
+pub fn pco::standalone::simple_compress_dyn(pco::dyn_slices::DynNumberSlice<'_>, &pco::ChunkConfig) -> pco::errors::PcoResult<alloc::vec::Vec<u8>>
+pub fn pco::standalone::simple_compress_into<T: pco::data_types::Number, W: core::io::write::Write>(&[T], &pco::ChunkConfig, W) -> pco::errors::PcoResult<W>
+pub fn pco::standalone::simple_decompress<T: pco::data_types::Number>(&[u8]) -> pco::errors::PcoResult<alloc::vec::Vec<T>>
+pub fn pco::standalone::simple_decompress_into<T: pco::data_types::Number>(&[u8], &mut [T]) -> pco::errors::PcoResult<pco::Progress>
+pub mod pco::wrapped
+pub mod pco::wrapped::guarantee
+pub fn pco::wrapped::guarantee::chunk_size<L: pco::data_types::Latent>(usize) -> usize
+pub fn pco::wrapped::guarantee::header_size() -> usize
+pub struct pco::wrapped::ChunkCompressor
+impl pco::wrapped::ChunkCompressor
+pub fn pco::wrapped::ChunkCompressor::meta(&self) -> &pco::metadata::ChunkMeta
+pub fn pco::wrapped::ChunkCompressor::meta_size_hint(&self) -> usize
+pub fn pco::wrapped::ChunkCompressor::n_per_page(&self) -> alloc::vec::Vec<usize>
+pub fn pco::wrapped::ChunkCompressor::page_size_hint(&self, usize) -> usize
+pub fn pco::wrapped::ChunkCompressor::write_meta<W: core::io::write::Write>(&self, W) -> pco::errors::PcoResult<W>
+pub fn pco::wrapped::ChunkCompressor::write_page<W: core::io::write::Write>(&mut self, usize, W) -> pco::errors::PcoResult<W>
+impl core::clone::Clone for pco::wrapped::ChunkCompressor
+pub fn pco::wrapped::ChunkCompressor::clone(&self) -> Self
+impl core::fmt::Debug for pco::wrapped::ChunkCompressor
+pub fn pco::wrapped::ChunkCompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::wrapped::ChunkDecompressor<T: pco::data_types::Number>
+impl<T: pco::data_types::Number> pco::wrapped::ChunkDecompressor<T>
+pub fn pco::wrapped::ChunkDecompressor<T>::meta(&self) -> &pco::metadata::ChunkMeta
+pub fn pco::wrapped::ChunkDecompressor<T>::page_decompressor<R: better_io::buf_read::BetterBufRead>(&mut self, R, usize) -> pco::errors::PcoResult<pco::wrapped::PageDecompressor<'_, T, R>>
+impl<T: core::clone::Clone + pco::data_types::Number> core::clone::Clone for pco::wrapped::ChunkDecompressor<T>
+pub fn pco::wrapped::ChunkDecompressor<T>::clone(&self) -> Self
+impl<T: core::fmt::Debug + pco::data_types::Number> core::fmt::Debug for pco::wrapped::ChunkDecompressor<T>
+pub fn pco::wrapped::ChunkDecompressor<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::wrapped::FileCompressor
+impl pco::wrapped::FileCompressor
+pub fn pco::wrapped::FileCompressor::chunk_compressor<T: pco::data_types::Number>(&self, &[T], &pco::ChunkConfig) -> pco::errors::PcoResult<pco::wrapped::ChunkCompressor>
+pub fn pco::wrapped::FileCompressor::write_header<W: core::io::write::Write>(&self, W) -> pco::errors::PcoResult<W>
+impl core::clone::Clone for pco::wrapped::FileCompressor
+pub fn pco::wrapped::FileCompressor::clone(&self) -> Self
+impl core::default::Default for pco::wrapped::FileCompressor
+pub fn pco::wrapped::FileCompressor::default() -> Self
+impl core::fmt::Debug for pco::wrapped::FileCompressor
+pub fn pco::wrapped::FileCompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct pco::wrapped::FileDecompressor
+impl pco::wrapped::FileDecompressor
+pub fn pco::wrapped::FileDecompressor::chunk_decompressor<T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead>(&self, R) -> pco::errors::PcoResult<(pco::wrapped::ChunkDecompressor<T>, R)>
+pub fn pco::wrapped::FileDecompressor::format_version(&self) -> &pco::metadata::FormatVersion
+pub fn pco::wrapped::FileDecompressor::new<R: better_io::buf_read::BetterBufRead>(R) -> pco::errors::PcoResult<(Self, R)>
+impl core::clone::Clone for pco::wrapped::FileDecompressor
+pub fn pco::wrapped::FileDecompressor::clone(&self) -> Self
+impl core::fmt::Debug for pco::wrapped::FileDecompressor
+pub fn pco::wrapped::FileDecompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::wrapped::PageDecompressor<'a, T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead>
+impl<'a, T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead> pco::wrapped::PageDecompressor<'a, T, R>
+pub fn pco::wrapped::PageDecompressor<'a, T, R>::into_src(self) -> R
+pub fn pco::wrapped::PageDecompressor<'a, T, R>::read(&mut self, &mut [T]) -> pco::errors::PcoResult<pco::Progress>
+pub macro pco::define_number_enum!
+pub macro pco::match_latent_enum!
+pub macro pco::match_number_enum!
+#[non_exhaustive] pub enum pco::DeltaSpec
+pub pco::DeltaSpec::Auto
+pub pco::DeltaSpec::NoOp
+pub pco::DeltaSpec::TryConsecutive(usize)
+pub pco::DeltaSpec::TryConv1(usize)
+pub pco::DeltaSpec::TryLookback
+impl core::clone::Clone for pco::DeltaSpec
+pub fn pco::DeltaSpec::clone(&self) -> Self
+impl core::default::Default for pco::DeltaSpec
+pub fn pco::DeltaSpec::default() -> Self
+impl core::fmt::Debug for pco::DeltaSpec
+pub fn pco::DeltaSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum pco::ModeSpec
+pub pco::ModeSpec::Auto
+pub pco::ModeSpec::Classic
+pub pco::ModeSpec::TryDict
+pub pco::ModeSpec::TryFloatMult(f64)
+pub pco::ModeSpec::TryFloatQuant(u32)
+pub pco::ModeSpec::TryIntMult(u64)
+impl core::clone::Clone for pco::ModeSpec
+pub fn pco::ModeSpec::clone(&self) -> Self
+impl core::default::Default for pco::ModeSpec
+pub fn pco::ModeSpec::default() -> Self
+impl core::fmt::Debug for pco::ModeSpec
+pub fn pco::ModeSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum pco::PagingSpec
+pub pco::PagingSpec::EqualPagesUpTo(usize)
+pub pco::PagingSpec::Exact(alloc::vec::Vec<usize>)
+impl pco::PagingSpec
+pub fn pco::PagingSpec::n_per_page(&self, usize) -> pco::errors::PcoResult<alloc::vec::Vec<usize>>
+impl core::clone::Clone for pco::PagingSpec
+pub fn pco::PagingSpec::clone(&self) -> Self
+impl core::default::Default for pco::PagingSpec
+pub fn pco::PagingSpec::default() -> Self
+impl core::fmt::Debug for pco::PagingSpec
+pub fn pco::PagingSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct pco::ChunkConfig
+pub pco::ChunkConfig::compression_level: usize
+pub pco::ChunkConfig::delta_spec: pco::DeltaSpec
+pub pco::ChunkConfig::enable_8_bit: bool
+pub pco::ChunkConfig::mode_spec: pco::ModeSpec
+pub pco::ChunkConfig::paging_spec: pco::PagingSpec
+impl pco::ChunkConfig
+pub fn pco::ChunkConfig::with_compression_level(self, usize) -> Self
+pub fn pco::ChunkConfig::with_delta_spec(self, pco::DeltaSpec) -> Self
+pub fn pco::ChunkConfig::with_enable_8_bit(self, bool) -> Self
+pub fn pco::ChunkConfig::with_mode_spec(self, pco::ModeSpec) -> Self
+pub fn pco::ChunkConfig::with_paging_spec(self, pco::PagingSpec) -> Self
+impl core::clone::Clone for pco::ChunkConfig
+pub fn pco::ChunkConfig::clone(&self) -> Self
+impl core::default::Default for pco::ChunkConfig
+pub fn pco::ChunkConfig::default() -> Self
+impl core::fmt::Debug for pco::ChunkConfig
+pub fn pco::ChunkConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::Progress
+pub pco::Progress::finished: bool
+pub pco::Progress::n_processed: usize
+impl core::clone::Clone for pco::Progress
+pub fn pco::Progress::clone(&self) -> Self
+impl core::default::Default for pco::Progress
+pub fn pco::Progress::default() -> Self
+impl core::fmt::Debug for pco::Progress
+pub fn pco::Progress::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for pco::Progress
+pub const pco::DEFAULT_COMPRESSION_LEVEL: usize
+pub const pco::DEFAULT_MAX_PAGE_N: usize
+pub const pco::FULL_BATCH_N: usize
