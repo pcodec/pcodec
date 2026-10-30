@@ -2,28 +2,22 @@ use std::mem::{self, MaybeUninit};
 
 use crate::data_types::Number;
 
-mod private {
+pub(crate) mod private {
   use std::mem::MaybeUninit;
 
   // The conversion lives on this private trait so that users cannot call it.
   // Otherwise safe code could write uninitialized values into a `&mut [T]`.
-  pub trait Sealed<T> {
+  pub trait WritableDstPriv<T> {
     fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>];
   }
 }
 
 /// A `[T]`-resembling that can receive decompressed numbers.
-pub trait WritableDst<T: Number>: private::Sealed<T> {}
+pub trait WritableDst<T: Number>: private::WritableDstPriv<T> {}
 
-impl<T: Number, D: private::Sealed<T> + ?Sized> WritableDst<T> for D {}
+impl<T: Number, D: private::WritableDstPriv<T> + ?Sized> WritableDst<T> for D {}
 
-pub(crate) fn as_maybe_uninit_slice_mut<T: Number, D: WritableDst<T> + ?Sized>(
-  dst: &mut D,
-) -> &mut [MaybeUninit<T>] {
-  private::Sealed::as_maybe_uninit_slice_mut(dst)
-}
-
-impl<T: Number> private::Sealed<T> for [T] {
+impl<T: Number> private::WritableDstPriv<T> for [T] {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
     // Safety: MaybeUninit<T> has the same layout as T, and we only ever write
     // initialized values through the result.
@@ -31,7 +25,7 @@ impl<T: Number> private::Sealed<T> for [T] {
   }
 }
 
-impl<T: Number, const N: usize> private::Sealed<T> for [T; N] {
+impl<T: Number, const N: usize> private::WritableDstPriv<T> for [T; N] {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
     // Safety: MaybeUninit<T> has the same layout as T, and we only ever write
     // initialized values through the result.
@@ -39,14 +33,14 @@ impl<T: Number, const N: usize> private::Sealed<T> for [T; N] {
   }
 }
 
-impl<T: Number> private::Sealed<T> for [MaybeUninit<T>] {
+impl<T: Number> private::WritableDstPriv<T> for [MaybeUninit<T>] {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
     self
   }
 }
 
-impl<T: Number> private::Sealed<T> for Vec<T> {
+impl<T: Number> private::WritableDstPriv<T> for Vec<T> {
   fn as_maybe_uninit_slice_mut(&mut self) -> &mut [MaybeUninit<T>] {
-    private::Sealed::as_maybe_uninit_slice_mut(self.as_mut_slice())
+    private::WritableDstPriv::as_maybe_uninit_slice_mut(self.as_mut_slice())
   }
 }

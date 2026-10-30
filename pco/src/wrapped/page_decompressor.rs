@@ -17,7 +17,7 @@ use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecom
 use crate::progress::Progress;
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
 use crate::wrapped::ChunkDecompressor;
-use crate::writable_dst::{self, WritableDst};
+use crate::writable_dst::WritableDst;
 
 pub(crate) struct PageDecompressorState<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
@@ -263,7 +263,7 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
     self.state.read(
       &mut self.cd.inner,
-      DynNumberDst::new(writable_dst::as_maybe_uninit_slice_mut(dst)),
+      DynNumberDst::new(dst.as_maybe_uninit_slice_mut()),
     )
   }
 

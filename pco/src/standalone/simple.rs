@@ -9,7 +9,7 @@ use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
-use crate::writable_dst::{self, WritableDst};
+use crate::writable_dst::WritableDst;
 use crate::{PagingSpec, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and a configuration and writes compressed bytes
@@ -103,10 +103,7 @@ pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
   src: &[u8],
   dst: &mut D,
 ) -> PcoResult<Progress> {
-  simple_decompress_into_uninit(
-    src,
-    writable_dst::as_maybe_uninit_slice_mut(dst),
-  )
+  simple_decompress_into_uninit(src, dst.as_maybe_uninit_slice_mut())
 }
 
 fn simple_decompress_into_uninit<T: Number>(

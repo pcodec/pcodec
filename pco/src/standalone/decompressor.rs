@@ -13,7 +13,7 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
-use crate::writable_dst::{self, WritableDst};
+use crate::writable_dst::WritableDst;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -306,7 +306,7 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// of numbers remaining in the chunk.
   #[inline]
   pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
-    self.read_uninit(writable_dst::as_maybe_uninit_slice_mut(dst))
+    self.read_uninit(dst.as_maybe_uninit_slice_mut())
   }
 
   fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
