@@ -98,7 +98,7 @@ impl CodecInternal for PaginatedPcoConfig {
         let page_n = u32::from_le_bytes(src[0..4].try_into().unwrap()) as usize;
         src = &src[4..];
         let mut pd = cd.page_decompressor(src, page_n).unwrap();
-        pd.read(&mut dst[i..]).unwrap();
+        pd.read_uninit(&mut dst[i..]).unwrap();
         i += page_n;
         src = pd.into_src();
       }

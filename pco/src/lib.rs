@@ -19,7 +19,6 @@ struct ReadmeDoctest;
 pub use chunk_config::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
 pub use constants::{DEFAULT_COMPRESSION_LEVEL, DEFAULT_MAX_PAGE_N, FULL_BATCH_N};
 pub use progress::Progress;
-pub use writable_dst::WritableDst;
 
 pub mod data_types;
 /// for inspecting certain types of Pco metadata
@@ -54,7 +53,6 @@ mod read_write_uint;
 mod sampling;
 mod scratch_array;
 mod sort_utils;
-mod writable_dst;
 
 #[cfg(test)]
 mod tests;

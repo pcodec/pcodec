@@ -13,7 +13,6 @@ use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
-use crate::writable_dst::WritableDst;
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -305,12 +304,21 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
   #[inline]
-  pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
-    // Safety: read_uninit does not write any uninitialized values.
-    unsafe { self.read_uninit(dst.as_maybe_uninit_slice_mut()) }
+  pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+    // safety: this only writes initialized values
+    unsafe {
+      self.read_uninit(mem::transmute::<
+        &mut [T],
+        &mut [MaybeUninit<T>],
+      >(dst))
+    }
   }
 
-  fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
+  /// Like `read`, but writes into a possibly uninitialized destination.
+  ///
+  /// Every element Pco reports as processed in the returned `Progress` has
+  /// been initialized.
+  pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
       &mut self.inner_cd.inner,
       DynNumberDst::new(dst),

@@ -1,6 +1,6 @@
 use std::cmp::min;
 use std::io::Write;
-use std::mem::MaybeUninit;
+use std::mem::{self, MaybeUninit};
 
 use crate::chunk_config::ChunkConfig;
 use crate::data_types::{Number, NumberType};
@@ -9,7 +9,6 @@ use crate::errors::PcoResult;
 use crate::progress::Progress;
 use crate::standalone::compressor::FileCompressor;
 use crate::standalone::decompressor::{DecompressorItem, FileDecompressor};
-use crate::writable_dst::WritableDst;
 use crate::{PagingSpec, FULL_BATCH_N};
 
 /// Takes in a slice of numbers and a configuration and writes compressed bytes
@@ -99,15 +98,25 @@ pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResu
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
-pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
-  src: &[u8],
-  dst: &mut D,
-) -> PcoResult<Progress> {
-  // Safety: simple_decompress_into_uninit does not write any uninitialized values.
-  unsafe { simple_decompress_into_uninit(src, dst.as_maybe_uninit_slice_mut()) }
+pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult<Progress> {
+  // safety: this only ever writes initialized values
+  unsafe {
+    simple_decompress_into_uninit::<T>(
+      src,
+      mem::transmute::<&mut [T], &mut [MaybeUninit<T>]>(dst),
+    )
+  }
 }
 
-fn simple_decompress_into_uninit<T: Number>(
+/// Like `simple_decompress_into`, but writes into a possibly uninitialized
+/// destination.
+///
+/// Will return an error if there are any corruption or insufficient data
+/// issues.
+/// Does not error if dst is too short or too long, but that can be inferred
+/// from `Progress`. Every element Pco reports as processed in the returned
+/// `Progress` has been initialized.
+pub fn simple_decompress_into_uninit<T: Number>(
   src: &[u8],
   mut dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<Progress> {
@@ -132,14 +141,14 @@ fn simple_decompress_into_uninit<T: Number>(
       (dst.len(), false)
     };
 
-    let new_progress = chunk_decompressor.read(&mut dst[..limit])?;
+    let new_progress = chunk_decompressor.read_uninit(&mut dst[..limit])?;
     dst = &mut dst[new_progress.n_processed..];
     progress.n_processed += new_progress.n_processed;
 
     // If we're near the end of dst, we do one possibly incomplete batch
     // of numbers and copy them over.
     if !dst.is_empty() {
-      let new_progress = chunk_decompressor.read(incomplete_batch_buffer.as_mut_slice())?;
+      let new_progress = chunk_decompressor.read_uninit(incomplete_batch_buffer.as_mut_slice())?;
       let n_processed = min(dst.len(), new_progress.n_processed);
       dst[..n_processed].copy_from_slice(&incomplete_batch_buffer[..n_processed]);
       dst = &mut dst[n_processed..];

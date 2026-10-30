@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::mem::{self, MaybeUninit};
 use std::ops::Range;
 
 use better_io::BetterBufRead;
@@ -17,7 +18,6 @@ use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecom
 use crate::progress::Progress;
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
 use crate::wrapped::ChunkDecompressor;
-use crate::writable_dst::WritableDst;
 
 pub(crate) struct PageDecompressorState<R: BetterBufRead> {
   reader_builder: BitReaderBuilder<R>,
@@ -260,14 +260,22 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
   #[inline]
-  pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
-    // Safety: state.read does not write any uninitialized values.
+  pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+    // safety: this only ever writes initialized values
     unsafe {
-      self.state.read(
-        &mut self.cd.inner,
-        DynNumberDst::new(dst.as_maybe_uninit_slice_mut()),
-      )
+      self.read_uninit(mem::transmute::<
+        &mut [T],
+        &mut [MaybeUninit<T>],
+      >(dst))
     }
+  }
+
+  /// Like `read`, but writes into a possibly uninitialized destination.
+  ///
+  /// Every element Pco reports as processed in the returned `Progress` has
+  /// been initialized.
+  pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
+    self.state.read(&mut self.cd.inner, DynNumberDst::new(dst))
   }
 
   /// Returns the rest of the compressed data source.
