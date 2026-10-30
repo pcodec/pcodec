@@ -354,7 +354,6 @@ pub fn pco::standalone::FileDecompressor::clone(&self) -> Self
 impl core::fmt::Debug for pco::standalone::FileDecompressor
 pub fn pco::standalone::FileDecompressor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn pco::standalone::simple_compress<T: pco::data_types::Number>(&[T], &pco::ChunkConfig) -> pco::errors::PcoResult<alloc::vec::Vec<u8>>
-pub fn pco::standalone::simple_compress_dyn(pco::dyn_slices::DynNumberSlice<'_>, &pco::ChunkConfig) -> pco::errors::PcoResult<alloc::vec::Vec<u8>>
 pub fn pco::standalone::simple_compress_into<T: pco::data_types::Number, W: core::io::write::Write>(&[T], &pco::ChunkConfig, W) -> pco::errors::PcoResult<W>
 pub fn pco::standalone::simple_decompress<T: pco::data_types::Number>(&[u8]) -> pco::errors::PcoResult<alloc::vec::Vec<T>>
 pub fn pco::standalone::simple_decompress_into<T: pco::data_types::Number>(&[u8], &mut [T]) -> pco::errors::PcoResult<pco::Progress>

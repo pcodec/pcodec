@@ -60,7 +60,7 @@ pub fn simple_compress<T: Number>(src: &[T], config: &ChunkConfig) -> PcoResult<
   simple_compress_dyn(DynNumberSlice::new(src), config)
 }
 
-pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResult<Vec<u8>> {
+fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResult<Vec<u8>> {
   let n = src.len();
   let mut dst = Vec::new();
   let file_compressor = FileCompressor::default().with_n_hint(n);
