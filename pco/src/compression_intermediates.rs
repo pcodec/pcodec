@@ -27,7 +27,8 @@ impl PageInfo {
 
 #[derive(Clone, Debug)]
 pub struct PageDissectedVar {
-  // These vecs should have the same length (assuming nontrivial ANS).
+  // These vecs should usually have the same length, or sometimes be empty for
+  // optimization purposes.
   pub ans_vals: Vec<AnsState>,
   pub ans_bits: Vec<Bitlen>,
   pub offsets: DynLatents,
