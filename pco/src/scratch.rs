@@ -27,28 +27,6 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
   }
 }
 
-// define_latent_enum!(
-//   #[derive()]
-//   pub union UniversalScratchArray(ScratchArray)
-// );
-
-// impl Debug for UniversalScratchArray {
-//   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//     write!(f, "<UniversalScratchArray>")
-//   }
-// }
-
-// impl Clone for UniversalScratchArray {
-//   fn clone(&self) -> Self {
-//     // Safety: U64 is the largest variant, so contains all others.
-//     unsafe {
-//       Self {
-//         U64: self.U64.clone(),
-//       }
-//     }
-//   }
-// }
-
 #[derive(Clone, Debug)]
 pub struct LatentDecompressorScratch<L: Latent> {
   pub offset_bits_csum: ScratchArray<Bitlen>,
@@ -60,13 +38,6 @@ define_latent_enum!(
   #[derive(Clone, Debug)]
   pub DynLatentDecompressorScratch(LatentDecompressorScratch)
 );
-
-// #[derive(Clone, Debug)]
-// pub struct DecompressorScratchInner {
-//   pub delta: LatentDecompressorScratch,
-//   pub primary: LatentDecompressorScratch,
-//   pub secondary: LatentDecompressorScratch,
-// }
 
 #[derive(Clone, Debug)]
 pub struct DecompressorScratch {
