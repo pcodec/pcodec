@@ -66,43 +66,6 @@ macro_rules! build_dtype_macros {
           }
         }
       };
-      // Union with owned data
-      (#[$enum_attrs: meta] $vis: vis union $name: ident($container: ident)) => {
-        #[$enum_attrs]
-        $vis union $name {
-          $($variant: std::mem::ManuallyDrop<$container<$t>>,)+
-        }
-
-        impl $name {
-          #[inline]
-          pub fn new<S: $constraint>(inner: $container<S>) -> Self {
-            let type_id = std::any::TypeId::of::<S>();
-            $(
-              if type_id == std::any::TypeId::of::<$t>() {
-                // Transmute doesn't work for containers whose size depends on T,
-                // so we use a hack from
-                // https://users.rust-lang.org/t/transmuting-a-generic-array/45645/6
-                let ptr = &inner as *const $container<S> as *const $container<$t>;
-                let typed = unsafe { ptr.read() };
-                return Self { $variant: std::mem::ManuallyDrop::new(typed) };
-              }
-            )+
-            unreachable!();
-          }
-
-          pub fn downcast_ref<T: $constraint>(&self) -> &$container<T> {
-            unsafe {
-              std::mem::transmute::<_, &$container<T>>(self)
-            }
-          }
-
-          pub fn downcast_mut<T: $constraint>(&mut self) -> &mut $container<T> {
-            unsafe {
-              std::mem::transmute::<_, &mut $container<T>>(self)
-            }
-          }
-        }
-      };
       // Enum with owned data
       (#[$enum_attrs: meta] $vis: vis $name: ident($container: ident)) => {
         #[$enum_attrs]

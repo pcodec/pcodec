@@ -42,19 +42,6 @@ impl ChunkDecompressorInner {
         .as_ref()
         .map(|_key, dyn_cld| dyn_cld.new_scratch()),
     );
-    // let per_latent_var = Box::new(DecompressorScratchInner {
-    //   delta: self
-    //     .per_latent_var
-    //     .delta
-    //     .as_ref()
-    //     .map(|lv| lv.new_scratch()),
-    //   primary: self.per_latent_var.primary.new_scratch(),
-    //   secondary: self
-    //     .per_latent_var
-    //     .secondary
-    //     .as_ref()
-    //     .map(|lv| lv.new_scratch()),
-    // });
 
     DecompressorScratch { per_latent_var }
   }
