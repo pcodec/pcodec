@@ -261,10 +261,13 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   /// of numbers remaining in the page.
   #[inline]
   pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
-    self.state.read(
-      &mut self.cd.inner,
-      DynNumberDst::new(dst.as_maybe_uninit_slice_mut()),
-    )
+    // Safety: state.read does not write any uninitialized values.
+    unsafe {
+      self.state.read(
+        &mut self.cd.inner,
+        DynNumberDst::new(dst.as_maybe_uninit_slice_mut()),
+      )
+    }
   }
 
   /// Returns the rest of the compressed data source.

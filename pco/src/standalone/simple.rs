@@ -103,7 +103,8 @@ pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
   src: &[u8],
   dst: &mut D,
 ) -> PcoResult<Progress> {
-  simple_decompress_into_uninit(src, dst.as_maybe_uninit_slice_mut())
+  // Safety: simple_decompress_into_uninit does not write any uninitialized values.
+  unsafe { simple_decompress_into_uninit(src, dst.as_maybe_uninit_slice_mut()) }
 }
 
 fn simple_decompress_into_uninit<T: Number>(

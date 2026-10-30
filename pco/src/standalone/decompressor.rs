@@ -306,7 +306,8 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// of numbers remaining in the chunk.
   #[inline]
   pub fn read<D: WritableDst<T> + ?Sized>(&mut self, dst: &mut D) -> PcoResult<Progress> {
-    self.read_uninit(dst.as_maybe_uninit_slice_mut())
+    // Safety: read_uninit does not write any uninitialized values.
+    unsafe { self.read_uninit(dst.as_maybe_uninit_slice_mut()) }
   }
 
   fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
