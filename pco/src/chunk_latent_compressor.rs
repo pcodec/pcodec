@@ -11,7 +11,9 @@ use crate::metadata::{bins, Bin};
 use crate::read_write_uint::ReadWriteUint;
 use crate::scratch_array::ScratchArray;
 use crate::{ans, bit_reader, bit_writer, bits, read_write_uint, FULL_BATCH_N};
+use std::debug_assert;
 use std::io::Write;
+use std::mem::MaybeUninit;
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
@@ -20,15 +22,13 @@ pub struct ChunkLatentCompressorScratch<L: Latent> {
   symbols: ScratchArray<Symbol>,
 }
 
-// Safety: set_len before fill is technically UB, but all T here are non-Drop
-// integer/float types so no destructor runs on garbage if a panic occurs.
-// Fixing correctly would require threading &mut [MaybeUninit<T>] through
-// dissect_batch and its callees (dissect_bins, set_offsets,
-// encode_ans_in_reverse) — a significant refactor of a hot path.
-unsafe fn uninit_vec<T>(n: usize) -> Vec<T> {
-  let mut res = Vec::with_capacity(n);
-  res.set_len(n);
-  res
+// The not-yet-initialized buffers of a page that a batch writes into.
+struct PageDissectedSpare<'a, L: Latent> {
+  ans_vals: &'a mut [MaybeUninit<AnsState>],
+  ans_bits: &'a mut [MaybeUninit<Bitlen>],
+  offsets: &'a mut [MaybeUninit<L>],
+  offset_bits: &'a mut [MaybeUninit<Bitlen>],
+  ans_final_states: &'a mut [AnsState; ANS_INTERLEAVING],
 }
 
 // This would be very hard to combine with write_uints because it makes use of
@@ -95,18 +95,11 @@ pub struct ChunkLatentCompressor<L: Latent> {
 #[inline(never)]
 fn encode_ans_in_reverse(
   encoder: &ans::Encoder,
-  ans_vals: &mut [AnsState],
-  ans_bits: &mut [Bitlen],
+  ans_vals: &mut [MaybeUninit<AnsState>],
+  ans_bits: &mut [MaybeUninit<Bitlen>],
   ans_final_states: &mut [AnsState; ANS_INTERLEAVING],
   dst: &mut [Symbol],
 ) {
-  if encoder.size_log() == 0 {
-    // trivial case: there's only one symbol. ANS values and states don't
-    // matter.
-    ans_bits.fill(0);
-    return;
-  }
-
   let final_base_i = (ans_vals.len() / ANS_INTERLEAVING) * ANS_INTERLEAVING;
   let final_j = ans_vals.len() % ANS_INTERLEAVING;
 
@@ -114,8 +107,11 @@ fn encode_ans_in_reverse(
   for j in (0..final_j).rev() {
     let i = final_base_i + j;
     let (new_state, bitlen) = encoder.encode(ans_final_states[j], dst[i]);
-    ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
-    ans_bits[i] = bitlen;
+    ans_vals[i].write(bits::lowest_bits_fast(
+      ans_final_states[j],
+      bitlen,
+    ));
+    ans_bits[i].write(bitlen);
     ans_final_states[j] = new_state;
   }
 
@@ -124,8 +120,11 @@ fn encode_ans_in_reverse(
     for j in (0..ANS_INTERLEAVING).rev() {
       let i = base_i + j;
       let (new_state, bitlen) = encoder.encode(ans_final_states[j], dst[i]);
-      ans_vals[i] = bits::lowest_bits_fast(ans_final_states[j], bitlen);
-      ans_bits[i] = bitlen;
+      ans_vals[i].write(bits::lowest_bits_fast(
+        ans_final_states[j],
+        bitlen,
+      ));
+      ans_bits[i].write(bitlen);
       ans_final_states[j] = new_state;
     }
   }
@@ -160,7 +159,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
   }
 
   #[inline(never)]
-  fn dissect_bins(&mut self, search_idxs: &[usize], dst_offset_bits: &mut [Bitlen]) {
+  fn dissect_bins(&mut self, search_idxs: &[usize], dst_offset_bits: &mut [MaybeUninit<Bitlen>]) {
     if self.table.is_trivial() {
       // trivial case: there's at most one bin. We've prepopulated the scratch
       // buffers with the correct values in this case.
@@ -169,7 +168,7 @@ impl<L: Latent> ChunkLatentCompressor<L> {
         .only_bin()
         .map(|info| info.offset_bits)
         .unwrap_or(0);
-      dst_offset_bits.fill(default_offset_bits);
+      dst_offset_bits.fill(MaybeUninit::new(default_offset_bits));
       return;
     }
 
@@ -177,17 +176,17 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       let info = &self.table.infos[search_idx];
       self.scratch.lowers[i] = info.lower;
       self.scratch.symbols[i] = info.symbol;
-      dst_offset_bits[i] = info.offset_bits;
+      dst_offset_bits[i].write(info.offset_bits);
     }
   }
 
   #[inline(never)]
-  fn set_offsets(&self, latents: &[L], offsets: &mut [L]) {
+  fn set_offsets(&self, latents: &[L], offsets: &mut [MaybeUninit<L>]) {
     for (offset, (&latent, &lower)) in offsets
       .iter_mut()
       .zip(latents.iter().zip(self.scratch.lowers.iter()))
     {
-      *offset = latent - lower;
+      offset.write(latent - lower);
     }
   }
 
@@ -195,9 +194,9 @@ impl<L: Latent> ChunkLatentCompressor<L> {
     &mut self,
     page_start: usize,
     relative_batch_range: Range<usize>,
-    dst: &mut PageDissectedVar,
+    dst: &mut PageDissectedSpare<L>,
   ) {
-    let PageDissectedVar {
+    let PageDissectedSpare {
       ans_vals,
       ans_bits,
       offsets,
@@ -217,56 +216,70 @@ impl<L: Latent> ChunkLatentCompressor<L> {
       &mut offset_bits[relative_batch_range.clone()],
     );
 
-    let offsets = offsets.downcast_mut::<L>().unwrap();
     self.set_offsets(
       &self.latents[absolute_batch_range],
       &mut offsets[relative_batch_range.clone()],
     );
 
-    encode_ans_in_reverse(
-      &self.encoder,
-      &mut ans_vals[relative_batch_range.clone()],
-      &mut ans_bits[relative_batch_range],
-      ans_final_states,
-      &mut self.scratch.symbols.0,
-    );
-  }
-
-  unsafe fn uninit_page_dissected_var(&self, n: usize) -> PageDissectedVar {
-    let ans_final_states = [self.encoder.default_state(); ANS_INTERLEAVING];
-    PageDissectedVar {
-      ans_vals: uninit_vec(n),
-      ans_bits: uninit_vec(n),
-      offsets: DynLatents::new(uninit_vec::<L>(n)),
-      offset_bits: uninit_vec(n),
-      ans_final_states,
+    if self.needs_ans {
+      encode_ans_in_reverse(
+        &self.encoder,
+        &mut ans_vals[relative_batch_range.clone()],
+        &mut ans_bits[relative_batch_range],
+        ans_final_states,
+        &mut self.scratch.symbols.0,
+      );
     }
   }
 
   pub fn dissect_page(&mut self, page_range: Range<usize>) -> PageDissectedVar {
-    if self.is_trivial {
-      // safe because length of uninit elements is 0
-      return unsafe { self.uninit_page_dissected_var(0) };
-    }
+    let mut ans_final_states = [self.encoder.default_state(); ANS_INTERLEAVING];
 
-    let page_n = page_range.len();
-    let mut page_dissected_var = unsafe { self.uninit_page_dissected_var(page_n) };
+    let offset_n = if self.is_trivial { 0 } else { page_range.len() };
+    let ans_n = if self.needs_ans { offset_n } else { 0 };
+    let mut ans_vals = Vec::with_capacity(ans_n);
+    let mut ans_bits = Vec::with_capacity(ans_n);
+    let mut offsets = Vec::<L>::with_capacity(offset_n);
+    let mut offset_bits = Vec::with_capacity(offset_n);
+
+    let mut spare = PageDissectedSpare {
+      ans_vals: &mut ans_vals.spare_capacity_mut()[..ans_n],
+      ans_bits: &mut ans_bits.spare_capacity_mut()[..ans_n],
+      offsets: &mut offsets.spare_capacity_mut()[..offset_n],
+      offset_bits: &mut offset_bits.spare_capacity_mut()[..offset_n],
+      ans_final_states: &mut ans_final_states,
+    };
 
     // We go through in reverse for ANS!
-    // Here page_dissected_var is indexed from 0..page_n, whereas latents are
+    // Here the page buffers are indexed from 0..page_n, whereas latents are
     // indexed from 0..chunk_n, so we need both an absolute page start index and
     // a relative range for the batch within the page.
-    let n_batches = page_n.div_ceil(FULL_BATCH_N);
+    let n_batches = offset_n.div_ceil(FULL_BATCH_N);
     for batch_idx in (0..n_batches).rev() {
       let relative_batch_range =
-        batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(page_n);
+        batch_idx * FULL_BATCH_N..((batch_idx + 1) * FULL_BATCH_N).min(offset_n);
       self.dissect_batch(
         page_range.start,
         relative_batch_range,
-        &mut page_dissected_var,
+        &mut spare,
       )
     }
-    page_dissected_var
+
+    // Safety: the batches above together initialized all elements.
+    unsafe {
+      ans_vals.set_len(ans_n);
+      ans_bits.set_len(ans_n);
+      offsets.set_len(offset_n);
+      offset_bits.set_len(offset_n);
+    }
+
+    PageDissectedVar {
+      ans_vals,
+      ans_bits,
+      offsets: DynLatents::new(offsets),
+      offset_bits,
+      ans_final_states,
+    }
   }
 
   pub fn write_dissected_batch<W: Write>(

@@ -1,6 +1,7 @@
 use core::f64::consts::LOG10_2;
 use std::cmp::{max, min};
 use std::mem;
+use std::mem::MaybeUninit;
 
 use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, MULT_REQUIRED_BITS_SAVED_PER_NUM};
@@ -19,18 +20,18 @@ pub(crate) fn join_latents<F: Float>(
   base: F,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [F],
+  dst: &mut [MaybeUninit<F>],
 ) -> PcoResult<()> {
   let primary = primary.downcast::<F::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
   for ((&mult, &adj), dst) in primary.iter().zip(secondary.iter()).zip(dst.iter_mut()) {
     let unadjusted = F::int_float_from_latent(mult) * base;
-    *dst = F::from_latent_ordered(
+    dst.write(F::from_latent_ordered(
       unadjusted
         .to_latent_ordered()
         .wrapping_add(adj)
         .toggle_center(),
-    );
+    ));
   }
 
   Ok(())
@@ -732,6 +733,7 @@ mod micro {
   use half::f16;
   use rand_xoshiro::rand_core::{RngCore, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
+  use std::mem::MaybeUninit;
 
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
@@ -752,7 +754,7 @@ mod micro {
       .into_iter()
       .map(|ulps| F::L::MID.wrapping_add(ulps))
       .collect::<Vec<_>>();
-    let mut dst = vec![F::ZERO; mults.len()];
+    let mut dst = vec![MaybeUninit::uninit(); mults.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

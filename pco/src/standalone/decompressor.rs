@@ -1,16 +1,18 @@
+use std::mem::MaybeUninit;
+use std::{cmp, mem};
+
 use better_io::BetterBufRead;
 
 use crate::bit_reader::{BitReader, BitReaderBuilder};
 use crate::constants::{Bitlen, OVERSHOOT_PADDING};
 use crate::data_types::{Number, NumberType};
-use crate::dyn_slices::DynNumberSliceMut;
+use crate::dyn_slices::DynNumberDst;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::format_version::FormatVersion;
 use crate::metadata::ChunkMeta;
 use crate::progress::Progress;
 use crate::standalone::constants::*;
 use crate::wrapped;
-use std::{cmp, mem};
 
 unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   let power = 1 + reader.read_uint::<Bitlen>(BITS_TO_ENCODE_VARINT_POWER);
@@ -301,10 +303,25 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   ///
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the chunk.
+  #[inline]
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
+    // safety: this only writes initialized values
+    unsafe {
+      self.read_uninit(mem::transmute::<
+        &mut [T],
+        &mut [MaybeUninit<T>],
+      >(dst))
+    }
+  }
+
+  /// Like `read`, but writes into a possibly uninitialized destination.
+  ///
+  /// Every element Pco reports as processed in the returned `Progress` has
+  /// been initialized.
+  pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     let progress = self.page_state.read(
       &mut self.inner_cd.inner,
-      DynNumberSliceMut::new(dst),
+      DynNumberDst::new(dst),
     )?;
 
     self.n_processed += progress.n_processed;
@@ -322,16 +339,16 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     let initial_len = dst.len();
     let remaining = self.n - self.n_processed;
     dst.reserve(remaining);
-    // Safety: set_len before read() is technically the wrong ordering, but
-    // read() takes &mut [T], and T: Number is non-Drop, so no destructor runs
-    // on uninitialized elements if a panic occurs between set_len and the fill.
-    // Maybe eventually we can accept &mut [MaybeUninit<T>] in the public API as
-    // well.
+    // Safety: reserve() guarantees at least `remaining` spare elements. Giving
+    // read() exactly `remaining` elements lets the compiler drop the code paths
+    // for a short dst.
+    let spare = &mut dst.spare_capacity_mut()[..remaining];
+    let progress = self.read_uninit(spare)?;
+    debug_assert!(progress.finished);
+    // Safety: read() just initialized all `remaining` elements.
     unsafe {
       dst.set_len(initial_len + remaining);
     }
-    let progress = self.read(&mut dst[initial_len..])?;
-    debug_assert!(progress.finished);
     Ok(())
   }
 }

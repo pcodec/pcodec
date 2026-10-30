@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::io::Write;
+use std::mem::{self, MaybeUninit};
 
 use crate::chunk_config::ChunkConfig;
 use crate::data_types::{Number, NumberType};
@@ -97,10 +98,28 @@ pub fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResu
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
 /// from `Progress`.
-pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoResult<Progress> {
+pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult<Progress> {
+  // safety: this only ever writes initialized values
+  unsafe {
+    simple_decompress_into_uninit::<T>(
+      src,
+      mem::transmute::<&mut [T], &mut [MaybeUninit<T>]>(dst),
+    )
+  }
+}
+
+/// Like `simple_decompress_into`, but writes into a possibly uninitialized
+/// destination.
+///
+/// Every element Pco reports as processed in the returned `Progress` has
+/// been initialized.
+pub fn simple_decompress_into_uninit<T: Number>(
+  src: &[u8],
+  mut dst: &mut [MaybeUninit<T>],
+) -> PcoResult<Progress> {
   let (file_decompressor, mut src) = FileDecompressor::new(src)?;
 
-  let mut incomplete_batch_buffer = vec![T::default(); FULL_BATCH_N];
+  let mut incomplete_batch_buffer = [MaybeUninit::<T>::uninit(); FULL_BATCH_N];
   let mut progress = Progress::default();
   loop {
     let maybe_cd = file_decompressor.chunk_decompressor(src)?;
@@ -119,14 +138,14 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], mut dst: &mut [T]) -> PcoRe
       (dst.len(), false)
     };
 
-    let new_progress = chunk_decompressor.read(&mut dst[..limit])?;
+    let new_progress = chunk_decompressor.read_uninit(&mut dst[..limit])?;
     dst = &mut dst[new_progress.n_processed..];
     progress.n_processed += new_progress.n_processed;
 
     // If we're near the end of dst, we do one possibly incomplete batch
     // of numbers and copy them over.
     if !dst.is_empty() {
-      let new_progress = chunk_decompressor.read(&mut incomplete_batch_buffer)?;
+      let new_progress = chunk_decompressor.read_uninit(incomplete_batch_buffer.as_mut_slice())?;
       let n_processed = min(dst.len(), new_progress.n_processed);
       dst[..n_processed].copy_from_slice(&incomplete_batch_buffer[..n_processed]);
       dst = &mut dst[n_processed..];
