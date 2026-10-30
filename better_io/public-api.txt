@@ -1,27 +1,27 @@
 pub mod better_io
-pub struct better_io::BetterBufReader<R: std::io::Read>
-impl<R: std::io::Read> better_io::BetterBufReader<R>
-pub fn better_io::BetterBufReader<R>::from_buf_reader(std::io::buffered::bufreader::BufReader<R>, usize) -> Self
+pub struct better_io::BetterBufReader<R: alloc::io::read::Read>
+impl<R: alloc::io::read::Read> better_io::BetterBufReader<R>
+pub fn better_io::BetterBufReader<R>::from_buf_reader(alloc::io::buffered::bufreader::BufReader<R>, usize) -> Self
 pub fn better_io::BetterBufReader<R>::from_read_simple(R) -> Self
 pub fn better_io::BetterBufReader<R>::into_inner(self) -> R
 pub fn better_io::BetterBufReader<R>::new(&[u8], R, usize) -> Self
-impl<R: std::io::Read> better_io::BetterBufRead for better_io::BetterBufReader<R>
+impl<R: alloc::io::read::Read> better_io::BetterBufRead for better_io::BetterBufReader<R>
 pub fn better_io::BetterBufReader<R>::capacity(&self) -> core::option::Option<usize>
 pub fn better_io::BetterBufReader<R>::consume(&mut self, usize)
-pub fn better_io::BetterBufReader<R>::fill_or_eof(&mut self, usize) -> std::io::error::Result<&[u8]>
+pub fn better_io::BetterBufReader<R>::fill_or_eof(&mut self, usize) -> core::io::error::Result<&[u8]>
 pub fn better_io::BetterBufReader<R>::resize_capacity(&mut self, usize)
 pub trait better_io::BetterBufRead
 pub fn better_io::BetterBufRead::capacity(&self) -> core::option::Option<usize>
 pub fn better_io::BetterBufRead::consume(&mut self, usize)
-pub fn better_io::BetterBufRead::fill_or_eof(&mut self, usize) -> std::io::error::Result<&[u8]>
+pub fn better_io::BetterBufRead::fill_or_eof(&mut self, usize) -> core::io::error::Result<&[u8]>
 pub fn better_io::BetterBufRead::resize_capacity(&mut self, usize)
 impl better_io::BetterBufRead for &[u8]
 pub fn &[u8]::capacity(&self) -> core::option::Option<usize>
 pub fn &[u8]::consume(&mut self, usize)
-pub fn &[u8]::fill_or_eof(&mut self, usize) -> std::io::error::Result<&[u8]>
+pub fn &[u8]::fill_or_eof(&mut self, usize) -> core::io::error::Result<&[u8]>
 pub fn &[u8]::resize_capacity(&mut self, usize)
-impl<R: std::io::Read> better_io::BetterBufRead for better_io::BetterBufReader<R>
+impl<R: alloc::io::read::Read> better_io::BetterBufRead for better_io::BetterBufReader<R>
 pub fn better_io::BetterBufReader<R>::capacity(&self) -> core::option::Option<usize>
 pub fn better_io::BetterBufReader<R>::consume(&mut self, usize)
-pub fn better_io::BetterBufReader<R>::fill_or_eof(&mut self, usize) -> std::io::error::Result<&[u8]>
+pub fn better_io::BetterBufReader<R>::fill_or_eof(&mut self, usize) -> core::io::error::Result<&[u8]>
 pub fn better_io::BetterBufReader<R>::resize_capacity(&mut self, usize)
