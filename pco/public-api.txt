@@ -325,6 +325,7 @@ pub fn pco::standalone::ChunkDecompressor<T, R>::into_src(self) -> R
 pub fn pco::standalone::ChunkDecompressor<T, R>::meta(&self) -> &pco::metadata::ChunkMeta
 pub fn pco::standalone::ChunkDecompressor<T, R>::n(&self) -> usize
 pub fn pco::standalone::ChunkDecompressor<T, R>::read(&mut self, &mut [T]) -> pco::errors::PcoResult<pco::Progress>
+pub fn pco::standalone::ChunkDecompressor<T, R>::read_uninit(&mut self, &mut [core::mem::maybe_uninit::MaybeUninit<T>]) -> pco::errors::PcoResult<pco::Progress>
 pub struct pco::standalone::FileCompressor
 impl pco::standalone::FileCompressor
 pub fn pco::standalone::FileCompressor::chunk_compressor<T: pco::data_types::Number>(&self, &[T], &pco::ChunkConfig) -> pco::errors::PcoResult<pco::standalone::ChunkCompressor>
@@ -404,6 +405,7 @@ pub struct pco::wrapped::PageDecompressor<'a, T: pco::data_types::Number, R: bet
 impl<'a, T: pco::data_types::Number, R: better_io::buf_read::BetterBufRead> pco::wrapped::PageDecompressor<'a, T, R>
 pub fn pco::wrapped::PageDecompressor<'a, T, R>::into_src(self) -> R
 pub fn pco::wrapped::PageDecompressor<'a, T, R>::read(&mut self, &mut [T]) -> pco::errors::PcoResult<pco::Progress>
+pub fn pco::wrapped::PageDecompressor<'a, T, R>::read_uninit(&mut self, &mut [core::mem::maybe_uninit::MaybeUninit<T>]) -> pco::errors::PcoResult<pco::Progress>
 pub macro pco::define_number_enum!
 pub macro pco::match_latent_enum!
 pub macro pco::match_number_enum!

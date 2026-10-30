@@ -123,6 +123,7 @@ mod micro {
   use crate::data_types::{Latent, Number};
   use crate::dyn_slices::DynLatentSlice;
   use crate::metadata::DynLatents;
+  use std::mem::MaybeUninit;
 
   const DICT_N: usize = 64;
 
@@ -137,7 +138,7 @@ mod micro {
     let idxs = (0..BENCH_N)
       .map(|_| (rng.next_u64() % DICT_N as u64) as u32)
       .collect::<Vec<_>>();
-    let mut dst = vec![T::ZERO; idxs.len()];
+    let mut dst = vec![MaybeUninit::uninit(); idxs.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

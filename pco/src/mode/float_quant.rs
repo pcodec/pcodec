@@ -305,6 +305,7 @@ mod micro {
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
+  use std::mem::MaybeUninit;
 
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
@@ -312,7 +313,7 @@ mod micro {
     let k = F::PRECISION_BITS / 2;
     let ys = uniform_latents::<F::L>(F::L::BITS - k);
     let ms = uniform_latents::<F::L>(k);
-    let mut dst = vec![F::ZERO; ys.len()];
+    let mut dst = vec![MaybeUninit::uninit(); ys.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

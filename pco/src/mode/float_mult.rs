@@ -733,6 +733,7 @@ mod micro {
   use half::f16;
   use rand_xoshiro::rand_core::{RngCore, SeedableRng};
   use rand_xoshiro::Xoroshiro128PlusPlus;
+  use std::mem::MaybeUninit;
 
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
@@ -753,7 +754,7 @@ mod micro {
       .into_iter()
       .map(|ulps| F::L::MID.wrapping_add(ulps))
       .collect::<Vec<_>>();
-    let mut dst = vec![F::ZERO; mults.len()];
+    let mut dst = vec![MaybeUninit::uninit(); mults.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

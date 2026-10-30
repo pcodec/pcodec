@@ -108,8 +108,11 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult
   }
 }
 
-// not exposing this in API for now because users who want anything this fancy
-// should probably be using a lower-level API
+/// Like `simple_decompress_into`, but writes into a possibly uninitialized
+/// destination.
+///
+/// Every element Pco reports as processed in the returned `Progress` has
+/// been initialized.
 fn simple_decompress_into_uninit<T: Number>(
   src: &[u8],
   mut dst: &mut [MaybeUninit<T>],

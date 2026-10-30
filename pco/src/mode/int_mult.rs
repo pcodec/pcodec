@@ -343,6 +343,7 @@ mod micro {
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
   use crate::data_types::Latent;
+  use std::mem::MaybeUninit;
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
@@ -350,7 +351,7 @@ mod micro {
     let base = T::from_u64(3);
     let mults = uniform_latents::<T>(6);
     let adjs = uniform_latents::<T>(5);
-    let mut dst = vec![T::ZERO; mults.len()];
+    let mut dst = vec![MaybeUninit::<T>::uninit(); mults.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
