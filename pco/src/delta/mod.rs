@@ -11,6 +11,7 @@ use crate::macros::match_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{DeltaEncoding, DeltaLookbackConfig};
+use crate::scratch::DynLatentDecompressorScratch;
 use std::ops::Range;
 
 // What the encoder is willing to emit; the reader accepts a looser bound (see
@@ -124,7 +125,7 @@ pub fn encode_in_place<L: Latent>(
 
 pub fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
-  delta_latents: DynLatentSlice,
+  delta_latents: Option<&DynLatentDecompressorScratch>,
   state_pos: &mut usize,
   state: &mut [L],
   latents: &mut [L],
@@ -138,7 +139,11 @@ pub fn decode_in_place<L: Latent>(
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
-        delta_latents.downcast::<DeltaLookback>().unwrap(),
+        &*delta_latents
+          .unwrap()
+          .downcast_ref::<DeltaLookback>()
+          .unwrap()
+          .latents,
         state_pos,
         state,
         latents,

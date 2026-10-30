@@ -9,7 +9,7 @@ use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
-use crate::scratch::LatentDecompressorScratch;
+use crate::scratch::{DynLatentDecompressorScratch, LatentDecompressorScratch};
 use crate::{bit_reader, delta};
 
 #[inline(never)]
@@ -91,7 +91,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     &mut self,
     reader: &mut BitReader,
     cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentDecompressorScratch,
+    scratch: &mut LatentDecompressorScratch<L>,
   ) {
     // At each iteration, this loads a single u64 and has all ANS decoders
     // read a single symbol from it.
@@ -101,7 +101,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let src = reader.src;
     let scratch_offset_bits_csum = &mut scratch.offset_bits_csum;
     let scratch_offset_bits = &mut scratch.offset_bits;
-    let scratch_latents = &mut scratch.latents.downcast_mut::<L>();
+    let scratch_latents = &mut scratch.latents;
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
@@ -151,12 +151,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     reader: &mut BitReader,
     batch_n: usize,
     cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentDecompressorScratch,
+    scratch: &mut LatentDecompressorScratch<L>,
   ) {
     let src = reader.src;
     let scratch_offset_bits_csum = &mut scratch.offset_bits_csum;
     let scratch_offset_bits = &mut scratch.offset_bits;
-    let scratch_latents = &mut scratch.latents.downcast_mut::<L>();
+    let scratch_latents = &mut scratch.latents;
     let mut stale_byte_idx = reader.stale_byte_idx;
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
@@ -192,7 +192,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     reader: &mut BitReader,
     batch_n: usize,
     cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentDecompressorScratch,
+    scratch: &mut LatentDecompressorScratch<L>,
   ) {
     if batch_n == 0 {
       return;
@@ -206,7 +206,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.read_ans_symbols(reader, batch_n, cld, scratch);
       }
     } else {
-      scratch.latents.downcast_mut::<L>()[..batch_n].fill(cld.state_lowers[0]);
+      scratch.latents[..batch_n].fill(cld.state_lowers[0]);
     }
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -223,7 +223,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
           reader,
           &scratch.offset_bits_csum.0,
           &scratch.offset_bits.0,
-          &mut scratch.latents.downcast_mut::<L>().0,
+          &mut scratch.latents.0,
           batch_n,
         )
       };
@@ -247,20 +247,20 @@ impl<L: Latent> PageLatentDecompressor<L> {
   pub unsafe fn read_batch(
     &mut self,
     reader: &mut BitReader,
-    delta_latents: DynLatentSlice,
+    delta_scratch: Option<&DynLatentDecompressorScratch>,
     n_remaining_in_page: usize,
     cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentDecompressorScratch,
+    scratch: &mut LatentDecompressorScratch<L>,
   ) -> PcoResult<()> {
     let n_remaining_pre_delta =
       n_remaining_in_page.saturating_sub(cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
     self.read_batch_pre_delta(reader, pre_delta_len, cld, scratch);
-    let dst = &mut scratch.latents.downcast_mut::<L>()[..n_remaining_in_page.min(FULL_BATCH_N)];
+    let dst = &mut scratch.latents[..n_remaining_in_page.min(FULL_BATCH_N)];
 
     delta::decode_in_place(
       &cld.delta_encoding,
-      delta_latents,
+      delta_scratch,
       &mut self.delta_state_pos,
       &mut self.delta_state,
       dst,

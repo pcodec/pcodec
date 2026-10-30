@@ -16,7 +16,9 @@ use crate::metadata::page::PageMeta;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::page_latent_decompressor::{DynPageLatentDecompressor, PageLatentDecompressor};
 use crate::progress::Progress;
-use crate::scratch::{DecompressorScratch, LatentDecompressorScratch};
+use crate::scratch::{
+  DecompressorScratch, DynLatentDecompressorScratch, LatentDecompressorScratch,
+};
 use crate::wrapped::chunk_decompressor::ChunkDecompressorInner;
 
 pub(crate) struct PageDecompressorState<R: BetterBufRead> {
@@ -92,25 +94,26 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
 fn read_primary_or_secondary<'a, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
-  delta_latents: &mut LatentDecompressorScratch,
+  delta_scratch: Option<&DynLatentDecompressorScratch>,
   n_remaining: usize,
   dyn_cld: &'a DynChunkLatentDecompressor,
   dyn_pld: &'a mut DynPageLatentDecompressor,
-  scratch: &'a mut LatentDecompressorScratch,
+  scratch: &'a mut DynLatentDecompressorScratch,
 ) -> PcoResult<DynLatentSlice<'a>> {
   reader_builder.with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
     match_latent_enum!(
       dyn_pld,
       DynPageLatentDecompressor<L>(pld) => {
         let cld = dyn_cld.downcast_ref::<L>().unwrap();
+        let scratch = scratch.downcast_mut::<L>().unwrap();
         pld.read_batch(
           reader,
-          delta_latents.latents::<L>(),
+          delta_scratch,
           n_remaining,
           cld,
           scratch,
         )?;
-        Ok(scratch.latents::<L>())
+        Ok(DynLatentSlice::new(scratch.latents.as_slice()))
       }
     )
   })
@@ -147,7 +150,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
                 reader,
                 limit,
                 cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
-                &mut scratch.per_latent_var.delta,
+                scratch.per_latent_var.delta.as_mut().unwrap().downcast_mut().unwrap(),
               )
             }
           );
@@ -158,7 +161,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     // PRIMARY AND SECONDARY LATENTS
     let primary = read_primary_or_secondary(
       &mut self.reader_builder,
-      &mut scratch.per_latent_var.delta,
+      scratch.per_latent_var.delta.as_ref(),
       n_remaining,
       &cd.per_latent_var.primary,
       &mut self.latent_decompressors.primary,
@@ -168,11 +171,11 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     let secondary = match self.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(read_primary_or_secondary(
         &mut self.reader_builder,
-        &mut scratch.per_latent_var.delta,
+        scratch.per_latent_var.delta.as_ref(),
         n_remaining,
         cd.per_latent_var.secondary.as_ref().unwrap(),
         dyn_pld,
-        &mut scratch.per_latent_var.secondary,
+        scratch.per_latent_var.secondary.as_mut().unwrap(),
       )?),
       None => None,
     };

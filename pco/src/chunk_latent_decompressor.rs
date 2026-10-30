@@ -5,7 +5,7 @@ use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
-use crate::scratch::{LatentDecompressorScratch, ScratchArray, UniversalScratchArray};
+use crate::scratch::{DynLatentDecompressorScratch, LatentDecompressorScratch, ScratchArray};
 use crate::{read_write_uint, FULL_BATCH_N};
 
 #[derive(Clone, Debug)]
@@ -46,16 +46,16 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
     })
   }
 
-  pub fn new_scratch(&self) -> LatentDecompressorScratch {
+  pub fn new_scratch(&self) -> LatentDecompressorScratch<L> {
     let mut res = LatentDecompressorScratch {
       offset_bits_csum: ScratchArray([0; FULL_BATCH_N]),
       offset_bits: ScratchArray([0; FULL_BATCH_N]),
-      latents: UniversalScratchArray::new(ScratchArray([L::ZERO; FULL_BATCH_N])),
+      latents: ScratchArray([L::ZERO; FULL_BATCH_N]),
     };
 
     let offset_bits_csum = &mut res.offset_bits_csum;
     let offset_bits = &mut res.offset_bits;
-    let latents = res.latents.downcast_mut::<L>();
+    let latents = &mut res.latents;
     if let Some(bin) = &self.only_bin {
       // we optimize performance by setting state once and never again
       let mut csum = 0;
@@ -95,11 +95,11 @@ impl DynChunkLatentDecompressor {
     Ok(res)
   }
 
-  pub fn new_scratch(&self) -> LatentDecompressorScratch {
+  pub fn new_scratch(&self) -> DynLatentDecompressorScratch {
     match_latent_enum!(
       self,
       DynChunkLatentDecompressor<L>(cld) => {
-        cld.new_scratch()
+        DynLatentDecompressorScratch::new(cld.new_scratch())
       }
     )
   }

@@ -5,7 +5,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
-use crate::scratch::{DecompressorScratch, DecompressorScratchInner, LatentDecompressorScratch};
+use crate::scratch::{DecompressorScratch, LatentDecompressorScratch};
 use crate::wrapped::PageDecompressor;
 
 #[derive(Clone, Debug)]
@@ -36,25 +36,25 @@ impl ChunkDecompressorInner {
   }
 
   pub fn new_scratch(&self) -> DecompressorScratch {
-    // let per_latent_var = self
-    //   .per_latent_var
-    //   .as_ref()
-    //   .map(|_key, dyn_cld| dyn_cld.new_scratch());
-    let per_latent_var = Box::new(DecompressorScratchInner {
-      delta: self
+    let per_latent_var = Box::new(
+      self
         .per_latent_var
-        .delta
         .as_ref()
-        .map(|lv| lv.new_scratch())
-        .unwrap_or(LatentDecompressorScratch::default()),
-      primary: self.per_latent_var.primary.new_scratch(),
-      secondary: self
-        .per_latent_var
-        .secondary
-        .as_ref()
-        .map(|lv| lv.new_scratch())
-        .unwrap_or(LatentDecompressorScratch::default()),
-    });
+        .map(|_key, dyn_cld| dyn_cld.new_scratch()),
+    );
+    // let per_latent_var = Box::new(DecompressorScratchInner {
+    //   delta: self
+    //     .per_latent_var
+    //     .delta
+    //     .as_ref()
+    //     .map(|lv| lv.new_scratch()),
+    //   primary: self.per_latent_var.primary.new_scratch(),
+    //   secondary: self
+    //     .per_latent_var
+    //     .secondary
+    //     .as_ref()
+    //     .map(|lv| lv.new_scratch()),
+    // });
 
     DecompressorScratch { per_latent_var }
   }

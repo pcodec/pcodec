@@ -29,59 +29,48 @@ impl<L: Latent> DerefMut for ScratchArray<L> {
   }
 }
 
-define_latent_enum!(
-  #[derive()]
-  pub union UniversalScratchArray(ScratchArray)
-);
+// define_latent_enum!(
+//   #[derive()]
+//   pub union UniversalScratchArray(ScratchArray)
+// );
 
-impl Debug for UniversalScratchArray {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "<UniversalScratchArray>")
-  }
-}
+// impl Debug for UniversalScratchArray {
+//   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//     write!(f, "<UniversalScratchArray>")
+//   }
+// }
 
-impl Clone for UniversalScratchArray {
-  fn clone(&self) -> Self {
-    // Safety: U64 is the largest variant, so contains all others.
-    unsafe {
-      Self {
-        U64: self.U64.clone(),
-      }
-    }
-  }
-}
+// impl Clone for UniversalScratchArray {
+//   fn clone(&self) -> Self {
+//     // Safety: U64 is the largest variant, so contains all others.
+//     unsafe {
+//       Self {
+//         U64: self.U64.clone(),
+//       }
+//     }
+//   }
+// }
 
 #[derive(Clone, Debug)]
-pub struct LatentDecompressorScratch {
+pub struct LatentDecompressorScratch<L: Latent> {
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
-  pub latents: UniversalScratchArray,
+  pub latents: ScratchArray<L>,
 }
 
-impl Default for LatentDecompressorScratch {
-  fn default() -> Self {
-    Self {
-      offset_bits_csum: ScratchArray([0; 256]),
-      offset_bits: ScratchArray([0; 256]),
-      latents: UniversalScratchArray::new(ScratchArray([0_u8; 256])),
-    }
-  }
-}
+define_latent_enum!(
+  #[derive(Clone, Debug)]
+  pub DynLatentDecompressorScratch(LatentDecompressorScratch)
+);
 
-impl LatentDecompressorScratch {
-  pub fn latents<'a, L: Latent>(&'a mut self) -> DynLatentSlice<'a> {
-    DynLatentSlice::new(self.latents.downcast_mut::<L>().as_mut_slice())
-  }
-}
-
-#[derive(Clone, Debug)]
-pub struct DecompressorScratchInner {
-  pub delta: LatentDecompressorScratch,
-  pub primary: LatentDecompressorScratch,
-  pub secondary: LatentDecompressorScratch,
-}
+// #[derive(Clone, Debug)]
+// pub struct DecompressorScratchInner {
+//   pub delta: LatentDecompressorScratch,
+//   pub primary: LatentDecompressorScratch,
+//   pub secondary: LatentDecompressorScratch,
+// }
 
 #[derive(Clone, Debug)]
 pub struct DecompressorScratch {
-  pub(crate) per_latent_var: Box<DecompressorScratchInner>,
+  pub(crate) per_latent_var: Box<PerLatentVar<DynLatentDecompressorScratch>>,
 }
