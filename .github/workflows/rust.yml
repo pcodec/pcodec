@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     # TODO: test each crate with minimum required rust and dependency versions?
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Override Rust Version
         run: rustup override set "$(cat .github/rust-test-version)"
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.8.1
+        uses: Swatinem/rust-cache@v2.9.3
       - name: Install cross
         uses: taiki-e/install-action@v2
         with:
@@ -34,7 +34,7 @@ jobs:
     name: "Quality"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Override Rust Version
         run: |
           rustup override set "$(cat .github/rust-test-version)"
@@ -42,6 +42,35 @@ jobs:
       - name: Ensure formatted
         run: cargo fmt --check
       - name: Rust Cache
-        uses: Swatinem/rust-cache@v2.8.1
+        uses: Swatinem/rust-cache@v2.9.3
       - name: Clippy
         run: cargo clippy --no-deps --all-features
+  public_api:
+    name: "Public API"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust Nightly
+        run: rustup override set nightly
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2.9.3
+      - name: Install cargo-public-api
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-public-api@0.52.0
+      - name: Ensure public API snapshots are up to date
+        run: |
+          .github/update_public_api.sh
+          if ! git diff --exit-code -- '*public-api.txt'; then
+            echo "::error::Public API changed. Run .github/update_public_api.sh and commit the result."
+            exit 1
+          fi
+  semver:
+    name: "Semver"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check semver against latest releases
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          package: pco, better_io, dtype_dispatch
