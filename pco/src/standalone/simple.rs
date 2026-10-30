@@ -103,8 +103,6 @@ pub fn simple_decompress_into<T: Number, D: WritableDst<T> + ?Sized>(
   src: &[u8],
   dst: &mut D,
 ) -> PcoResult<Progress> {
-  // We keep this wrapper thin so that each type of dst does not duplicate the
-  // whole decompression loop.
   simple_decompress_into_uninit(
     src,
     writable_dst::as_maybe_uninit_slice_mut(dst),
