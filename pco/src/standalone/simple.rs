@@ -113,7 +113,7 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult
 ///
 /// Every element Pco reports as processed in the returned `Progress` has
 /// been initialized.
-fn simple_decompress_into_uninit<T: Number>(
+pub fn simple_decompress_into_uninit<T: Number>(
   src: &[u8],
   mut dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<Progress> {
