@@ -1,4 +1,3 @@
-#![allow(clippy::uninit_vec)]
 #![deny(clippy::unused_unit)]
 #![deny(dead_code)]
 

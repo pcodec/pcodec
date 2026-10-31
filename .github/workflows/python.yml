@@ -19,7 +19,7 @@ jobs:
         with:
           # locking this to a version compatible with pyo3+maturin;
           # free threaded to assert lack of GIL behavior
-          python-version: "3.14t"
+          python-version: "3.15t"
       - name: Override Rust Version
         run: rustup override set "$(cat .github/rust-test-version)"
       # TODO: there has to be a cleaner way to do this and also add caching

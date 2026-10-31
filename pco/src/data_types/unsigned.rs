@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
 use crate::data_types::{Latent, LatentPriv, Number, NumberPriv};
@@ -50,7 +52,7 @@ pub fn join_latents<T: Number>(
   mode: &Mode,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [T],
+  dst: &mut [MaybeUninit<T>],
 ) -> PcoResult<()> {
   match mode {
     Mode::Classic => classic::join_latents(primary, dst),
@@ -163,7 +165,7 @@ macro_rules! impl_unsigned_number {
         mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
+        dst: &mut [MaybeUninit<Self>],
       ) -> PcoResult<()> {
         join_latents(mode, primary, secondary, dst)
       }

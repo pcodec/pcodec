@@ -1,3 +1,7 @@
+use std::fmt::{Debug, Display};
+use std::mem::MaybeUninit;
+use std::ops::*;
+
 use crate::compression_intermediates::Bid;
 use crate::constants::Bitlen;
 use crate::data_types::{unsigned, Number, NumberPriv};
@@ -7,8 +11,6 @@ use crate::errors::PcoResult;
 use crate::metadata::per_latent_var::PerLatentVar;
 use crate::metadata::{ChunkMeta, Mode};
 use crate::{describers, ChunkConfig};
-use std::fmt::{Debug, Display};
-use std::ops::*;
 
 pub trait Signed:
   AddAssign
@@ -54,7 +56,7 @@ macro_rules! impl_signed {
         mode: &Mode,
         primary: DynLatentSlice,
         secondary: Option<DynLatentSlice>,
-        dst: &mut [Self],
+        dst: &mut [MaybeUninit<Self>],
       ) -> PcoResult<()> {
         unsigned::join_latents(mode, primary, secondary, dst)
       }

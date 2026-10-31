@@ -209,7 +209,7 @@ pub struct ChunkConfig {
   /// Specifies how delta encoding should be chosen.
   ///
   /// See [`DeltaEncoding`](crate::metadata::DeltaEncoding) to understand what
-  /// delta encoding is, and see [`DeltaSpec`](crate::metadata::DeltaSpec) for
+  /// delta encoding is, and see [`DeltaSpec`](crate::DeltaSpec) for
   /// how to configure it.
   pub delta_spec: DeltaSpec,
   /// Specifies how the chunk should be split into pages (default: equal pages

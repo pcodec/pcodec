@@ -15,6 +15,11 @@ you're opposed to creating a Discord account, Github issues also work.
 * Before making a PR, make sure to
   * Test your code; `cargo test` and `cargo clippy`.
   * Format it; `cargo fmt`.
+  * If you changed the public API of `pco`, `better_io`, or `dtype_dispatch`,
+    run `.github/update_public_api.sh` and commit the updated
+    `public-api.txt` snapshots.
+    This requires a nightly toolchain (`rustup toolchain install nightly`) and
+    `cargo install cargo-public-api`.
   * [Run the benchmarks](benchmark_results.md).
     This verifies compression and decompression works for each synthetic
     dataset, which occasionally catches strange cases the tests miss.

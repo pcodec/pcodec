@@ -1,7 +1,7 @@
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
 use pyo3::{pyclass, pymethods};
 
-#[pyclass(name = "ModeSpec")]
+#[pyclass(name = "ModeSpec", from_py_object)]
 #[derive(Clone, Default)]
 pub struct PyModeSpec(ModeSpec);
 
@@ -45,7 +45,7 @@ impl PyModeSpec {
   }
 }
 
-#[pyclass(name = "DeltaSpec")]
+#[pyclass(name = "DeltaSpec", from_py_object)]
 #[derive(Clone, Default)]
 pub struct PyDeltaSpec(DeltaSpec);
 
@@ -83,7 +83,7 @@ impl PyDeltaSpec {
   }
 }
 
-#[pyclass(name = "PagingSpec")]
+#[pyclass(name = "PagingSpec", from_py_object)]
 #[derive(Clone, Default)]
 pub struct PyPagingSpec(PagingSpec);
 

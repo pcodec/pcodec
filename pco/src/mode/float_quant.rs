@@ -1,3 +1,6 @@
+use std::cmp;
+use std::mem::MaybeUninit;
+
 use crate::compression_intermediates::Bid;
 use crate::constants::{Bitlen, QUANT_REQUIRED_BITS_SAVED_PER_NUM};
 use crate::data_types::float::Float;
@@ -7,14 +10,13 @@ use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::metadata::{DynLatents, Mode};
 use crate::sampling::{self, PrimaryLatentAndSavings};
-use std::cmp;
 
 #[inline(never)]
 pub(crate) fn join_latents<F: Float>(
   k: Bitlen,
   primary: DynLatentSlice,
   secondary: Option<DynLatentSlice>,
-  dst: &mut [F],
+  dst: &mut [MaybeUninit<F>],
 ) -> PcoResult<()> {
   let primary = primary.downcast::<F::L>().unwrap();
   let secondary = secondary.unwrap().downcast::<F::L>().unwrap();
@@ -40,7 +42,7 @@ pub(crate) fn join_latents<F: Float>(
     } else {
       F::L::MID
     };
-    *dst = F::from_latent_bits((y << k) ^ m ^ flip);
+    dst.write(F::from_latent_bits((y << k) ^ m ^ flip));
   }
 
   Ok(())
@@ -158,6 +160,8 @@ pub(crate) fn estimate_best_k_and_bits_saved<F: Float>(sample: &[F]) -> (Bitlen,
 
 #[cfg(test)]
 mod test {
+  use std::mem;
+
   use super::*;
 
   #[test]
@@ -253,7 +257,7 @@ mod test {
     let SplitLatents { primary, secondary } = split_latents(&nums, k);
     let mut primary = primary.downcast::<u64>().unwrap();
     let mut secondary = secondary.unwrap().downcast::<u64>().unwrap();
-    let mut dst = vec![0.0; nums.len()];
+    let mut dst = [MaybeUninit::<f64>::uninit(); 4];
     join_latents::<f64>(
       k,
       DynLatentSlice::U64(&mut primary),
@@ -263,6 +267,7 @@ mod test {
     .unwrap();
 
     assert_eq!(dst.len(), nums.len());
+    let dst = unsafe { mem::transmute::<[MaybeUninit<f64>; 4], [f64; 4]>(dst) };
     for (a, b) in dst.iter().zip(&nums) {
       assert_eq!(a.to_bits(), b.to_bits());
     }
@@ -300,6 +305,7 @@ mod micro {
   use super::*;
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
+  use std::mem::MaybeUninit;
 
   #[divan::bench(types = [f16, f32, f64])]
   fn join_latents<F: Float>(bencher: Bencher) {
@@ -307,7 +313,7 @@ mod micro {
     let k = F::PRECISION_BITS / 2;
     let ys = uniform_latents::<F::L>(F::L::BITS - k);
     let ms = uniform_latents::<F::L>(k);
-    let mut dst = vec![F::ZERO; ys.len()];
+    let mut dst = vec![MaybeUninit::uninit(); ys.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {

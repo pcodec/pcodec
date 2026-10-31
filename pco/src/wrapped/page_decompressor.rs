@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::marker::PhantomData;
+use std::mem::{self, MaybeUninit};
 use std::ops::Range;
 
 use better_io::BetterBufRead;
@@ -9,7 +10,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::constants::{FULL_BATCH_N, MAX_BATCH_LATENT_VAR_SIZE, OVERSHOOT_PADDING};
 use crate::data_types::number_priv::NumberPriv;
 use crate::data_types::Number;
-use crate::dyn_slices::{DynLatentSlice, DynNumberSliceMut};
+use crate::dyn_slices::{DynLatentSlice, DynNumberDst};
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::{match_latent_enum, match_number_enum};
 use crate::metadata::page::PageMeta;
@@ -90,6 +91,47 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
   }
 }
 
+// We keep this out of line so that it does not bloat the batch loop, which
+// matters for datasets without delta latents.
+#[inline(never)]
+fn read_delta<R: BetterBufRead>(
+  reader_builder: &mut BitReaderBuilder<R>,
+  limit: usize,
+  cd: &ChunkDecompressorInner,
+  dyn_pld: &mut DynPageLatentDecompressor,
+  scratch: &mut DecompressorScratch,
+) -> PcoResult<()> {
+  reader_builder.with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
+    match_latent_enum!(
+      dyn_pld,
+      DynPageLatentDecompressor<L>(pld) => {
+        // Delta latents only line up with pre-delta length of the other
+        // latents.
+        // We never apply delta encoding to delta latents, so we just
+        // skip straight to the pre-delta routine.
+        pld.read_batch_pre_delta(
+          reader,
+          limit,
+          cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
+          &mut scratch.0.delta,
+        );
+      }
+    );
+    Ok(())
+  })
+}
+
+// This runs once per page, so we keep it out of the batch loop.
+#[inline(never)]
+fn drain_page_end<R: BetterBufRead>(reader_builder: &mut BitReaderBuilder<R>) -> PcoResult<()> {
+  reader_builder.with_reader(1, |reader| {
+    reader.drain_empty_byte("expected trailing bits at end of page to be empty")
+  })
+}
+
+// This runs once or twice per batch, so we inline it explicitly rather than
+// leaving it to codegen unit placement, which varies between builds.
+#[inline(always)]
 fn read_primary_or_secondary<'a, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
   delta_latents: &mut LatentDecompressorScratch,
@@ -122,7 +164,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     cd: &ChunkDecompressorInner,
     range: Range<usize>,
     scratch: &mut DecompressorScratch,
-    dst: &mut DynNumberSliceMut,
+    dst: &mut DynNumberDst,
   ) -> PcoResult<()> {
     let batch_n = range.len();
     let n_remaining = self.n_remaining;
@@ -133,26 +175,13 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
         n_remaining.saturating_sub(cd.n_latents_per_delta_state()),
         batch_n,
       );
-      self
-        .reader_builder
-        .with_reader(MAX_BATCH_LATENT_VAR_SIZE, |reader| unsafe {
-          match_latent_enum!(
-            dyn_pld,
-            DynPageLatentDecompressor<L>(pld) => {
-              // Delta latents only line up with pre-delta length of the other
-              // latents.
-              // We never apply delta encoding to delta latents, so we just
-              // skip straight to the pre-delta routine.
-              pld.read_batch_pre_delta(
-                reader,
-                limit,
-                cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
-                &mut scratch.0.delta,
-              )
-            }
-          );
-          Ok(())
-        })?;
+      read_delta(
+        &mut self.reader_builder,
+        limit,
+        cd,
+        dyn_pld,
+        scratch,
+      )?;
     }
 
     // PRIMARY AND SECONDARY LATENTS
@@ -179,7 +208,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
     match_number_enum!(
       dst,
-      DynNumberSliceMut<T>(dst) => {
+      DynNumberDst<T>(dst) => {
         T::join_latents(
           &cd.meta.mode,
           primary,
@@ -191,9 +220,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
 
     self.n_remaining -= batch_n;
     if self.n_remaining == 0 {
-      self.reader_builder.with_reader(1, |reader| {
-        reader.drain_empty_byte("expected trailing bits at end of page to be empty")
-      })?;
+      drain_page_end(&mut self.reader_builder)?;
     }
 
     Ok(())
@@ -203,7 +230,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     &mut self,
     cd: &ChunkDecompressorInner,
     scratch: &mut DecompressorScratch,
-    mut dst: DynNumberSliceMut,
+    mut dst: DynNumberDst,
   ) -> PcoResult<Progress> {
     let n_remaining = self.n_remaining;
     let dst_len = dst.len();
@@ -264,12 +291,25 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   ///
   /// `dst` must have length either a multiple of 256 or be at least the count
   /// of numbers remaining in the page.
+  #[inline]
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
-    self.state.read(
-      self.cd,
-      self.scratch,
-      DynNumberSliceMut::new(dst),
-    )
+    // safety: this only ever writes initialized values
+    unsafe {
+      self.read_uninit(mem::transmute::<
+        &mut [T],
+        &mut [MaybeUninit<T>],
+      >(dst))
+    }
+  }
+
+  /// Like `read`, but writes into a possibly uninitialized destination.
+  ///
+  /// Every element Pco reports as processed in the returned `Progress` has
+  /// been initialized.
+  pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
+    self
+      .state
+      .read(self.cd, self.scratch, DynNumberDst::new(dst))
   }
 
   /// Returns the rest of the compressed data source.

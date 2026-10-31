@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::data_types::{Number, SplitLatents};
 use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
@@ -11,14 +13,17 @@ pub(crate) fn split_latents<T: Number>(nums: &[T]) -> SplitLatents {
   }
 }
 
-pub(crate) fn join_latents<T: Number>(primary: DynLatentSlice, dst: &mut [T]) -> PcoResult<()> {
+pub(crate) fn join_latents<T: Number>(
+  primary: DynLatentSlice,
+  dst: &mut [MaybeUninit<T>],
+) -> PcoResult<()> {
   for (&l, num) in primary
     .downcast::<T::L>()
     .unwrap()
     .iter()
     .zip(dst.iter_mut())
   {
-    *num = T::from_latent_ordered(l);
+    num.write(T::from_latent_ordered(l));
   }
   Ok(())
 }
@@ -31,11 +36,12 @@ mod micro {
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
   use crate::data_types::Latent;
+  use std::mem::MaybeUninit;
 
   #[divan::bench(types = [u8, u16, u32, u64])]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
     let primary = uniform_latents::<T>(T::BITS);
-    let mut dst = vec![T::ZERO; primary.len()];
+    let mut dst = vec![MaybeUninit::<T>::uninit(); primary.len()];
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
