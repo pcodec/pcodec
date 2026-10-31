@@ -1,12 +1,11 @@
 use std::fmt::Debug;
-use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 use crate::constants::Bitlen;
 use crate::data_types::Latent;
 use crate::dyn_slices::DynLatentSlice;
 use crate::macros::define_latent_enum;
-use crate::metadata::PerLatentVar;
+use crate::metadata::Bin;
 use crate::FULL_BATCH_N;
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
@@ -63,7 +62,7 @@ impl Default for LatentDecompressorScratch {
     Self {
       offset_bits_csum: ScratchArray([0; 256]),
       offset_bits: ScratchArray([0; 256]),
-      latents: UniversalScratchArray::new(ScratchArray([0_u8; 256])),
+      latents: UniversalScratchArray::new(ScratchArray([0_u64; 256])),
     }
   }
 }
@@ -74,14 +73,20 @@ impl LatentDecompressorScratch {
   }
 }
 
-#[derive(Clone, Debug)]
+define_latent_enum!(
+  #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+  pub DynBin(Bin)
+);
+
+#[derive(Clone, Debug, Default)]
 pub struct DecompressorScratchInner {
+  pub delta_only_bin: Option<DynBin>,
+  pub primary_only_bin: Option<DynBin>,
+  pub secondary_only_bin: Option<DynBin>,
   pub delta: LatentDecompressorScratch,
   pub primary: LatentDecompressorScratch,
   pub secondary: LatentDecompressorScratch,
 }
 
-#[derive(Clone, Debug)]
-pub struct DecompressorScratch {
-  pub(crate) per_latent_var: Box<DecompressorScratchInner>,
-}
+#[derive(Clone, Debug, Default)]
+pub struct DecompressorScratch(pub(crate) Box<DecompressorScratchInner>);

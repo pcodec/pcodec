@@ -5,7 +5,7 @@ use crate::errors::PcoResult;
 use crate::macros::{define_latent_enum, match_latent_enum};
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::{bins, Bin, ChunkLatentVarMeta, DynBins};
-use crate::scratch::{LatentDecompressorScratch, ScratchArray, UniversalScratchArray};
+use crate::scratch::{DynBin, LatentDecompressorScratch};
 use crate::{read_write_uint, FULL_BATCH_N};
 
 #[derive(Clone, Debug)]
@@ -15,7 +15,7 @@ pub struct ChunkLatentDecompressor<L: Latent> {
   pub state_lowers: Vec<L>,
   pub n_bins: usize,
   pub decoder: ans::Decoder,
-  only_bin: Option<Bin<L>>,
+  only_bin: Option<DynBin>,
 }
 
 impl<L: Latent> ChunkLatentDecompressor<L> {
@@ -34,7 +34,11 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       .map(|&s| bins.get(s as usize).map_or(L::ZERO, |b| b.lower))
       .collect();
     let decoder = ans::Decoder::new(&ans_spec, &bin_offset_bits);
-    let only_bin = if bins.len() == 1 { Some(bins[0]) } else { None };
+    let only_bin = if bins.len() == 1 {
+      Some(DynBin::new(bins[0]))
+    } else {
+      None
+    };
 
     Ok(Self {
       bytes_per_offset,
@@ -46,28 +50,26 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
     })
   }
 
-  pub fn new_scratch(&self) -> LatentDecompressorScratch {
-    let mut res = LatentDecompressorScratch {
-      offset_bits_csum: ScratchArray([0; FULL_BATCH_N]),
-      offset_bits: ScratchArray([0; FULL_BATCH_N]),
-      latents: UniversalScratchArray::new(ScratchArray([L::ZERO; FULL_BATCH_N])),
-    };
-
-    let offset_bits_csum = &mut res.offset_bits_csum;
-    let offset_bits = &mut res.offset_bits;
-    let latents = res.latents.downcast_mut::<L>();
-    if let Some(bin) = &self.only_bin {
-      // we optimize performance by setting state once and never again
+  pub fn adapt_scratch(
+    &self,
+    only_bin: &mut Option<DynBin>,
+    scratch: &mut LatentDecompressorScratch,
+  ) {
+    if only_bin.is_some() && *only_bin != self.only_bin {
+      // we optimize performance by setting state once as long as this chunk is
+      // still in use
+      let bin = self.only_bin.unwrap().downcast::<L>().unwrap();
       let mut csum = 0;
+      let latents = scratch.latents.downcast_mut();
       for i in 0..FULL_BATCH_N {
-        offset_bits[i] = bin.offset_bits;
-        offset_bits_csum[i] = csum;
+        scratch.offset_bits[i] = bin.offset_bits;
+        scratch.offset_bits_csum[i] = csum;
         latents[i] = bin.lower;
         csum += bin.offset_bits;
       }
     }
 
-    res
+    *only_bin = self.only_bin;
   }
 }
 
@@ -95,11 +97,15 @@ impl DynChunkLatentDecompressor {
     Ok(res)
   }
 
-  pub fn new_scratch(&self) -> LatentDecompressorScratch {
+  pub fn adapt_scratch(
+    &self,
+    only_bin: &mut Option<DynBin>,
+    scratch: &mut LatentDecompressorScratch,
+  ) {
     match_latent_enum!(
       self,
       DynChunkLatentDecompressor<L>(cld) => {
-        cld.new_scratch()
+        cld.adapt_scratch(only_bin, scratch);
       }
     )
   }

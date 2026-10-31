@@ -5,7 +5,7 @@ use crate::chunk_latent_decompressor::DynChunkLatentDecompressor;
 use crate::data_types::Number;
 use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{ChunkMeta, LatentVarKey, PerLatentVar};
-use crate::scratch::{DecompressorScratch, DecompressorScratchInner, LatentDecompressorScratch};
+use crate::scratch::{DecompressorScratch, DecompressorScratchInner};
 use crate::wrapped::PageDecompressor;
 
 #[derive(Clone, Debug)]
@@ -35,28 +35,23 @@ impl ChunkDecompressorInner {
       .n_latents_per_state()
   }
 
-  pub fn new_scratch(&self) -> DecompressorScratch {
-    // let per_latent_var = self
-    //   .per_latent_var
-    //   .as_ref()
-    //   .map(|_key, dyn_cld| dyn_cld.new_scratch());
-    let per_latent_var = Box::new(DecompressorScratchInner {
-      delta: self
-        .per_latent_var
-        .delta
-        .as_ref()
-        .map(|lv| lv.new_scratch())
-        .unwrap_or(LatentDecompressorScratch::default()),
-      primary: self.per_latent_var.primary.new_scratch(),
-      secondary: self
-        .per_latent_var
-        .secondary
-        .as_ref()
-        .map(|lv| lv.new_scratch())
-        .unwrap_or(LatentDecompressorScratch::default()),
-    });
-
-    DecompressorScratch { per_latent_var }
+  pub(crate) fn adapt_scratch(&self, scratch: &mut DecompressorScratchInner) {
+    if let Some(cld) = self.per_latent_var.delta.as_ref() {
+      cld.adapt_scratch(
+        &mut scratch.delta_only_bin,
+        &mut scratch.delta,
+      );
+    }
+    self.per_latent_var.primary.adapt_scratch(
+      &mut scratch.primary_only_bin,
+      &mut scratch.primary,
+    );
+    if let Some(cld) = self.per_latent_var.secondary.as_ref() {
+      cld.adapt_scratch(
+        &mut scratch.secondary_only_bin,
+        &mut scratch.secondary,
+      );
+    }
   }
 }
 
@@ -80,7 +75,9 @@ impl<T: Number> ChunkDecompressor<T> {
     }
 
     let cd = ChunkDecompressorInner::new(meta)?;
-    let scratch = cd.new_scratch();
+    let mut scratch = DecompressorScratch::default();
+    cd.adapt_scratch(&mut scratch.0);
+
     Ok(Self {
       inner: cd,
       scratch,

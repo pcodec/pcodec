@@ -147,7 +147,7 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
                 reader,
                 limit,
                 cd.per_latent_var.delta.as_ref().unwrap().downcast_ref::<L>().unwrap(),
-                &mut scratch.per_latent_var.delta,
+                &mut scratch.0.delta,
               )
             }
           );
@@ -158,21 +158,21 @@ impl<R: BetterBufRead> PageDecompressorState<R> {
     // PRIMARY AND SECONDARY LATENTS
     let primary = read_primary_or_secondary(
       &mut self.reader_builder,
-      &mut scratch.per_latent_var.delta,
+      &mut scratch.0.delta,
       n_remaining,
       &cd.per_latent_var.primary,
       &mut self.latent_decompressors.primary,
-      &mut scratch.per_latent_var.primary,
+      &mut scratch.0.primary,
     )?;
 
     let secondary = match self.latent_decompressors.secondary.as_mut() {
       Some(dyn_pld) => Some(read_primary_or_secondary(
         &mut self.reader_builder,
-        &mut scratch.per_latent_var.delta,
+        &mut scratch.0.delta,
         n_remaining,
         cd.per_latent_var.secondary.as_ref().unwrap(),
         dyn_pld,
-        &mut scratch.per_latent_var.secondary,
+        &mut scratch.0.secondary,
       )?),
       None => None,
     };

@@ -283,6 +283,7 @@ mod micro {
   use crate::bench_utils::{BENCH_BATCHES, BENCH_N};
   use crate::constants::{Weight, OVERSHOOT_PADDING};
   use crate::metadata::Bin;
+  use crate::scratch::{DecompressorScratch, ScratchArray};
 
   const ANS_SIZE_LOG: Bitlen = 10;
   const ANS_BINS: usize = 64;
@@ -335,7 +336,7 @@ mod micro {
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| {
         let cld = ans_cld::<L>();
-        let scratch = cld.new_scratch();
+        let scratch = DecompressorScratch::default();
         (reader(&src), pld::<L>(), cld, scratch)
       })
       .bench_local_refs(|(reader, pld, cld, scratch)| unsafe {
@@ -361,7 +362,7 @@ mod micro {
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| {
-        let scratch = offset_cld::<L>(n_bits).new_scratch();
+        let scratch = LatentDecompressorScratch::default();
         (reader(&src), scratch)
       })
       .bench_local_refs(|(reader, scratch)| unsafe {
