@@ -380,7 +380,7 @@ mod micro {
             reader,
             &scratch.offset_bits_csum.0,
             &scratch.offset_bits.0,
-            scratch.latents.downcast_init_mut::<L>(),
+            scratch.latents.downcast_init_mut::<L>(FULL_BATCH_N),
             FULL_BATCH_N,
           );
         }
