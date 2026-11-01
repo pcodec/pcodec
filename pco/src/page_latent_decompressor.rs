@@ -188,6 +188,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
   // May contaminate dst.
+  // By contract, always fills FULL_BATCH_N of the appropriate type in scratch.latents.
   pub unsafe fn read_batch_pre_delta(
     &mut self,
     reader: &mut BitReader,
@@ -205,11 +206,15 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.read_full_ans_symbols(reader, cld, scratch);
       } else {
         self.read_ans_symbols(reader, batch_n, cld, scratch);
+        scratch.latents.downcast_mut::<L>()[batch_n..].fill(MaybeUninit::new(cld.state_lowers[0]));
       }
     } else {
       // We have already set offset bits to the only possible value in scratch
       // initialization, so we only need to fill the latents (lowers).
-      scratch.latents.downcast_mut::<L>()[..batch_n].fill(MaybeUninit::new(cld.state_lowers[0]));
+      scratch
+        .latents
+        .downcast_mut::<L>()
+        .fill(MaybeUninit::new(cld.state_lowers[0]));
     }
 
     // We want to read the offsets for each latent type as fast as possible.

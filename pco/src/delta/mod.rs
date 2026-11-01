@@ -122,7 +122,8 @@ pub fn encode_in_place<L: Latent>(
   }
 }
 
-pub fn decode_in_place<L: Latent>(
+// unsafe because it may require delta_latents to be fully initialized
+pub unsafe fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: &UniversalScratchArray,
   state_pos: &mut usize,
