@@ -50,12 +50,8 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
     })
   }
 
-  pub fn adapt_scratch(
-    &self,
-    only_bin: &mut Option<DynBin>,
-    scratch: &mut LatentDecompressorScratch,
-  ) {
-    if only_bin.is_some() && *only_bin != self.only_bin {
+  pub fn adapt_scratch(&self, scratch: &mut LatentDecompressorScratch) {
+    if self.only_bin.is_some() && scratch.only_bin != self.only_bin {
       // we optimize performance by setting state once as long as this chunk is
       // still in use
       let bin = self.only_bin.unwrap().downcast::<L>().unwrap();
@@ -64,12 +60,12 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
       for i in 0..FULL_BATCH_N {
         scratch.offset_bits[i] = bin.offset_bits;
         scratch.offset_bits_csum[i] = csum;
-        latents[i] = bin.lower;
+        latents[i].write(bin.lower);
         csum += bin.offset_bits;
       }
     }
 
-    *only_bin = self.only_bin;
+    scratch.only_bin = self.only_bin;
   }
 }
 
@@ -97,15 +93,11 @@ impl DynChunkLatentDecompressor {
     Ok(res)
   }
 
-  pub fn adapt_scratch(
-    &self,
-    only_bin: &mut Option<DynBin>,
-    scratch: &mut LatentDecompressorScratch,
-  ) {
+  pub fn adapt_scratch(&self, scratch: &mut LatentDecompressorScratch) {
     match_latent_enum!(
       self,
       DynChunkLatentDecompressor<L>(cld) => {
-        cld.adapt_scratch(only_bin, scratch);
+        cld.adapt_scratch(scratch);
       }
     )
   }

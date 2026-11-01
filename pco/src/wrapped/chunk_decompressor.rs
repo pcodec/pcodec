@@ -37,20 +37,14 @@ impl ChunkDecompressorInner {
 
   pub(crate) fn adapt_scratch(&self, scratch: &mut DecompressorScratchInner) {
     if let Some(cld) = self.per_latent_var.delta.as_ref() {
-      cld.adapt_scratch(
-        &mut scratch.delta_only_bin,
-        &mut scratch.delta,
-      );
+      cld.adapt_scratch(&mut scratch.delta);
     }
-    self.per_latent_var.primary.adapt_scratch(
-      &mut scratch.primary_only_bin,
-      &mut scratch.primary,
-    );
+    self
+      .per_latent_var
+      .primary
+      .adapt_scratch(&mut scratch.primary);
     if let Some(cld) = self.per_latent_var.secondary.as_ref() {
-      cld.adapt_scratch(
-        &mut scratch.secondary_only_bin,
-        &mut scratch.secondary,
-      );
+      cld.adapt_scratch(&mut scratch.secondary);
     }
   }
 }

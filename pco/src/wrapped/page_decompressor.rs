@@ -134,7 +134,7 @@ fn drain_page_end<R: BetterBufRead>(reader_builder: &mut BitReaderBuilder<R>) ->
 #[inline(always)]
 fn read_primary_or_secondary<'a, R: BetterBufRead>(
   reader_builder: &mut BitReaderBuilder<R>,
-  delta_latents: &mut LatentDecompressorScratch,
+  delta_scratch: &mut LatentDecompressorScratch,
   n_remaining: usize,
   dyn_cld: &'a DynChunkLatentDecompressor,
   dyn_pld: &'a mut DynPageLatentDecompressor,
@@ -147,12 +147,12 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
         let cld = dyn_cld.downcast_ref::<L>().unwrap();
         pld.read_batch(
           reader,
-          delta_latents.latents::<L>(),
+          &delta_scratch.latents,
           n_remaining,
           cld,
           scratch,
         )?;
-        Ok(scratch.latents::<L>())
+        Ok(DynLatentSlice::new(scratch.latents.downcast_init::<L>()))
       }
     )
   })

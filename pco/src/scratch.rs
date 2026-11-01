@@ -1,9 +1,9 @@
 use std::fmt::Debug;
+use std::mem::{self, MaybeUninit};
 use std::ops::{Deref, DerefMut};
 
 use crate::constants::Bitlen;
 use crate::data_types::Latent;
-use crate::dyn_slices::DynLatentSlice;
 use crate::macros::define_latent_enum;
 use crate::metadata::Bin;
 use crate::FULL_BATCH_N;
@@ -22,54 +22,45 @@ impl<L: Latent> Deref for ScratchArray<L> {
     &self.0
   }
 }
+
 impl<L: Latent> DerefMut for ScratchArray<L> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.0
   }
 }
 
-define_latent_enum!(
-  #[derive()]
-  pub union UniversalScratchArray(ScratchArray)
-);
-
-impl Debug for UniversalScratchArray {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "<UniversalScratchArray>")
-  }
-}
-
-impl Clone for UniversalScratchArray {
-  fn clone(&self) -> Self {
-    // Safety: U64 is the largest variant, so contains all others.
-    unsafe {
-      Self {
-        U64: self.U64.clone(),
-      }
-    }
-  }
-}
-
-#[derive(Clone, Debug)]
-pub struct LatentDecompressorScratch {
-  pub offset_bits_csum: ScratchArray<Bitlen>,
-  pub offset_bits: ScratchArray<Bitlen>,
-  pub latents: UniversalScratchArray,
-}
-
-impl Default for LatentDecompressorScratch {
+impl<L: Latent> Default for ScratchArray<L> {
   fn default() -> Self {
-    Self {
-      offset_bits_csum: ScratchArray([0; 256]),
-      offset_bits: ScratchArray([0; 256]),
-      latents: UniversalScratchArray::new(ScratchArray([0_u64; 256])),
-    }
+    Self([L::ZERO; FULL_BATCH_N])
   }
 }
 
-impl LatentDecompressorScratch {
-  pub fn latents<'a, L: Latent>(&'a mut self) -> DynLatentSlice<'a> {
-    DynLatentSlice::new(self.latents.downcast_mut::<L>().as_mut_slice())
+// We never use the type contained in universal scratch, but the important thing
+// is that it's large enough to be used as scratch by any latent type. We tried
+// implementing with a union, but since we never reference the individual fields
+// it was unnecessarily complicated.
+#[derive(Clone, Debug)]
+#[repr(align(64))]
+pub struct UniversalScratchArray([MaybeUninit<u64>; FULL_BATCH_N]);
+
+impl UniversalScratchArray {
+  pub fn downcast_mut<L: Latent>(&mut self) -> &mut [MaybeUninit<L>; FULL_BATCH_N] {
+    // Safety: we're returning maybeuninits
+    unsafe { mem::transmute(&mut self.0) }
+  }
+
+  pub unsafe fn downcast_init<L: Latent>(&self) -> &[L; FULL_BATCH_N] {
+    mem::transmute(&self.0)
+  }
+
+  pub unsafe fn downcast_init_mut<L: Latent>(&mut self) -> &mut [L; FULL_BATCH_N] {
+    mem::transmute(&mut self.0)
+  }
+}
+
+impl Default for UniversalScratchArray {
+  fn default() -> Self {
+    Self([MaybeUninit::uninit(); FULL_BATCH_N])
   }
 }
 
@@ -79,10 +70,15 @@ define_latent_enum!(
 );
 
 #[derive(Clone, Debug, Default)]
+pub struct LatentDecompressorScratch {
+  pub only_bin: Option<DynBin>,
+  pub offset_bits_csum: ScratchArray<Bitlen>,
+  pub offset_bits: ScratchArray<Bitlen>,
+  pub latents: UniversalScratchArray,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct DecompressorScratchInner {
-  pub delta_only_bin: Option<DynBin>,
-  pub primary_only_bin: Option<DynBin>,
-  pub secondary_only_bin: Option<DynBin>,
   pub delta: LatentDecompressorScratch,
   pub primary: LatentDecompressorScratch,
   pub secondary: LatentDecompressorScratch,

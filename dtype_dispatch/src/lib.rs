@@ -90,16 +90,12 @@ macro_rules! build_dtype_macros {
             unreachable!();
           }
 
-          pub fn downcast_ref<T: $constraint>(&self) -> &$container<T> {
-            unsafe {
-              std::mem::transmute::<_, &$container<T>>(self)
-            }
+          pub unsafe fn downcast_ref<T: $constraint>(&self) -> &$container<T> {
+            std::mem::transmute::<_, &$container<T>>(self)
           }
 
-          pub fn downcast_mut<T: $constraint>(&mut self) -> &mut $container<T> {
-            unsafe {
-              std::mem::transmute::<_, &mut $container<T>>(self)
-            }
+          pub unsafe fn downcast_mut<T: $constraint>(&mut self) -> &mut $container<T> {
+            std::mem::transmute::<_, &mut $container<T>>(self)
           }
         }
       };
