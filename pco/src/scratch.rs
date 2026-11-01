@@ -85,5 +85,9 @@ pub struct DecompressorScratchInner {
 }
 
 /// A spare memory region used by Pco during decompression.
+///
+/// Power users who need multiple threads sharing chunks should use one scratch
+/// per active [`PageDecompressor`][crate::wrapped::PageDecompressor].
+/// This likely means one per thread.
 #[derive(Clone, Debug, Default)]
 pub struct DecompressorScratch(pub(crate) Box<DecompressorScratchInner>);
