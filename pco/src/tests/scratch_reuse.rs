@@ -73,6 +73,14 @@ fn test_scratch_reuse_for_different_data_types_and_bins() -> PcoResult<()> {
   let meta = round_trip(&fc, &fd, chunk, &mut scratch)?;
   assert_single_bin_offset_bits(&meta, None);
 
+  let chunk = (70_u32..86).collect::<Vec<_>>().repeat(50);
+  let meta = round_trip(&fc, &fd, chunk, &mut scratch)?;
+  assert_single_bin_offset_bits(&meta, Some(4));
+
+  let chunk = vec![0_u16, 999].repeat(400);
+  let meta = round_trip(&fc, &fd, chunk, &mut scratch)?;
+  assert_single_bin_offset_bits(&meta, None);
+
   let chunk = vec![101_u64, 102].repeat(400);
   let meta = round_trip(&fc, &fd, chunk, &mut scratch)?;
   assert_single_bin_offset_bits(&meta, Some(1));

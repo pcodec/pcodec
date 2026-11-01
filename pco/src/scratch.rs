@@ -42,17 +42,20 @@ impl<L: Latent> Default for ScratchArray<L> {
 pub struct UniversalScratchArray([MaybeUninit<u64>; FULL_BATCH_N]);
 
 impl UniversalScratchArray {
+  #[inline]
   pub fn downcast_mut<L: Latent>(&mut self) -> &mut [MaybeUninit<L>; FULL_BATCH_N] {
     // Safety: we're returning maybeuninits
     unsafe { mem::transmute(&mut self.0) }
   }
 
-  pub unsafe fn downcast_init<L: Latent>(&self) -> &[L; FULL_BATCH_N] {
-    mem::transmute(&self.0)
+  #[inline]
+  pub unsafe fn downcast_init<L: Latent>(&self, limit: usize) -> &[L] {
+    mem::transmute(&self.0[..limit])
   }
 
-  pub unsafe fn downcast_init_mut<L: Latent>(&mut self) -> &mut [L; FULL_BATCH_N] {
-    mem::transmute(&mut self.0)
+  #[inline]
+  pub unsafe fn downcast_init_mut<L: Latent>(&mut self, limit: usize) -> &mut [L] {
+    mem::transmute(&mut self.0[..limit])
   }
 }
 

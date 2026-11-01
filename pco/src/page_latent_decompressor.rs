@@ -6,6 +6,7 @@ use crate::bit_reader::BitReader;
 use crate::chunk_latent_decompressor::ChunkLatentDecompressor;
 use crate::constants::{Bitlen, ANS_INTERLEAVING, FULL_BATCH_N};
 use crate::data_types::Latent;
+use crate::dyn_slices::DynLatentSlice;
 use crate::errors::PcoResult;
 use crate::macros::define_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
@@ -225,7 +226,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
           reader,
           &scratch.offset_bits_csum.0,
           &scratch.offset_bits.0,
-          scratch.latents.downcast_init_mut::<L>(),
+          scratch.latents.downcast_init_mut::<L>(batch_n),
           batch_n,
         )
       };
@@ -246,20 +247,20 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
   }
 
-  pub unsafe fn read_batch(
+  pub unsafe fn read_batch<'a>(
     &mut self,
     reader: &mut BitReader,
     delta_latents: &UniversalScratchArray,
     n_remaining_in_page: usize,
     cld: &ChunkLatentDecompressor<L>,
-    scratch: &mut LatentDecompressorScratch,
-  ) -> PcoResult<()> {
+    scratch: &'a mut LatentDecompressorScratch,
+  ) -> PcoResult<DynLatentSlice<'a>> {
     let n_remaining_pre_delta =
       n_remaining_in_page.saturating_sub(cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
     self.read_batch_pre_delta(reader, pre_delta_len, cld, scratch);
-    let dst =
-      &mut scratch.latents.downcast_init_mut::<L>()[..n_remaining_in_page.min(FULL_BATCH_N)];
+    let dst_len = n_remaining_in_page.min(FULL_BATCH_N);
+    let dst = &mut scratch.latents.downcast_init_mut::<L>(dst_len);
 
     delta::decode_in_place(
       &cld.delta_encoding,
@@ -267,7 +268,11 @@ impl<L: Latent> PageLatentDecompressor<L> {
       &mut self.delta_state_pos,
       &mut self.delta_state,
       dst,
-    )
+    )?;
+
+    Ok(DynLatentSlice::new(
+      scratch.latents.downcast_init::<L>(dst_len),
+    ))
   }
 }
 

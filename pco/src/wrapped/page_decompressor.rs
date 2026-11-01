@@ -151,8 +151,7 @@ fn read_primary_or_secondary<'a, R: BetterBufRead>(
           n_remaining,
           cld,
           scratch,
-        )?;
-        Ok(DynLatentSlice::new(scratch.latents.downcast_init::<L>()))
+        )
       }
     )
   })
