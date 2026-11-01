@@ -197,7 +197,14 @@ impl<L: Latent> PageLatentDecompressor<L> {
     scratch: &mut LatentDecompressorScratch,
   ) {
     assert!(batch_n <= FULL_BATCH_N);
-    if cld.n_bins > 1 {
+    if batch_n == 0 {
+      scratch
+        .latents
+        .downcast_mut::<L>()
+        .fill(MaybeUninit::new(L::ZERO));
+      // exit early because there are no offsets and read_offsets can't deal
+      return;
+    } else if cld.n_bins > 1 {
       if batch_n == FULL_BATCH_N {
         self.read_full_ans_symbols(reader, cld, scratch);
       } else {
@@ -207,11 +214,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
     } else {
       // We have already set offset bits to the only possible value in scratch
       // initialization, so we only need to fill the latents (lowers).
-      let default = cld.state_lowers.get(0).cloned().unwrap_or(L::ZERO);
       scratch
         .latents
         .downcast_mut::<L>()
-        .fill(MaybeUninit::new(default));
+        .fill(MaybeUninit::new(cld.state_lowers[0]));
     }
 
     // We want to read the offsets for each latent type as fast as possible.
@@ -228,7 +234,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
           reader,
           &scratch.offset_bits_csum.0,
           &scratch.offset_bits.0,
-          scratch.latents.downcast_init_mut::<L>(batch_n),
+          scratch.latents.downcast_init_mut::<L>(),
           batch_n,
         )
       };
@@ -249,6 +255,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
   }
 
+  // contractually fills scratch.latents with FULL_BATCH_N of the appropriate type
   pub unsafe fn read_batch<'a>(
     &mut self,
     reader: &mut BitReader,
@@ -262,7 +269,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
     self.read_batch_pre_delta(reader, pre_delta_len, cld, scratch);
     let dst_len = n_remaining_in_page.min(FULL_BATCH_N);
-    let dst = &mut scratch.latents.downcast_init_mut::<L>(dst_len);
+    let dst = &mut scratch.latents.downcast_init_mut::<L>()[..dst_len];
 
     delta::decode_in_place(
       &cld.delta_encoding,
@@ -273,7 +280,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     )?;
 
     Ok(DynLatentSlice::new(
-      scratch.latents.downcast_init::<L>(dst_len),
+      &scratch.latents.downcast_init::<L>()[..dst_len],
     ))
   }
 }
@@ -382,7 +389,7 @@ mod micro {
             reader,
             &scratch.offset_bits_csum.0,
             &scratch.offset_bits.0,
-            scratch.latents.downcast_init_mut::<L>(FULL_BATCH_N),
+            scratch.latents.downcast_init_mut::<L>(),
             FULL_BATCH_N,
           );
         }
