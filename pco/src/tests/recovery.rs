@@ -49,10 +49,10 @@ fn assert_nums_eq<T: Number>(decompressed: &[T], expected: &[T], name: &str) -> 
 fn assert_recovers<T: Number>(nums: &[T], compression_level: usize, name: &str) -> PcoResult<()> {
   let mut delta_specs = vec![
     DeltaSpec::NoOp,
-    // DeltaSpec::TryConsecutive(0),
-    // DeltaSpec::TryConsecutive(1),
-    // DeltaSpec::TryConsecutive(7),
-    // DeltaSpec::TryLookback,
+    DeltaSpec::TryConsecutive(0),
+    DeltaSpec::TryConsecutive(1),
+    DeltaSpec::TryConsecutive(7),
+    DeltaSpec::TryLookback,
   ];
   if T::L::BITS <= 32 {
     delta_specs.push(DeltaSpec::TryConv1(2));

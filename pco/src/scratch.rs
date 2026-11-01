@@ -71,7 +71,7 @@ define_latent_enum!(
 
 #[derive(Clone, Debug, Default)]
 pub struct LatentDecompressorScratch {
-  pub only_bin: Option<DynBin>,
+  pub only_bin: Option<DynBin>, // used to check if this scratch is primed for some perf optimizations
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
   pub latents: UniversalScratchArray,
@@ -84,5 +84,6 @@ pub struct DecompressorScratchInner {
   pub secondary: LatentDecompressorScratch,
 }
 
+/// A spare memory region used by Pco during decompression.
 #[derive(Clone, Debug, Default)]
 pub struct DecompressorScratch(pub(crate) Box<DecompressorScratchInner>);

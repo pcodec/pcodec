@@ -90,8 +90,11 @@ impl<T: Number> ChunkDecompressor<T> {
   /// Will return an error if corruptions or insufficient data are found.
   ///
   /// Even though this takes `&mut self`, the page decompressor only mutates the
-  /// chunk decompressor's scratch buffers and has no effect on the
+  /// chunk decompressor's internal scratch buffers and has no effect on the
   /// decompression of later pages.
+  /// Use
+  /// [`Self::page_decompressor_with_scratch`][Self::page_decompressor_with_scratch]
+  /// if you need to multiple references to this chunk decompressor.
   pub fn page_decompressor<R: BetterBufRead>(
     &mut self,
     src: R,
@@ -101,13 +104,16 @@ impl<T: Number> ChunkDecompressor<T> {
   }
 
   /// Reads metadata for a page and returns a `PageDecompressor` and the
-  /// remaining input.
+  /// remaining input, using external scratch space.
   ///
   /// Will return an error if corruptions or insufficient data are found.
   ///
-  /// Even though this takes `&mut self`, the page decompressor only mutates the
-  /// chunk decompressor's scratch buffers and has no effect on the
-  /// decompression of later pages.
+  /// The benefit of this over
+  /// [`Self::page_decompressor`][Self::page_decompressor] is that it requires
+  /// only an immutable reference to `self`, allowing the chunk decompressor to
+  /// be used by multiple threads in parallel.
+  /// Scratch can be created by
+  /// [`DecompressorScratch::default`][crate::DecompressorScratch::default].
   pub fn page_decompressor_with_scratch<'a, R: BetterBufRead>(
     &'a self,
     src: R,

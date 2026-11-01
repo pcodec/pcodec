@@ -119,10 +119,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
       macro_rules! handle_single_symbol {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
-          let node = unsafe { ans_nodes.get_unchecked($state_idx as usize) };
+          let node = ans_nodes.get_unchecked($state_idx as usize);
           let bits_to_read = node.bits_to_read as Bitlen;
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = unsafe { *lowers.get_unchecked($state_idx as usize) };
+          let lower = *lowers.get_unchecked($state_idx as usize);
           let offset_bits = node.offset_bits as Bitlen;
           *scratch_offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
           *scratch_offset_bits.get_unchecked_mut(i) = offset_bits;
@@ -167,10 +167,10 @@ impl<L: Latent> PageLatentDecompressor<L> {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = unsafe { cld.decoder.nodes.get_unchecked(state_idx) };
+      let node = cld.decoder.nodes.get_unchecked(state_idx);
       let bits_to_read = node.bits_to_read as Bitlen;
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-      let lower = unsafe { *cld.state_lowers.get_unchecked(state_idx) };
+      let lower = *cld.state_lowers.get_unchecked(state_idx);
       let offset_bits = node.offset_bits as Bitlen;
       *scratch_offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
       *scratch_offset_bits.get_unchecked_mut(i) = offset_bits;
@@ -206,6 +206,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
         self.read_ans_symbols(reader, batch_n, cld, scratch);
       }
     } else {
+      // We have already set offset bits to the only possible value in scratch
+      // initialization, so we only need to fill the latents (lowers).
       scratch.latents.downcast_mut::<L>()[..batch_n].fill(MaybeUninit::new(cld.state_lowers[0]));
     }
 
@@ -256,9 +258,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       n_remaining_in_page.saturating_sub(cld.delta_encoding.n_latents_per_state());
     let pre_delta_len = FULL_BATCH_N.min(n_remaining_pre_delta);
     self.read_batch_pre_delta(reader, pre_delta_len, cld, scratch);
-    let dst = unsafe {
-      &mut scratch.latents.downcast_init_mut::<L>()[..n_remaining_in_page.min(FULL_BATCH_N)]
-    };
+    let dst =
+      &mut scratch.latents.downcast_init_mut::<L>()[..n_remaining_in_page.min(FULL_BATCH_N)];
 
     delta::decode_in_place(
       &cld.delta_encoding,
@@ -363,7 +364,9 @@ mod micro {
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .with_inputs(|| {
-        let scratch = LatentDecompressorScratch::default();
+        let cld = offset_cld::<L>(n_bits);
+        let mut scratch = LatentDecompressorScratch::default();
+        cld.adapt_scratch(&mut scratch);
         (reader(&src), scratch)
       })
       .bench_local_refs(|(reader, scratch)| unsafe {

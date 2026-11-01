@@ -52,15 +52,13 @@ impl<L: Latent> ChunkLatentDecompressor<L> {
 
   pub fn adapt_scratch(&self, scratch: &mut LatentDecompressorScratch) {
     if self.only_bin.is_some() && scratch.only_bin != self.only_bin {
-      // we optimize performance by setting state once as long as this chunk is
-      // still in use
+      // With a single bin, we optimize performance by setting offset bits once
+      // so that we can skip ANS decoding in each batch.
       let bin = self.only_bin.unwrap().downcast::<L>().unwrap();
       let mut csum = 0;
-      let latents = scratch.latents.downcast_mut();
       for i in 0..FULL_BATCH_N {
         scratch.offset_bits[i] = bin.offset_bits;
         scratch.offset_bits_csum[i] = csum;
-        latents[i].write(bin.lower);
         csum += bin.offset_bits;
       }
     }
