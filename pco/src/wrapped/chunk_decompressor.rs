@@ -109,11 +109,12 @@ impl<T: Number> ChunkDecompressor<T> {
   /// chunk decompressor's scratch buffers and has no effect on the
   /// decompression of later pages.
   pub fn page_decompressor_with_scratch<'a, R: BetterBufRead>(
-    &'a mut self,
+    &'a self,
     src: R,
     n: usize,
     scratch: &'a mut DecompressorScratch,
   ) -> PcoResult<PageDecompressor<'a, T, R>> {
+    self.inner.adapt_scratch(&mut scratch.0);
     PageDecompressor::<T, R>::new(src, &self.inner, n, scratch)
   }
 }

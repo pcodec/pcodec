@@ -378,6 +378,7 @@ pub struct pco::wrapped::ChunkDecompressor<T: pco::data_types::Number>
 impl<T: pco::data_types::Number> pco::wrapped::ChunkDecompressor<T>
 pub fn pco::wrapped::ChunkDecompressor<T>::meta(&self) -> &pco::metadata::ChunkMeta
 pub fn pco::wrapped::ChunkDecompressor<T>::page_decompressor<R: better_io::buf_read::BetterBufRead>(&mut self, R, usize) -> pco::errors::PcoResult<pco::wrapped::PageDecompressor<'_, T, R>>
+pub fn pco::wrapped::ChunkDecompressor<T>::page_decompressor_with_scratch<'a, R: better_io::buf_read::BetterBufRead>(&'a self, R, usize, &'a mut pco::DecompressorScratch) -> pco::errors::PcoResult<pco::wrapped::PageDecompressor<'a, T, R>>
 impl<T: core::clone::Clone + pco::data_types::Number> core::clone::Clone for pco::wrapped::ChunkDecompressor<T>
 pub fn pco::wrapped::ChunkDecompressor<T>::clone(&self) -> Self
 impl<T: core::fmt::Debug + pco::data_types::Number> core::fmt::Debug for pco::wrapped::ChunkDecompressor<T>
@@ -463,6 +464,13 @@ impl core::default::Default for pco::ChunkConfig
 pub fn pco::ChunkConfig::default() -> Self
 impl core::fmt::Debug for pco::ChunkConfig
 pub fn pco::ChunkConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct pco::DecompressorScratch(_)
+impl core::clone::Clone for pco::DecompressorScratch
+pub fn pco::DecompressorScratch::clone(&self) -> Self
+impl core::default::Default for pco::DecompressorScratch
+pub fn pco::DecompressorScratch::default() -> Self
+impl core::fmt::Debug for pco::DecompressorScratch
+pub fn pco::DecompressorScratch::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct pco::Progress
 pub pco::Progress::finished: bool
 pub pco::Progress::n_processed: usize
