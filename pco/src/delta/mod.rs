@@ -2,6 +2,7 @@ mod consecutive;
 mod conv1;
 mod lookback;
 
+use crate::bits;
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
 use crate::errors::{PcoError, PcoResult};
@@ -10,7 +11,6 @@ use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{DeltaEncoding, DeltaLookbackConfig};
 use crate::scratch::UniversalScratchArray;
-use crate::bits;
 use std::ops::Range;
 
 // What the encoder is willing to emit; the reader accepts a looser bound (see

@@ -4,8 +4,6 @@ use std::ops::{Deref, DerefMut};
 
 use crate::constants::Bitlen;
 use crate::data_types::Latent;
-use crate::macros::define_latent_enum;
-use crate::metadata::Bin;
 use crate::FULL_BATCH_N;
 
 // Struct to enforce alignment of the scratch arrays to 64 bytes. This can
@@ -64,14 +62,9 @@ impl Default for UniversalScratchArray {
   }
 }
 
-define_latent_enum!(
-  #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-  pub DynBin(Bin)
-);
-
 #[derive(Clone, Debug, Default)]
 pub struct LatentDecompressorScratch {
-  pub only_bin: Option<DynBin>, // used to check if this scratch is primed for some perf optimizations
+  pub only_bin_offset_bits: Option<Bitlen>, // used to check if this scratch is primed for some perf optimizations
   pub offset_bits_csum: ScratchArray<Bitlen>,
   pub offset_bits: ScratchArray<Bitlen>,
   pub latents: UniversalScratchArray,
