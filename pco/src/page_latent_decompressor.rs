@@ -196,10 +196,6 @@ impl<L: Latent> PageLatentDecompressor<L> {
     cld: &ChunkLatentDecompressor<L>,
     scratch: &mut LatentDecompressorScratch,
   ) {
-    if batch_n == 0 {
-      return;
-    }
-
     assert!(batch_n <= FULL_BATCH_N);
     if cld.n_bins > 1 {
       if batch_n == FULL_BATCH_N {
@@ -211,10 +207,11 @@ impl<L: Latent> PageLatentDecompressor<L> {
     } else {
       // We have already set offset bits to the only possible value in scratch
       // initialization, so we only need to fill the latents (lowers).
+      let default = cld.state_lowers.get(0).cloned().unwrap_or(L::ZERO);
       scratch
         .latents
         .downcast_mut::<L>()
-        .fill(MaybeUninit::new(cld.state_lowers[0]));
+        .fill(MaybeUninit::new(default));
     }
 
     // We want to read the offsets for each latent type as fast as possible.
