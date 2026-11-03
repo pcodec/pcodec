@@ -923,7 +923,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "libc",
- "pco 1.0.4",
+ "pco 1.1.0",
 ]
 
 [[package]]
@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "pco"
-version = "1.0.4"
+version = "1.1.0"
 dependencies = [
  "better_io 0.2.0",
  "divan",
@@ -2315,7 +2315,7 @@ dependencies = [
  "indicatif",
  "once_cell",
  "parquet",
- "pco 1.0.4",
+ "pco 1.1.0",
  "q_compress",
  "rayon",
  "rust-openzl",
@@ -2337,16 +2337,16 @@ version = "0.1.0"
 dependencies = [
  "half",
  "jni",
- "pco 1.0.4",
+ "pco 1.1.0",
 ]
 
 [[package]]
 name = "pco_python"
-version = "1.0.4"
+version = "1.1.0"
 dependencies = [
  "half",
  "numpy",
- "pco 1.0.4",
+ "pco 1.1.0",
  "pyo3",
 ]
 
