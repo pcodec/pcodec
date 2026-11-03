@@ -3,23 +3,18 @@ use std::env;
 const DISMISS_WARNINGS_VAR: &str = "PCO_DISMISS_BUILD_WARNINGS";
 
 fn main() {
-  if cfg!(target_arch = "x86_64")
-    && env::var("PROFILE").unwrap_or("".to_string()) == "release"
-    && env::var(DISMISS_WARNINGS_VAR).unwrap_or("".to_string()) != "1"
+  let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+  let target_features = env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();
+  let target_features: Vec<&str> = target_features.split(',').collect();
+
+  if target_arch == "x86_64"
+    && env::var("PROFILE").unwrap_or_default() == "release"
+    && env::var(DISMISS_WARNINGS_VAR).unwrap_or_default() != "1"
   {
-    let mut missing_instructions = Vec::new();
-    if !cfg!(target_feature = "bmi1") {
-      missing_instructions.push("bmi1");
-    }
-    if !cfg!(target_feature = "bmi2") {
-      missing_instructions.push("bmi2");
-    }
-    if !cfg!(target_feature = "lzcnt") {
-      missing_instructions.push("lzcnt");
-    }
-    if !cfg!(target_feature = "avx2") {
-      missing_instructions.push("avx2");
-    }
+    let missing_instructions: Vec<&str> = ["bmi1", "bmi2", "lzcnt", "avx2"]
+      .into_iter()
+      .filter(|feature| !target_features.contains(feature))
+      .collect();
 
     if !missing_instructions.is_empty() {
       println!(
