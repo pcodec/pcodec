@@ -5,12 +5,12 @@ mod lookback;
 use crate::bits;
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
-use crate::dyn_slices::DynLatentSlice;
 use crate::errors::{PcoError, PcoResult};
 use crate::macros::match_latent_enum;
 use crate::metadata::delta_encoding::LatentVarDeltaEncoding;
 use crate::metadata::dyn_latents::DynLatents;
 use crate::metadata::{DeltaEncoding, DeltaLookbackConfig};
+use crate::scratch::UniversalScratchArray;
 use std::ops::Range;
 
 // What the encoder is willing to emit; the reader accepts a looser bound (see
@@ -122,9 +122,10 @@ pub fn encode_in_place<L: Latent>(
   }
 }
 
-pub fn decode_in_place<L: Latent>(
+// unsafe because it may require delta_latents to be fully initialized
+pub unsafe fn decode_in_place<L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
-  delta_latents: Option<DynLatentSlice>,
+  delta_latents: &UniversalScratchArray,
   state_pos: &mut usize,
   state: &mut [L],
   latents: &mut [L],
@@ -138,7 +139,7 @@ pub fn decode_in_place<L: Latent>(
     LatentVarDeltaEncoding::Lookback(config) => {
       let has_oob_lookbacks = lookback::decode_in_place(
         *config,
-        delta_latents.unwrap().downcast::<DeltaLookback>().unwrap(),
+        unsafe { delta_latents.downcast_init() },
         state_pos,
         state,
         latents,

@@ -70,7 +70,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # TODO remove this after next publish
       - name: Check semver against latest releases
         uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           package: pco, better_io, dtype_dispatch
+          baseline-rev: 80371dbcd8daf1d0351556dab1464b3801666798 # TODO remove this after next publish

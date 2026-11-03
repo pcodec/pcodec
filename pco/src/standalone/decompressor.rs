@@ -319,10 +319,10 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   /// Every element Pco reports as processed in the returned `Progress` has
   /// been initialized.
   pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
-    let progress = self.page_state.read(
-      &mut self.inner_cd.inner,
-      DynNumberDst::new(dst),
-    )?;
+    let (inner, scratch) = self.inner_cd.inner_and_scratch();
+    let progress = self
+      .page_state
+      .read(inner, scratch, DynNumberDst::new(dst))?;
 
     self.n_processed += progress.n_processed;
 
