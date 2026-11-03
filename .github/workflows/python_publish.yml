@@ -16,8 +16,7 @@ jobs:
     if: contains(github.event.release.name, 'Python')
     strategy:
       matrix:
-        # can add s390x and ppc64le back in if anyone ever wants to use them
-        target: [ x86_64, x86, aarch64, armv7 ]
+        target: [ x86_64, aarch64 ]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
