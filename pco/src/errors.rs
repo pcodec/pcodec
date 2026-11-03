@@ -56,7 +56,7 @@ impl Display for PcoError {
     write!(
       f,
       "pco {:?} error: {}",
-      self.kind, &self.message
+      self.kind, self.message
     )
   }
 }

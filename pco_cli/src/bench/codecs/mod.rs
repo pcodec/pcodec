@@ -164,7 +164,7 @@ impl<C: CodecInternal> CodecSurface for C {
       if thread_idx == 0 {
         let save_path = dir.join(format!(
           "{}{}.{}",
-          &dataset,
+          dataset,
           self.details(false),
           self.name(),
         ));

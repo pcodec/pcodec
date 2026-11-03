@@ -206,7 +206,7 @@ impl<'a> BitReader<'a> {
   }
 
   #[inline]
-  pub unsafe fn read_bool(&mut self) -> bool {
+  pub fn read_bool(&mut self) -> bool {
     self.refill();
     let res = self.src[self.stale_byte_idx] & (1 << self.bits_past_byte) != 0;
     self.consume(1);
@@ -373,7 +373,7 @@ mod tests {
     let src = (0..7).collect::<Vec<_>>();
     let capacity = 4 + OVERSHOOT_PADDING;
     let mut reader_builder = BitReaderBuilder::new(src.as_slice());
-    reader_builder.with_reader(1, |reader| unsafe {
+    reader_builder.with_reader(1, |reader| {
       assert!(!reader.read_bool());
       Ok(())
     })?;

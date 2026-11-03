@@ -21,7 +21,7 @@ unsafe fn read_varint(reader: &mut BitReader) -> PcoResult<u64> {
   Ok(res)
 }
 
-unsafe fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberType>> {
+fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberType>> {
   let byte = reader.read_aligned_bytes(1)?[0];
   if byte == MAGIC_TERMINATION_BYTE {
     return Ok(None);
