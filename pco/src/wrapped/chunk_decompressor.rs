@@ -54,7 +54,7 @@ impl ChunkDecompressorInner {
 pub struct ChunkDecompressor<T: Number> {
   pub(crate) inner: ChunkDecompressorInner,
   // TODO in 2.0 consider removing owned scratch from ChunkDecompressor
-  pub(crate) scratch: DecompressorScratch,
+  pub(crate) scratch: Option<DecompressorScratch>,
   phantom: PhantomData<T>,
 }
 
@@ -68,13 +68,9 @@ impl<T: Number> ChunkDecompressor<T> {
       )));
     }
 
-    let cd = ChunkDecompressorInner::new(meta)?;
-    let mut scratch = DecompressorScratch::default();
-    cd.adapt_scratch(&mut scratch.0);
-
     Ok(Self {
-      inner: cd,
-      scratch,
+      inner: ChunkDecompressorInner::new(meta)?,
+      scratch: None,
       phantom: PhantomData,
     })
   }
@@ -82,6 +78,20 @@ impl<T: Number> ChunkDecompressor<T> {
   /// Returns pre-computed information about the chunk.
   pub fn meta(&self) -> &ChunkMeta {
     &self.inner.meta
+  }
+
+  pub(crate) fn inner_and_scratch(
+    &mut self,
+  ) -> (
+    &ChunkDecompressorInner,
+    &mut DecompressorScratch,
+  ) {
+    let scratch = self.scratch.get_or_insert_with(|| {
+      let mut scratch = DecompressorScratch::default();
+      self.inner.adapt_scratch(&mut scratch.0);
+      scratch
+    });
+    (&self.inner, scratch)
   }
 
   /// Reads metadata for a page and returns a `PageDecompressor` and the
@@ -100,7 +110,8 @@ impl<T: Number> ChunkDecompressor<T> {
     src: R,
     n: usize,
   ) -> PcoResult<PageDecompressor<'_, T, R>> {
-    PageDecompressor::<T, R>::new(src, &self.inner, n, &mut self.scratch)
+    let (inner, scratch) = self.inner_and_scratch();
+    PageDecompressor::<T, R>::new(src, inner, n, scratch)
   }
 
   /// Reads metadata for a page and returns a `PageDecompressor` and the
