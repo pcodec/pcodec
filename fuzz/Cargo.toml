@@ -1,0 +1,54 @@
+[package]
+name = "pco-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+half = "2.0.0"
+pco = { path = "../pco" }
+cpcodec = { path = "../pco_c" }
+
+[[bin]]
+name = "decompress_arbitrary"
+path = "fuzz_targets/decompress_arbitrary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "roundtrip"
+path = "fuzz_targets/roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decompress_corrupt"
+path = "fuzz_targets/decompress_corrupt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "c_api_roundtrip"
+path = "fuzz_targets/c_api_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "c_api_decompress"
+path = "fuzz_targets/c_api_decompress.rs"
+test = false
+doc = false
+bench = false
+
+# keep out of the pcodec workspace so `cargo test` there is unaffected
+[workspace]
+members = ["."]
