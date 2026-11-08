@@ -276,7 +276,7 @@ fn new_candidate(
   let chunk_latent_compressors = chunk_latent_compressors.into();
   let bin_countss = bin_countss.into();
 
-  let meta = ChunkMeta::new(mode, delta_encoding, var_metas)?;
+  let meta = ChunkMeta::try_new(mode, delta_encoding, var_metas)?;
   let chunk_compressor = ChunkCompressor {
     meta,
     chunk_latent_compressors,

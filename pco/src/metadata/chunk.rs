@@ -30,14 +30,17 @@ pub struct ChunkMeta {
 }
 
 impl ChunkMeta {
-  /// Assembles chunk metadata from its parts.
-  ///
-  /// Will return a corruption error if the delta encoding is incompatible
-  /// with the latent variables' bins.
-  /// Will panic if `delta_encoding` is
-  /// [`Lookback`][DeltaEncoding::Lookback] but `per_latent_var` has no
-  /// delta latent variable.
+  #[doc(hidden)]
+  #[deprecated(note = "ChunkMeta is not meant to be constructed by users")]
   pub fn new(
+    mode: Mode,
+    delta_encoding: DeltaEncoding,
+    per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
+  ) -> PcoResult<Self> {
+    Self::try_new(mode, delta_encoding, per_latent_var)
+  }
+
+  pub(crate) fn try_new(
     mode: Mode,
     delta_encoding: DeltaEncoding,
     per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
@@ -176,7 +179,7 @@ impl ChunkMeta {
       reader.drain_empty_byte("nonzero bits in end of final byte of chunk metadata")
     })?;
 
-    let cd = Self::new(mode, delta_encoding, per_latent_var)?;
+    let cd = Self::try_new(mode, delta_encoding, per_latent_var)?;
     Ok((cd, reader_builder.into_inner()))
   }
 

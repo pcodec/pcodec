@@ -234,8 +234,6 @@ pub struct pco::metadata::ChunkMeta
 pub pco::metadata::ChunkMeta::delta_encoding: pco::metadata::DeltaEncoding
 pub pco::metadata::ChunkMeta::mode: pco::metadata::Mode
 pub pco::metadata::ChunkMeta::per_latent_var: pco::metadata::PerLatentVar<pco::metadata::ChunkLatentVarMeta>
-impl pco::metadata::ChunkMeta
-pub fn pco::metadata::ChunkMeta::new(pco::metadata::Mode, pco::metadata::DeltaEncoding, pco::metadata::PerLatentVar<pco::metadata::ChunkLatentVarMeta>) -> pco::errors::PcoResult<Self>
 impl core::clone::Clone for pco::metadata::ChunkMeta
 pub fn pco::metadata::ChunkMeta::clone(&self) -> Self
 impl core::fmt::Debug for pco::metadata::ChunkMeta

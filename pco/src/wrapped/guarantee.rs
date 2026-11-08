@@ -18,7 +18,7 @@ pub(crate) fn baseline_chunk_meta<L: Latent>() -> ChunkMeta {
     }]),
   };
 
-  ChunkMeta::new(
+  ChunkMeta::try_new(
     Mode::Classic,
     DeltaEncoding::NoOp,
     PerLatentVar {
