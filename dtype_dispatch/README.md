@@ -132,8 +132,7 @@ containers (e.g. sparse arrays).
 `dtype_dispatch` elegantly solves this with a single macro that generates two
 powerful macros for you to use.
 These building blocks can solve almost any dynamic<->generic data type dispatch
-problem:
-
+problem.
 
 ## Comparisons
 
@@ -175,7 +174,7 @@ dtype_dispatch::build_dtype_macros!(
   },
 );
 
-// Enum with neither data nor descriminants
+// Enum with neither data nor discriminants
 // Supports:
 // * new
 define_an_enum!(
@@ -183,7 +182,7 @@ define_an_enum!(
   pub MyDtype
 );
 
-// Enum with descriminants, coming from T::BITS for each type
+// Enum with discriminants, coming from T::BITS for each type
 // Supports:
 // * new
 // * from_descriminant
@@ -242,9 +241,10 @@ You can satisfy this by `use`ing your type or making a type alias of it,
 e.g. `type MyContainer<T: MyConstraint> = Vec<Foo<T>>`.
 
 It is also mandatory that you place exactly one attribute when defining each
-enum, e.g. with a `#[derive(Clone, Debug)]`.
+enum, e.g. with a `#[derive(Clone, Debug)]` (followed by the `#[repr(...)]`
+attribute for enums with discriminants).
 If you don't want any attributes, you can just do `#[derive()]`.
 
-As of v2.0, we assume the variant<=>trait impl mapping is bijective, so it
-highly recommended that users keep their constraint trait either private or
+As of v0.2.0, we assume the variant<=>trait impl mapping is bijective, so it
+is highly recommended that users keep their constraint trait either private or
 sealed, or else panics will be possible.

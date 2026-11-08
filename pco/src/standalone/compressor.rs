@@ -104,7 +104,7 @@ impl FileCompressor {
     self.inner.write_header(dst)
   }
 
-  /// Creates a `ChunkCompressor` that can be used to write entire chunks
+  /// Creates a [`ChunkCompressor`] that can be used to write entire chunks
   /// at a time.
   ///
   /// Will return an error if any arguments provided are invalid.

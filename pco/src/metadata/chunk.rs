@@ -24,12 +24,19 @@ pub struct ChunkMeta {
   pub delta_encoding: DeltaEncoding,
   /// Metadata about the interleaved streams needed by `pco` to
   /// compress/decompress the inputs
-  /// according to the formula used by `mode`.
+  /// according to the formula used by [`mode`][Self::mode].
   pub per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
   _private: (),
 }
 
 impl ChunkMeta {
+  /// Assembles chunk metadata from its parts.
+  ///
+  /// Will return a corruption error if the delta encoding is incompatible
+  /// with the latent variables' bins.
+  /// Will panic if `delta_encoding` is
+  /// [`Lookback`][DeltaEncoding::Lookback] but `per_latent_var` has no
+  /// delta latent variable.
   pub fn new(
     mode: Mode,
     delta_encoding: DeltaEncoding,

@@ -26,5 +26,8 @@ impl<L: LatentPriv> Latent for L {}
 
 /// Trait for types that Pco can compress and decompress.
 pub trait Number: NumberPriv {
+  /// Returns a [`LatentDescriber`] for each latent variable in the chunk,
+  /// which can be used to interpret the chunk's metadata in terms of this
+  /// number type.
   fn get_latent_describers(meta: &ChunkMeta) -> PerLatentVar<LatentDescriber>;
 }

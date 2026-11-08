@@ -22,7 +22,12 @@ use crate::errors::{PcoError, PcoResult};
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FormatVersion {
+  /// Incremented for changes that older decompressors cannot read.
   pub major: u8,
+  /// Incremented for changes that older decompressors with the same major
+  /// version may be able to read.
+  ///
+  /// See [`can_be_decompressed`][Self::can_be_decompressed].
   pub minor: u8,
 }
 

@@ -9,6 +9,7 @@ use crate::metadata::format_version::FormatVersion;
 use crate::metadata::per_latent_var::LatentVarKey;
 use std::io::Write;
 
+/// Parameters of [`DeltaEncoding::Lookback`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DeltaLookbackConfig {
@@ -29,9 +30,12 @@ impl DeltaLookbackConfig {
   }
 }
 
+/// Parameters of [`DeltaEncoding::Conv1`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DeltaConv1Config {
+  /// The number of bits the convolution's integer weights and bias are
+  /// scaled up by; each prediction is right-shifted by this much.
   pub quantization: Bitlen,
   // Avoiding exposing bias and weights because I think it's possible we'll
   // change their representation in the future; for now users will have to
@@ -94,13 +98,21 @@ pub enum DeltaEncoding {
   /// Encodes the differences between consecutive values (or differences
   /// between those, etc.).
   Consecutive {
+    /// How many times differences were taken, e.g. 2 for deltas-of-deltas.
     order: usize,
+    /// Whether the mode's [secondary latent
+    /// variable][crate::metadata::LatentVarKey::Secondary] was delta encoded
+    /// too.
     secondary_uses_delta: bool,
   },
   /// Encodes an extra "lookback" latent variable and the differences
   /// `x[i] - x[i - lookback[i]]` between values.
   Lookback {
+    /// The lookback window and state sizes.
     config: DeltaLookbackConfig,
+    /// Whether the mode's [secondary latent
+    /// variable][crate::metadata::LatentVarKey::Secondary] was delta encoded
+    /// too.
     secondary_uses_delta: bool,
   },
   /// Encodes the difference between each value and a convolution of the

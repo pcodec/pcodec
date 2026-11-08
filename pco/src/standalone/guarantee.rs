@@ -23,7 +23,7 @@ pub fn chunk_size<L: Latent>(n: usize) -> usize {
 }
 
 /// Returns the maximum possible byte size of a standalone file given a
-/// latent type (e.g. u32 or u64), count of numbers, and `PagingSpec`.
+/// latent type (e.g. u32 or u64), count of numbers, and [`PagingSpec`].
 ///
 /// Will return an invalid argument error if the paging spec is invalid.
 pub fn file_size<L: Latent>(n: usize, paging_spec: &PagingSpec) -> PcoResult<usize> {

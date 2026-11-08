@@ -50,7 +50,7 @@ const FIXED_READ_SIZE: usize = BITS_TO_ENCODE_MODE_VARIANT.div_ceil(8) as usize
 /// How Pco does the first step of processing for this chunk.
 ///
 /// Each mode splits the vector of numbers into one or two vectors of latents,
-/// with a different formula for how the split and (and eventual join during
+/// with a different formula for how the split (and eventual join during
 /// decompression) is done.
 /// Each of these vectors of latents is then passed through Pco's subsequent
 /// processing steps (possible delta encoding and binning) to produce the final
@@ -59,7 +59,8 @@ const FIXED_READ_SIZE: usize = BITS_TO_ENCODE_MODE_VARIANT.div_ceil(8) as usize
 /// We have deliberately written the formulas below in a slightly wrong way to
 /// convey the correct intuition without dealing with implementation
 /// complexities.
-/// Slightly more rigorous formulas are in format.md.
+/// Slightly more rigorous formulas are in
+/// [format.md](https://github.com/pcodec/pcodec/blob/main/docs/format.md).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Mode {

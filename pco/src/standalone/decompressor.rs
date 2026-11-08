@@ -71,7 +71,7 @@ pub struct FileDecompressor {
 /// The outcome of starting a new chunk of a standalone file.
 #[allow(clippy::large_enum_variant)]
 pub enum DecompressorItem<T: Number, R: BetterBufRead> {
-  /// We get a `ChunkDecompressor` when there is another chunk as evidenced
+  /// We get a [`ChunkDecompressor`] when there is another chunk as evidenced
   /// by the number type byte.
   Chunk(ChunkDecompressor<T, R>),
   /// We are at the end of the pco data if we encounter a null byte instead of
@@ -80,7 +80,7 @@ pub enum DecompressorItem<T: Number, R: BetterBufRead> {
 }
 
 impl FileDecompressor {
-  /// Reads a short header and returns a `FileDecompressor` and the
+  /// Reads a short header and returns a [`FileDecompressor`] and the
   /// remaining input.
   ///
   /// Will return an error if any corruptions or insufficient data are found.
@@ -138,26 +138,36 @@ impl FileDecompressor {
     ))
   }
 
-  /// Lowers how much memory [`Self::simple_decompress`] may preallocate based
-  /// on the file's `n_hint`.
+  /// Sets how much memory [`Self::simple_decompress`] may preallocate based
+  /// on the file's [`n_hint`][Self::n_hint].
   ///
   /// `n_hint` is untrusted - a tiny file may legally declare `usize::MAX` - so
-  /// it is capped at `DEFAULT_MAX_PREALLOC_BYTES` by default. Use this if you
-  /// would rather pay for a few reallocations than let a file reserve memory
-  /// it has not earned.
+  /// it is capped at 4 GiB by default. Lower this if you would rather pay for
+  /// a few reallocations than let a file reserve memory it has not earned.
   pub fn with_max_prealloc(mut self, bytes: usize) -> Self {
     self.max_prealloc_bytes = bytes;
     self
   }
 
+  /// Returns the format version the file was compressed with.
   pub fn format_version(&self) -> &FormatVersion {
     self.inner.format_version()
   }
 
+  /// Returns the number type all chunks in this file share, if the file
+  /// declares one.
+  ///
+  /// See
+  /// [`FileCompressor::with_uniform_type`][crate::standalone::FileCompressor::with_uniform_type].
   pub fn uniform_type(&self) -> Option<NumberType> {
     self.uniform_type
   }
 
+  /// Returns the file's declared hint for its count of numbers, or 0 if
+  /// none was given.
+  ///
+  /// This is untrusted and may be inaccurate.
+  /// See [`FileCompressor::with_n_hint`][crate::standalone::FileCompressor::with_n_hint].
   pub fn n_hint(&self) -> usize {
     self.n_hint
   }
@@ -227,7 +237,7 @@ impl FileDecompressor {
     Ok((Some(n), reader_builder.into_inner()))
   }
 
-  /// Reads a chunk's metadata and returns either a `ChunkDecompressor` or
+  /// Reads a chunk's metadata and returns either a [`ChunkDecompressor`] or
   /// the rest of the source if at the end of the pco file.
   ///
   /// Will return an error if corruptions or insufficient
@@ -301,7 +311,8 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
   ///
   /// Will return an error if corruptions or insufficient data are found.
   ///
-  /// `dst` must have length either a multiple of 256 or be at least the count
+  /// `dst` must have length either a multiple of [`FULL_BATCH_N`][crate::FULL_BATCH_N] or be at
+  /// least the count
   /// of numbers remaining in the chunk.
   #[inline]
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
@@ -314,9 +325,10 @@ impl<T: Number, R: BetterBufRead> ChunkDecompressor<T, R> {
     }
   }
 
-  /// Like `read`, but writes into a possibly uninitialized destination.
+  /// Like [`read`][Self::read], but writes into a possibly uninitialized
+  /// destination.
   ///
-  /// Every element Pco reports as processed in the returned `Progress` has
+  /// Every element Pco reports as processed in the returned [`Progress`] has
   /// been initialized.
   pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     let (inner, scratch) = self.inner_cd.inner_and_scratch();

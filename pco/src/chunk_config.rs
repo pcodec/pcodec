@@ -7,7 +7,7 @@ use crate::DEFAULT_COMPRESSION_LEVEL;
 /// chunk of data.
 ///
 /// The `Try*` variants almost always use the provided mode, but fall back to
-/// `Classic` if the provided mode is especially bad.
+/// [`Classic`][crate::metadata::Mode::Classic] if the provided mode is especially bad.
 /// It is recommended that you only use the `Try*` variants if you know for
 /// certain that your numbers benefit from that mode.
 #[derive(Clone, Debug, Default)]
@@ -17,29 +17,30 @@ pub enum ModeSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad mode in adversarial cases.
-  /// At present, this does not consider `Dict` mode.
+  /// At present, this does not consider [`Dict`][crate::metadata::Mode::Dict] mode.
   #[default]
   Auto,
-  /// Only uses `Classic` mode.
+  /// Only uses [`Classic`][crate::metadata::Mode::Classic] mode.
   Classic,
-  /// Tries using `FloatMult` mode with a given `base`.
+  /// Tries using [`FloatMult`][crate::metadata::Mode::FloatMult] mode with a given `base`.
   ///
   /// This can be helpful when most numbers are approximately equal modulo
   /// `base`.
   /// Only applies to floating-point types.
   TryFloatMult(f64),
-  /// Tries using `FloatQuant` mode with `k` bits of quantization.
+  /// Tries using [`FloatQuant`][crate::metadata::Mode::FloatQuant] mode with `k` bits of
+  /// quantization.
   ///
   /// This can be helpful when most numbers have the same final `k` bits.
   /// Only applies to floating-point types.
   TryFloatQuant(Bitlen),
-  /// Tries using `IntMult` mode with a given `base`.
+  /// Tries using [`IntMult`][crate::metadata::Mode::IntMult] mode with a given `base`.
   ///
   /// This can be helpful when most numbers are approximately equal modulo
   /// `base`.
   /// Only applies to integer types.
   TryIntMult(u64),
-  /// Tries using `Dict` mode.
+  /// Tries using [`Dict`][crate::metadata::Mode::Dict] mode.
   ///
   /// This may be beneficial when the data consists of IDs, i.e. a large number
   /// of discrete values over a very wide range that often occur multiple times
@@ -55,7 +56,7 @@ pub enum ModeSpec {
 /// chunk of data.
 ///
 /// The `Try*` variants almost always use the provided encoding, but fall back
-/// to `None` if the provided encoding is especially bad.
+/// to [`NoOp`][DeltaSpec::NoOp] if the provided encoding is especially bad.
 /// It is recommended that you only use the `Try*` variants if you know for
 /// certain that your numbers benefit from delta encoding.
 #[derive(Clone, Debug, Default)]
@@ -65,7 +66,8 @@ pub enum DeltaSpec {
   ///
   /// This works well most of the time, but costs some compression time and can
   /// select a bad delta encoding in adversarial cases.
-  /// At present, this does not consider `Conv1` delta encoding due to
+  /// At present, this does not consider
+  /// [`Conv1`][crate::metadata::DeltaEncoding::Conv1] delta encoding due to
   /// decompression performance costs.
   #[default]
   Auto,
@@ -81,7 +83,8 @@ pub enum DeltaSpec {
   /// Supports a delta encoding order up to 7.
   /// For instance, 1st order is just regular delta encoding, 2nd is
   /// deltas-of-deltas, etc.
-  /// It is legal to use 0th order, but it is identical to `NoOp`.
+  /// It is legal to use 0th order, but it is identical to
+  /// [`NoOp`][DeltaSpec::NoOp].
   TryConsecutive(usize),
   /// Tries delta encoding according to an extra latent variable of "lookback".
   ///
@@ -104,11 +107,12 @@ pub enum DeltaSpec {
   /// Supports order up to 32.
   /// In practice, the weights for the convolution are chosen via linear
   /// regression.
-  /// It is legal to use 0th order, but it is identical to `NoOp`.
+  /// It is legal to use 0th order, but it is identical to
+  /// [`NoOp`][DeltaSpec::NoOp].
   TryConv1(usize),
 }
 
-/// `PagingSpec` specifies how a chunk is split into pages.
+/// Specifies how a chunk is split into pages.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum PagingSpec {
@@ -131,6 +135,10 @@ impl Default for PagingSpec {
 }
 
 impl PagingSpec {
+  /// Returns the count of numbers in each page for a chunk of `n` numbers.
+  ///
+  /// Will return an invalid argument error if any page would be empty or the
+  /// counts do not sum to `n`.
   pub fn n_per_page(&self, n: usize) -> PcoResult<Vec<usize>> {
     let n_per_page = match self {
       // You might think it would be beneficial to do either of these:
@@ -183,15 +191,11 @@ impl PagingSpec {
 }
 
 /// All configurations available for a compressor.
-///
-/// Some, like `delta_encoding_order`, are explicitly stored in the
-/// compressed bytes.
-/// Others, like `compression_level`, affect compression but are not explicitly
-/// stored.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct ChunkConfig {
-  /// Ranges from 0 to 12 inclusive (default: 8).
+  /// Ranges from 0 to 12 inclusive (default:
+  /// [`DEFAULT_COMPRESSION_LEVEL`]).
   ///
   /// At present,
   /// * Level 0 achieves only a small amount of compression.
@@ -213,7 +217,7 @@ pub struct ChunkConfig {
   /// how to configure it.
   pub delta_spec: DeltaSpec,
   /// Specifies how the chunk should be split into pages (default: equal pages
-  /// up to 2^18 numbers each).
+  /// up to [`DEFAULT_MAX_PAGE_N`] numbers each).
   pub paging_spec: PagingSpec,
   /// By default, Pco will fail when trying to compress u8 or i8 data.
   /// This is to prevent user error: Pco is not meant to be used with arbitrary

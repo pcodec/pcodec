@@ -8,12 +8,14 @@ Bit packing a component is completed by filling the rest of the byte with 0s.
 
 Let `dtype_size` be the number type's number of bits.
 A "raw" value for a number is a `dtype_size` value that maps to the number
-via [its `from_unsigned` function](#Modes).
+via [its `from_latent_ordered` function](#modes).
+Each latent variable also has a latent type (see the mode table below), and we
+let `latent_size` be its number of bits.
 
 ## Version Compatibility
 
 Define "compatibility line" to be a non-API-breaking sequence of SemVer
-versions, e.g 0.4.x or 1.x.y.
+versions, e.g. 0.4.x or 1.x.y.
 Pco's compatibility guarantee is:
 
 Each library version will be able to decompress any data compressed by
@@ -53,10 +55,10 @@ allowing Pco to make small format changes in the future if necessary.
 To explain the meaning of these: suppose a decompressor supports version `a.b`, and is reading a file with version `c.d`.
 * If `a < c`, the decompressor will definitely be unable to read the file; the
   file has modifications the decompressor does not support.
-* If `a >= c, b < d`, the decompressor might be able to read the file; the file
-  may or may not contain additions the decompressor does not support.
-* If `a >= c, b >= d`, the decompressor will definitely be able to read the
-  file.
+* If `a == c, b < d`, the decompressor might be able to read the file; the
+  file may or may not contain additions the decompressor does not support.
+* If `a > c`, or `a == c, b >= d`, the decompressor will definitely be able to
+  read the file.
 
 
 The header simply consists of
@@ -91,13 +93,11 @@ Each chunk meta consists of
   | 1     | IntMult      | `T::L`         | `T::L`            | `dtype_size`      |
   | 2     | FloatMult    | `T::L`         | `T::L`            | `dtype_size`      |
   | 3     | FloatQuant   | `T::L`         | `T::L`            | 8                 |
-  | 4     | Dict         | `u32`          |                   | variable*         |
+  | 4     | Dict         | `u32`          |                   | variable          |
   | 5-15  | \<reserved\> |                |                   |                   |
 
   Here, `T::L` refers to the latent type with the same number of bits as the
   number type, e.g. u64 for i64.
-  `Dict` mode's payload is a 25-bit integer for the count of values in the
-  dictionary, followed by those raw values.
 
 * [`extra_mode_bits` bits] for certain modes, extra data is parsed. See the
   mode-specific formulas below for how this is used, e.g. as the `mult`, `k`, or
@@ -107,12 +107,12 @@ Each chunk meta consists of
   int modes cannot apply to floats, and vice versa.
   Parsing the `dict` value is more complex than the others: it is formed by
   reading 25 bits for `dict_len`, followed by 0s until byte-aligned, followed by
-  `dict_len` raw values that consitute `dict`.
+  `dict_len` raw values that constitute `dict`.
 * [4 bits] `delta_encoding`, using this table:
 
   | value | delta encoding | n latent variables | `extra_delta_bits` |
   |-------|----------------|--------------------|--------------------|
-  | 0     | None           | 0                  | 0                  |
+  | 0     | NoOp           | 0                  | 0                  |
   | 1     | Consecutive    | 0                  | 4                  |
   | 2     | Lookback       | 1                  | 10                 |
   | 3     | Conv1          | 0                  | variable           |
@@ -128,8 +128,10 @@ Each chunk meta consists of
     encoded.
     Let `state_n = 1 << state_n_log`.
   * for `conv1`, this is 5 bits for `quantization`, 64 bits for a raw `bias`
-    value (i64), 5 bits for the order (number of weights), and 32 bits per raw
-    weight value (i32).
+    value (i64), 5 bits for 1 less than `order` (the number of weights), and
+    32 bits per raw weight value (i32).
+    Conv1 on a 64-bit latent type is considered a corruption.
+    Let `state_n = order`.
 * per latent variable (ordered by delta latent variables followed by mode
   latent variables),
   * [4 bits] `ans_size_log`, the log2 of the size of its tANS table.
@@ -137,10 +139,9 @@ Each chunk meta consists of
   * [15 bits] the count of bins
   * per bin,
     * [`ans_size_log` bits] 1 less than `weight`, this bin's weight in the tANS table
-    * [`dtype_size` bits] the lower bound of this bin's numerical range,
-      encoded as a raw value.
-    * [`log2(dtype_size) + 1` bits] the number of offset bits for this bin
-      e.g. for a 64-bit data type, this will be 7 bits long.
+    * [`latent_size` bits] the lower bound of this bin's numerical range.
+    * [`log2(latent_size) + 1` bits] the number of offset bits for this bin,
+      e.g. for a 64-bit latent type, this will be 7 bits long.
 
 Based on chunk metadata, 4-way interleaved tANS decoders should be initialized
 using
@@ -155,8 +156,8 @@ batch will contain the rest (<= 256 numbers).
 Each page consists of
 
 * per latent variable,
-  * if delta encoding is applicable, for `i in 0..state_n`,
-    * [`dtype_size` bits] the `i`th delta state
+  * if delta encoding applies to this latent variable, for `i in 0..state_n`,
+    * [`latent_size` bits] the `i`th delta state
   * for `i in 0..4`,
     * [`ans_size_log` bits] the `i`th interleaved tANS state index
 * [0-7 bits] 0s until byte-aligned
@@ -179,9 +180,9 @@ It consists of
 * [8 bits] standalone version
 * [8 bits] either a uniform number type which all following chunks must share,
   or 0.
-* [6 bits] 1 less than `n_hint_log2`
-* [`n_hint_log2` bits] `n_hint`, the total count of numbers in the file, if known;
-  0 otherwise
+* [6 bits] 1 less than `n_hint_bits`, the bit length of `n_hint` (at least 1)
+* [`n_hint_bits` bits] `n_hint`, the total count of numbers in the file, if
+  known; 0 otherwise
 * [0-7 bits] 0s until byte-aligned
 * a wrapped header
 * per chunk,
@@ -193,8 +194,8 @@ It consists of
 
 So far, these standalone versions exist:
 
-| format version | first Rust version | format modifications |
-|----------------|--------------------|----------------------|
+| standalone version | first Rust version | format modifications |
+|--------------------|--------------------|----------------------|
 | 0              | 0.0.0              |   |
 | 1              | 0.1.0              |   |
 | 2              | 0.1.1              | explicit standalone version (previously was implicit and equaled wrapped major version), added `n_hint` |
@@ -227,14 +228,22 @@ To produce latents, we simply do `l[i] = bin[i].lower + offset[i]`.
 ### Delta Encodings
 
 Depending on `delta_encoding`, the mode latents are further decoded.
+Delta encoding always applies to the primary latent variable, and applies to
+the secondary latent variable only if the delta encoding's "secondary latent is
+delta encoded" bit is set (never, for Conv1).
 Note that the delta latent variable, if it exists, is never delta encoded
 itself.
 
-#### None
+Unless the delta encoding is NoOp, each delta encoded latent first has `MID`
+(see [Modes](#modes)) added to it with wrapping, undoing the centering applied
+during compression.
+The descriptions below refer to the latents after this step.
+
+#### NoOp
 
 No additional processing is applied.
 
-##### Consecutive
+#### Consecutive
 
 Latents are decoded by taking a cumulative sum repeatedly.
 The delta state is interpreted as delta moments, which are used to initialize
@@ -245,18 +254,17 @@ and the deltas `[0, 10, 0]` would decode to the latents `[1, 3, 5, 17, 29]`.
 
 #### Lookback
 
-Letting `lookback` be the delta latent variable.
+Let `lookback` be the delta latent variable.
 Mode latents are decoded via `l[i] += l[i - lookback[i]]`.
 
-The decompressor should error if any lookback exceeds the window.
+The decompressor should error if any lookback is 0 or exceeds the window.
 
-### Conv1
+#### Conv1
 
 Supposing the latents are k-bit, conv1 arithmetic is mainly done in 2k-bit
 signed values to avoid overflow.
 Latents are decoded in order via
-`l[i] += ((bias + sum[weight[j] * l[i - order + j]]) >> quantization) as L`.
-The bit shift here is arithmetic, not logical.
+`l[i] += (max(0, bias + sum[weight[j] * l[i - order + j]]) >> quantization) as L`.
 
 ### Modes
 
@@ -269,23 +277,23 @@ Let `l0` and `l1` be the primary and secondary latents respectively.
 | Dict       | `from_latent_ordered(dict[l0])`                                        |
 | IntMult    | `from_latent_ordered(l0 * mult + l1)`                                  |
 | FloatMult  | `int_float_from_latent(l0) * mult + (l1 + MID) ULPs`                   |
-| FloatQuant | `from_latent_ordered((l0 << k) + (l0 << k >= MID ? l1 : 2^k - 1 - l1)` |
+| FloatQuant | `from_latent_ordered((l0 << k) + (l0 << k >= MID ? l1 : 2^k - 1 - l1))` |
 
 Here ULP refers to [unit in the last place](https://en.wikipedia.org/wiki/Unit_in_the_last_place),
-`MID` is the middle value for the latent type (e.g. 2^31 for `u32`), and `dict` is a dictionary of unique values, stored in as the Dict mode metadata payload.
+`MID` is the middle value for the latent type (e.g. 2^31 for `u32`), and `dict` is a dictionary of unique values, stored as the Dict mode metadata payload.
 Each number type has an order-preserving bijection to an unsigned latent type
 known as `from_latent_ordered` and `to_latent_ordered`.
 For instance, floats have their first bit toggled, and the rest of their bits
 toggled if the float was originally negative:
 
 ```rust
-fn from_unsigned(unsigned: u32) -> f32 {
-  if unsigned & (1 << 31) > 0 {
+fn from_latent_ordered(l: u32) -> f32 {
+  if l & (1 << 31) > 0 {
     // positive float
-    f32::from_bits(unsigned ^ (1 << 31))
+    f32::from_bits(l ^ (1 << 31))
   } else {
     // negative float
-    f32::from_bits(!unsigned)
+    f32::from_bits(!l)
   }
 }
 ```
@@ -294,7 +302,7 @@ Signed integers have an order-preserving wrapping addition and wrapping
 conversion like so:
 
 ```rust
-fn from_unsigned(unsigned: u32) -> i32 {
-  i32::MIN.wrapping_add(unsigned as i32)
+fn from_latent_ordered(l: u32) -> i32 {
+  i32::MIN.wrapping_add(l as i32)
 }
 ```

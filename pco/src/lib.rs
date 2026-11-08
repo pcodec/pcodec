@@ -21,9 +21,11 @@ pub use constants::{DEFAULT_COMPRESSION_LEVEL, DEFAULT_MAX_PAGE_N, FULL_BATCH_N}
 pub use progress::Progress;
 pub use scratch::DecompressorScratch;
 
+/// traits and enums for the number types Pco supports
 pub mod data_types;
 /// for inspecting certain types of Pco metadata
 pub mod describers;
+/// the error and result types returned by Pco
 pub mod errors;
 /// structs representing stored information about how compression was done
 pub mod metadata;

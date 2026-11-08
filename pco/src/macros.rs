@@ -2,7 +2,7 @@
 
 dtype_dispatch::build_dtype_macros!(
   #[doc = "\
-    Defines enums holding a container generic to `Number`.
+    Defines enums holding a container generic to [`Number`][crate::data_types::Number].
   "]
   #[doc = "\
     You'll only want to use this if you're using pco's low level APIs.
@@ -12,7 +12,7 @@ dtype_dispatch::build_dtype_macros!(
   define_number_enum,
 
   #[doc = "\
-    Matches enums holding a container of `Number`s and puts the concrete type
+    Matches enums holding a container of [`Number`][crate::data_types::Number]s and puts the concrete type
     into scope.
   "]
   #[doc = "\
@@ -42,7 +42,7 @@ dtype_dispatch::build_dtype_macros!(
   define_latent_enum,
 
   #[doc = "\
-    Matches enums holding a container of `Latent`s and puts the concrete type
+    Matches enums holding a container of [`Latent`][crate::data_types::Latent]s and puts the concrete type
     into scope.
   "]
   #[doc = "\

@@ -38,6 +38,8 @@ pub trait DescribeLatent: private::Sealed {
   fn latent(&self, latent: DynLatent) -> String;
 }
 
+/// A boxed [`DescribeLatent`], as returned by
+/// [`Number::get_latent_describers`].
 pub type LatentDescriber = Box<dyn DescribeLatent>;
 
 // describer for the delta latent var (not a describer for a latent var that has

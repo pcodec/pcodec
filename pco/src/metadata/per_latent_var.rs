@@ -22,8 +22,11 @@ pub enum LatentVarKey {
 /// A generic container holding a value for each applicable latent variable.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PerLatentVar<T> {
+  /// The value for [`LatentVarKey::Delta`], if present.
   pub delta: Option<T>,
+  /// The value for [`LatentVarKey::Primary`].
   pub primary: T,
+  /// The value for [`LatentVarKey::Secondary`], if present.
   pub secondary: Option<T>,
 }
 
@@ -135,7 +138,7 @@ impl<T> PerLatentVar<T> {
     }
   }
 
-  /// Returns a vector of the defined `LatentVarKey`s and values, in order
+  /// Returns a vector of the defined [`LatentVarKey`]s and values, in order
   /// of appearance in the file.
   pub fn enumerated(self) -> Vec<(LatentVarKey, T)> {
     let mut res = Vec::with_capacity(3);
