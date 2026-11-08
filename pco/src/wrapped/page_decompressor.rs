@@ -288,7 +288,8 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
   ///
   /// Will return an error if corruptions or insufficient data are found.
   ///
-  /// `dst` must have length either a multiple of 256 or be at least the count
+  /// `dst` must have length either a multiple of
+  /// [`FULL_BATCH_N`][crate::FULL_BATCH_N] or be at least the count
   /// of numbers remaining in the page.
   #[inline]
   pub fn read(&mut self, dst: &mut [T]) -> PcoResult<Progress> {
@@ -301,9 +302,10 @@ impl<'a, T: Number, R: BetterBufRead> PageDecompressor<'a, T, R> {
     }
   }
 
-  /// Like `read`, but writes into a possibly uninitialized destination.
+  /// Like [`read`][Self::read], but writes into a possibly uninitialized
+  /// destination.
   ///
-  /// Every element Pco reports as processed in the returned `Progress` has
+  /// Every element Pco reports as processed in the returned [`Progress`] has
   /// been initialized.
   pub fn read_uninit(&mut self, dst: &mut [MaybeUninit<T>]) -> PcoResult<Progress> {
     self

@@ -276,7 +276,7 @@ fn new_candidate(
   let chunk_latent_compressors = chunk_latent_compressors.into();
   let bin_countss = bin_countss.into();
 
-  let meta = ChunkMeta::new(mode, delta_encoding, var_metas)?;
+  let meta = ChunkMeta::try_new(mode, delta_encoding, var_metas)?;
   let chunk_compressor = ChunkCompressor {
     meta,
     chunk_latent_compressors,
@@ -595,7 +595,7 @@ impl ChunkCompressor {
   /// Returns an estimate of the byte size of a specific page.
   ///
   /// This can be useful when building the file as a `Vec<u8>` in memory;
-  /// you can `.reserve(chunk_compressor.size_hint())` ahead of time.
+  /// you can `.reserve()` ahead of time.
   pub fn page_size_hint(&self, page_idx: usize) -> usize {
     self.page_size_hint_inner(page_idx, PAGE_SIZE_OVERESTIMATION)
   }

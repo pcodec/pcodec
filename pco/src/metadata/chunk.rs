@@ -24,13 +24,23 @@ pub struct ChunkMeta {
   pub delta_encoding: DeltaEncoding,
   /// Metadata about the interleaved streams needed by `pco` to
   /// compress/decompress the inputs
-  /// according to the formula used by `mode`.
+  /// according to the formula used by [`mode`][Self::mode].
   pub per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
   _private: (),
 }
 
 impl ChunkMeta {
+  #[doc(hidden)]
+  #[deprecated(note = "ChunkMeta is not meant to be constructed by users")]
   pub fn new(
+    mode: Mode,
+    delta_encoding: DeltaEncoding,
+    per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
+  ) -> PcoResult<Self> {
+    Self::try_new(mode, delta_encoding, per_latent_var)
+  }
+
+  pub(crate) fn try_new(
     mode: Mode,
     delta_encoding: DeltaEncoding,
     per_latent_var: PerLatentVar<ChunkLatentVarMeta>,
@@ -169,7 +179,7 @@ impl ChunkMeta {
       reader.drain_empty_byte("nonzero bits in end of final byte of chunk metadata")
     })?;
 
-    let cd = Self::new(mode, delta_encoding, per_latent_var)?;
+    let cd = Self::try_new(mode, delta_encoding, per_latent_var)?;
     Ok((cd, reader_builder.into_inner()))
   }
 

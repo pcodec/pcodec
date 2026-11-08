@@ -16,7 +16,8 @@ use crate::{PagingSpec, FULL_BATCH_N};
 ///
 /// Will return an error if the compressor config is invalid or there is an IO
 /// error.
-/// This will use the `PagingSpec` in `ChunkConfig` to decide where to split
+/// This will use the [`PagingSpec`][crate::PagingSpec] in [`ChunkConfig`] to
+/// decide where to split
 /// chunks.
 /// For standalone, the concepts of chunk and page are conflated since each
 /// chunk has exactly one page.
@@ -52,7 +53,8 @@ pub fn simple_compress_into<T: Number, W: Write>(
 /// bytes.
 ///
 /// Will return an error if the compressor config is invalid.
-/// This will use the `PagingSpec` in `ChunkConfig` to decide where to split
+/// This will use the [`PagingSpec`][crate::PagingSpec] in [`ChunkConfig`] to
+/// decide where to split
 /// chunks.
 /// For standalone, the concepts of chunk and page are conflated since each
 /// chunk has exactly one page.
@@ -97,7 +99,7 @@ fn simple_compress_dyn(src: DynNumberSlice, config: &ChunkConfig) -> PcoResult<V
 /// Will return an error if there are any corruption or insufficient data
 /// issues.
 /// Does not error if dst is too short or too long, but that can be inferred
-/// from `Progress`.
+/// from [`Progress`].
 pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult<Progress> {
   // safety: this only ever writes initialized values
   unsafe {
@@ -108,10 +110,10 @@ pub fn simple_decompress_into<T: Number>(src: &[u8], dst: &mut [T]) -> PcoResult
   }
 }
 
-/// Like `simple_decompress_into`, but writes into a possibly uninitialized
+/// Like [`simple_decompress_into`], but writes into a possibly uninitialized
 /// destination.
 ///
-/// Every element Pco reports as processed in the returned `Progress` has
+/// Every element Pco reports as processed in the returned [`Progress`] has
 /// been initialized.
 pub fn simple_decompress_into_uninit<T: Number>(
   src: &[u8],

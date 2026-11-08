@@ -36,7 +36,7 @@ pcodec bench \
   --iters 7 \
   --limit 999999 \
   --save-dir ./tmp
-pcodec bench --binary-dir ./data
+pcodec bench -i ./data/binary --input-format binary
 ```
 
 ### Setting up synthetic data
@@ -45,7 +45,7 @@ One way to generate test data from a wide variety of processes and
 distributions is from the `generate_randoms.py` script in the pcodec
 repository.
 To run it, set up a python3 environment with `numpy` installed.
-In that environment, `cd`'d in to the root of the repo,
+In that environment, `cd`'d into the root of the repo,
 run `python pco_cli/generate_randoms.py`.
 This will populate some human-readable data in `data/txt/` and
 the exact same numerical data as bytes in `data/binary/`.
@@ -61,11 +61,11 @@ file.
 Examples:
 
 ```shell
-pcodec compress --csv my.csv --col-name my_column out.pco
-pcodec compress --parquet my.snappy.parquet --col-name my_column out.pco
+pcodec compress -i my.csv --col-name my_column out.pco
+pcodec compress -i my.snappy.parquet --col-name my_column out.pco
 
 pcodec compress \
-  --csv my.csv \
+  -i my.csv \
   --col-idx 0 \
   --csv-has-header \
   --dtype u32 \
@@ -74,10 +74,10 @@ pcodec compress \
   out.pco
 
 pcodec compress \
-  --csv time_series.csv \
+  -i time_series.csv \
   --col-name temperature \
   --dtype f32 \
-  --delta-order 3 \
+  --delta Consecutive@3 \
   out.pco
 ```
 
@@ -98,5 +98,5 @@ This command prints out information about a .pco file.
 Examples:
 
 ```shell
-% pcodec inspect in.pco
+pcodec inspect in.pco
 ```

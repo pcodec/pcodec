@@ -58,7 +58,7 @@ impl FileCompressor {
     Ok(writer.into_inner())
   }
 
-  /// Creates a `ChunkCompressor` that can be used to write chunk metadata
+  /// Creates a [`ChunkCompressor`] that can be used to write chunk metadata
   /// and create page compressors.
   ///
   /// Will return an error if any arguments provided are invalid.

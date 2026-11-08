@@ -68,8 +68,8 @@ Pco uses a holistic, 3-step approach:
   Most natural data uses classic mode, which simply matches `x = l_0`.
 * **delta encoding**.
   Pco identifies whether certain latent variables would be better compressed as
-  deltas between consecutive elements (or deltas of deltas, or deltas with
-  lookback).
+  deltas between consecutive elements (or deltas of deltas, deltas with
+  lookback, or residuals from a linear prediction).
   If so, it takes differences.
 * **binning**.
   This is the core and most novel part of Pco.
@@ -100,7 +100,9 @@ It is mainly recommended for quick proofs of concept and benchmarking.
 
 Pco has a hierarchy of multiple batches per page; multiple pages per chunk; and
 multiple chunks per file.
-By default Pco uses up to 2^18 (~262k) numbers per chunk if available.
+By default, Pco splits each chunk into pages of up to 2^18 (~262k) numbers.
+In the standalone format each chunk has exactly one page, so this also limits
+chunk size there.
 
 |       | unit of ___                     | size for good compression |
 |-------|---------------------------------|---------------------------|

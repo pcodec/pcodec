@@ -26,7 +26,9 @@ pub enum ErrorKind {
 /// The error type used in results for all `pco` functionality.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PcoError {
+  /// The category of error.
   pub kind: ErrorKind,
+  /// A human-readable description of what went wrong.
   pub message: String,
 }
 
@@ -72,4 +74,5 @@ impl From<io::Error> for PcoError {
 
 impl Error for PcoError {}
 
+/// Shorthand for a `Result` whose error is a [`PcoError`].
 pub type PcoResult<T> = Result<T, PcoError>;

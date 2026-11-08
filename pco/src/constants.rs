@@ -50,8 +50,12 @@ pub const QUANT_REQUIRED_BITS_SAVED_PER_NUM: f64 = 1.5;
 pub const CLASSIC_MEMORIZABLE_BINS_LOG: Bitlen = 8;
 
 // defaults
+/// The default value of
+/// [`ChunkConfig::compression_level`][crate::ChunkConfig::compression_level].
 pub const DEFAULT_COMPRESSION_LEVEL: usize = 8;
 // if you modify default page size, update docs for PagingSpec
+/// The maximum page size used by the default
+/// [`PagingSpec`][crate::PagingSpec].
 pub const DEFAULT_MAX_PAGE_N: usize = 1 << 18;
 
 // important parts of the format specification

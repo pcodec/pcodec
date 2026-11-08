@@ -17,7 +17,7 @@ pub struct FileDecompressor {
 }
 
 impl FileDecompressor {
-  /// Reads a short header and returns a `FileDecompressor` and the remaining
+  /// Reads a short header and returns a [`FileDecompressor`] and the remaining
   /// input.
   ///
   /// Will return an error if any corruptions or insufficient data are found.
@@ -33,11 +33,12 @@ impl FileDecompressor {
     ))
   }
 
+  /// Returns the format version the file was compressed with.
   pub fn format_version(&self) -> &FormatVersion {
     &self.format_version
   }
 
-  /// Reads a chunk's metadata and returns a `ChunkDecompressor` and the
+  /// Reads a chunk's metadata and returns a [`ChunkDecompressor`] and the
   /// remaining input.
   ///
   /// Will return an error if corruptions or insufficient data are found.

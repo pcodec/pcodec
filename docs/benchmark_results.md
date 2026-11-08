@@ -3,7 +3,7 @@
 ## Tabular Datasets
 
 Below we compare speeds and compressed sizes on 3 real-world datasets.
-All these results, as well as those from [the paper](https://arxiv.org/abs/2502.06112), are available in the results CSVs, e.g. 
+All these results, as well as those from [the paper](https://arxiv.org/abs/2502.06112), are available in the results CSVs, e.g.
 [results for columnar datasets on a macbook pro](./benchmark_results/columnar_mbp_m3_max_rust1_89.csv).
 All benchmarks reported here and in the paper can be easily run via
 [the CLI](../pco_cli/README.md#bench).
@@ -42,9 +42,9 @@ The 3 datasets we display here are:
   >
 </p>
 
-For these results, we used a single performance core of a Macbook Pro M3 Max.
+For these results, we used a single performance core of a MacBook Pro M3 Max.
 Only numerical columns were used.
-For Blosc, the SHUFFLE filter and the Zstd default of Zstd level 3 was used.
+For Blosc, the SHUFFLE filter and the Zstd default of Zstd level 3 were used.
 For Parquet, the Parquet default of Zstd level 1 was used.
 
 Even at max compression levels, Zstd-based codecs don't perform much better.

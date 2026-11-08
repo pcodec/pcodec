@@ -10,4 +10,4 @@ At present, this crate only supports `BetterBufRead` and `BetterBufReader`.
 much thinking.
 Though I don't think the ideas are original; they somewhat resemble
 [this blog post](https://fgiesen.wordpress.com/2011/11/21/buffer-centric-io/)
-and probably some older stuff too.
+and probably some older work too.

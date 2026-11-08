@@ -94,7 +94,7 @@ impl<T: Number> ChunkDecompressor<T> {
     (&self.inner, scratch)
   }
 
-  /// Reads metadata for a page and returns a `PageDecompressor` and the
+  /// Reads metadata for a page and returns a [`PageDecompressor`] and the
   /// remaining input.
   ///
   /// Will return an error if corruptions or insufficient data are found.
@@ -104,7 +104,7 @@ impl<T: Number> ChunkDecompressor<T> {
   /// decompression of later pages.
   /// Use
   /// [`Self::page_decompressor_with_scratch`][Self::page_decompressor_with_scratch]
-  /// if you need to multiple references to this chunk decompressor.
+  /// if you need multiple references to this chunk decompressor.
   pub fn page_decompressor<R: BetterBufRead>(
     &mut self,
     src: R,
@@ -114,7 +114,7 @@ impl<T: Number> ChunkDecompressor<T> {
     PageDecompressor::<T, R>::new(src, inner, n, scratch)
   }
 
-  /// Reads metadata for a page and returns a `PageDecompressor` and the
+  /// Reads metadata for a page and returns a [`PageDecompressor`] and the
   /// remaining input, using external scratch space.
   ///
   /// Will return an error if corruptions or insufficient data are found.
