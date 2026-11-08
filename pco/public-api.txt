@@ -29,7 +29,7 @@ pub pco::data_types::NumberType::U32 = 1
 pub pco::data_types::NumberType::U64 = 2
 pub pco::data_types::NumberType::U8 = 10
 impl pco::data_types::NumberType
-pub fn pco::data_types::NumberType::from_descriminant(u8) -> core::option::Option<Self>
+pub fn pco::data_types::NumberType::from_discriminant(u8) -> core::option::Option<Self>
 pub fn pco::data_types::NumberType::new<T: pco::data_types::Number>() -> Self
 impl core::clone::Clone for pco::data_types::NumberType
 pub fn pco::data_types::NumberType::clone(&self) -> Self

@@ -189,7 +189,7 @@ define_an_enum!(
 define_an_enum!(
   #[derive(Clone, Debug)]
   #[repr(u32)]
-  pub MyDescriminatingDtype = BITS
+  pub MyDiscriminatingDtype = BITS
 );
 
 // Enum with owned data
