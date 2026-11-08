@@ -27,7 +27,7 @@ fn read_uniform_type(reader: &mut BitReader) -> PcoResult<Option<NumberType>> {
     return Ok(None);
   }
 
-  match NumberType::from_descriminant(byte) {
+  match NumberType::from_discriminant(byte) {
     Some(number_type) => Ok(Some(number_type)),
     None => Err(PcoError::corruption(format!(
       "unknown number type byte: {}",
@@ -184,7 +184,7 @@ impl FileDecompressor {
     }
 
     match src.first() {
-      Some(&byte) => match NumberType::from_descriminant(byte) {
+      Some(&byte) => match NumberType::from_discriminant(byte) {
         Some(number_type) => Ok(Some(number_type)),
         None if byte == MAGIC_TERMINATION_BYTE => Ok(None),
         _ => Err(PcoError::corruption(format!(
@@ -225,7 +225,7 @@ impl FileDecompressor {
       // of that, we call it a corruption.
       return Err(PcoError::corruption(format!(
         "requested chunk decompression with {:?} does not match chunk's number type of {:?}",
-        NumberType::from_descriminant(expected_type_byte),
+        NumberType::from_discriminant(expected_type_byte),
         type_or_termination_byte,
       )));
     }

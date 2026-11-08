@@ -126,7 +126,7 @@ fn _decompress_into<T: Number>(
 /// This function is thread-safe and performs no heap allocation.
 #[no_mangle]
 pub extern "C" fn pco_standalone_guarantee_file_size(n: size_t, dtype: c_uchar) -> size_t {
-  let Some(dtype_enum) = NumberType::from_descriminant(dtype) else {
+  let Some(dtype_enum) = NumberType::from_discriminant(dtype) else {
     return 0;
   };
   let paging_spec = PagingSpec::default();
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn pco_standalone_simple_compress_into(
   dst_cap: size_t,
   n_written: *mut size_t,
 ) -> PcoError {
-  let Some(dtype_enum) = NumberType::from_descriminant(dtype) else {
+  let Some(dtype_enum) = NumberType::from_discriminant(dtype) else {
     return PcoInvalidType;
   };
   let chunk_config = if config.is_null() {
@@ -183,7 +183,7 @@ pub extern "C" fn pco_standalone_simple_decompress_into(
   dst_cap: size_t,
   n_written: *mut size_t,
 ) -> PcoError {
-  let Some(dtype_enum) = NumberType::from_descriminant(dtype) else {
+  let Some(dtype_enum) = NumberType::from_discriminant(dtype) else {
     return PcoInvalidType;
   };
   match_number_enum!(

@@ -185,7 +185,7 @@ define_an_enum!(
 // Enum with discriminants, coming from T::BITS for each type
 // Supports:
 // * new
-// * from_descriminant
+// * from_discriminant
 define_an_enum!(
   #[derive(Clone, Debug)]
   #[repr(u32)]
