@@ -477,7 +477,7 @@ mod tests {
   #[test]
   fn test_all_pco_dtypes_are_arrowable() {
     for i in 0..=255 {
-      match pco::data_types::NumberType::from_descriminant(i) {
+      match pco::data_types::NumberType::from_discriminant(i) {
         Some(dtype) => {
           let arrow_dtype = to_arrow(dtype);
           assert_eq!(from_arrow(&arrow_dtype).unwrap(), dtype);
@@ -491,7 +491,7 @@ mod tests {
   fn test_all_pco_dtypes_except_8_bit_in_default_list() {
     let arrow_dtypes_except_8_bit = all_arrow_except_8_bit().0;
     for i in 0..=255 {
-      match pco::data_types::NumberType::from_descriminant(i) {
+      match pco::data_types::NumberType::from_discriminant(i) {
         Some(dtype) => {
           if dtype == NumberType::U8 || dtype == NumberType::I8 {
             continue;

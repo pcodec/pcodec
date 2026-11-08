@@ -18,7 +18,7 @@ pub fn from_java<'a>(
   else {
     unreachable!();
   };
-  let number_type = NumberType::from_descriminant(number_type_i8 as u8).unwrap();
+  let number_type = NumberType::from_discriminant(number_type_i8 as u8).unwrap();
   Ok((src, number_type))
 }
 

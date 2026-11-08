@@ -7,6 +7,14 @@ define_number_enum!(
   pub NumberType = NUMBER_TYPE_BYTE
 );
 
+impl NumberType {
+  #[doc(hidden)]
+  #[deprecated(note = "use from_discriminant() instead")]
+  pub fn from_descriminant(desc: u8) -> Option<Self> {
+    Self::from_discriminant(desc)
+  }
+}
+
 define_latent_enum!(
   #[derive(Clone, Copy, Debug, PartialEq, Eq)]
   pub LatentType

@@ -16,7 +16,7 @@ macro_rules! build_dtype_macros {
   ) => {
     $(#[$definer_attrs])*
     macro_rules! $definer {
-      // Enum with neither data nor descriminants
+      // Enum with neither data nor discriminants
       (#[$enum_attrs: meta] $vis: vis $name: ident) => {
         #[$enum_attrs]
         #[non_exhaustive]
@@ -37,7 +37,7 @@ macro_rules! build_dtype_macros {
           }
         }
       };
-      // Enum with descriminants
+      // Enum with discriminants
       (#[$enum_attrs: meta] #[repr($desc_t: ty)] $vis: vis $name: ident = $desc_val: ident) => {
         #[$enum_attrs]
         #[repr($desc_t)]
@@ -58,7 +58,7 @@ macro_rules! build_dtype_macros {
             unreachable!();
           }
 
-          pub fn from_descriminant(desc: $desc_t) -> Option<Self> {
+          pub fn from_discriminant(desc: $desc_t) -> Option<Self> {
             match desc {
               $(<$t>::$desc_val => Some(Self::$variant),)+
               _ => None

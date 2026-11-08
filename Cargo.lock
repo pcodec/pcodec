@@ -1054,7 +1054,7 @@ checksum = "d3a5ccdfd6c5e7e2fea9c5cf256f2a08216047fab19c621c3da64e9ae4a1462d"
 
 [[package]]
 name = "dtype_dispatch"
-version = "0.2.1"
+version = "0.3.0"
 
 [[package]]
 name = "dyn-hash"
@@ -2293,7 +2293,7 @@ version = "1.1.0"
 dependencies = [
  "better_io 0.2.0",
  "divan",
- "dtype_dispatch 0.2.1",
+ "dtype_dispatch 0.3.0",
  "half",
  "rand 0.8.5",
  "rand_xoshiro",
