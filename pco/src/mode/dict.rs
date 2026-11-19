@@ -9,31 +9,35 @@ use crate::errors::{PcoError, PcoResult};
 use crate::metadata::{DynLatents, Mode};
 
 fn configure_less_specialized<L: Latent>(classic_nums: Vec<L>) -> (Mode, SplitLatents) {
-  let mut count_by_unique = HashMap::new();
+  // Unique values are kept in order of first occurrence rather than HashMap
+  // iteration order, which is randomly seeded per map. That makes the dict,
+  // and therefore the compressed output, deterministic.
+  let mut unique_idx_by_unique = HashMap::new();
+  let mut unique_counts: Vec<(L, u32)> = Vec::new();
   for &num in &classic_nums {
-    *count_by_unique.entry(num).or_insert(0_u32) += 1;
+    let unique_idx = *unique_idx_by_unique.entry(num).or_insert_with(|| {
+      unique_counts.push((num, 0));
+      (unique_counts.len() - 1) as u32
+    });
+    unique_counts[unique_idx as usize].1 += 1;
   }
 
-  // We sort by frequency descending to maximize the benefit of binning. We do
-  // this via an argsort instead of directly sorting a Vec<(L, u32)> to reduce
-  // binary size.
-  let unique_counts = count_by_unique
-    .iter()
-    .map(|(&val, &count)| (val, count))
-    .collect::<Vec<(L, u32)>>();
+  // We sort by frequency descending to maximize the benefit of binning, with
+  // ties in order of first occurrence. We do this via an argsort instead of
+  // directly sorting a Vec<(L, u32)> to reduce binary size.
   let mut sort_idx_counts = unique_counts
     .iter()
     .enumerate()
     .map(|(idx, &(_, count))| (idx as u32, count))
     .collect::<Vec<(u32, u32)>>();
-  sort_idx_counts.sort_unstable_by_key(|&(_, count)| cmp::Reverse(count));
+  sort_idx_counts.sort_unstable_by_key(|&(idx, count)| (cmp::Reverse(count), idx));
   let dict = sort_idx_counts
     .into_iter()
     .map(|(sort_idx, _)| unique_counts[sort_idx as usize].0)
     .collect::<Vec<_>>();
 
   // Here we reuse the hashmap we no longer need.
-  let mut dict_idx_by_unique = count_by_unique;
+  let mut dict_idx_by_unique = unique_idx_by_unique;
   for (i, &val) in dict.iter().enumerate() {
     dict_idx_by_unique.insert(val, i as u32);
   }
@@ -93,8 +97,10 @@ pub fn join_latents<T: Number>(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::chunk_config::{ChunkConfig, ModeSpec};
   use crate::dyn_slices::DynLatentSlice;
   use crate::metadata::DynLatents;
+  use crate::standalone::simple_compress;
 
   #[test]
   fn test_join_latents_oob_index_returns_err() {
@@ -109,6 +115,38 @@ mod tests {
       result.is_err(),
       "expected Err for out-of-range dict index"
     );
+  }
+
+  #[test]
+  fn test_dict_orders_by_count_then_first_occurrence() {
+    // 9 and 5 occur twice, 7 and 1 once; equal counts keep the order in which
+    // the values first appear
+    let (mode, _) = configure_less_specialized(vec![9_u32, 5, 5, 7, 9, 1]);
+    let Mode::Dict(dict) = mode else {
+      panic!("expected dict mode");
+    };
+    assert_eq!(
+      *dict.downcast_ref::<u32>().unwrap(),
+      vec![9, 5, 7, 1]
+    );
+  }
+
+  #[test]
+  fn test_dict_compression_is_deterministic() {
+    // with equal counts, the order used to follow HashMap iteration, which is
+    // seeded randomly per map, so the same input could compress differently
+    let nums = vec![3_u64, 1 << 40, 7, 123_456].repeat(1000);
+    let config = ChunkConfig::default().with_mode_spec(ModeSpec::TryDict);
+    let expected = simple_compress(&nums, &config).unwrap();
+    for _ in 0..16 {
+      let compressed = simple_compress(&nums, &config).unwrap();
+      assert!(
+        compressed == expected,
+        "compressed output changed between runs: {} vs {} bytes",
+        compressed.len(),
+        expected.len(),
+      );
+    }
   }
 }
 
