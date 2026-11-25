@@ -60,6 +60,7 @@ force_export!(_FORCE_EXPORT_U8_4, u8, 4);
 force_export!(_FORCE_EXPORT_U16_4, u16, 4);
 force_export!(_FORCE_EXPORT_U32_4, u32, 4);
 force_export!(_FORCE_EXPORT_U32_8, u32, 8);
+force_export!(_FORCE_EXPORT_U64_4, u64, 4);
 force_export!(_FORCE_EXPORT_U64_8, u64, 8);
 
 // this is entirely state - any precomputed information is in the ChunkLatentDecompressor
@@ -87,13 +88,14 @@ impl<L: Latent> PageLatentDecompressor<L> {
   }
 
   // This implementation handles only a full batch, but is faster.
+  // Returns the total number of offset bits in the batch.
   #[inline(never)]
   unsafe fn read_full_ans_symbols(
     &mut self,
     reader: &mut BitReader,
     cld: &ChunkLatentDecompressor<L>,
     scratch: &mut LatentDecompressorScratch,
-  ) {
+  ) -> Bitlen {
     // At each iteration, this loads a single u64 and has all ANS decoders
     // read a single symbol from it.
     // Therefore it requires that ANS_INTERLEAVING * MAX_BITS_PER_ANS <= 57.
@@ -107,6 +109,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let mut bits_past_byte = reader.bits_past_byte;
     let mut offset_bit_idx = 0;
     let [mut state_idx_0, mut state_idx_1, mut state_idx_2, mut state_idx_3] = self.ans_state_idxs;
+    let all_bits_to_read = cld.decoder.bits_to_read.as_slice();
     let ans_nodes = cld.decoder.nodes.as_slice();
     let lowers = cld.state_lowers.as_slice();
     for base_i in (0..FULL_BATCH_N).step_by(ANS_INTERLEAVING) {
@@ -120,17 +123,18 @@ impl<L: Latent> PageLatentDecompressor<L> {
       macro_rules! handle_single_symbol {
         ($j: expr, $state_idx: ident) => {
           let i = base_i + $j;
-          let node = ans_nodes.get_unchecked($state_idx as usize);
-          let bits_to_read = node.bits_to_read as Bitlen;
+          let state_idx = $state_idx as usize;
+          let bits_to_read = *all_bits_to_read.get_unchecked(state_idx) as Bitlen;
+          let node = *ans_nodes.get_unchecked(state_idx);
           let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
-          let lower = *lowers.get_unchecked($state_idx as usize);
-          let offset_bits = node.offset_bits as Bitlen;
+          let lower = *lowers.get_unchecked(state_idx);
+          let offset_bits = node.offset_bits();
           *scratch_offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
           *scratch_offset_bits.get_unchecked_mut(i) = offset_bits;
           scratch_latents.get_unchecked_mut(i).write(lower);
           bits_past_byte += bits_to_read;
           offset_bit_idx += offset_bits;
-          $state_idx = node.next_state_idx_base as AnsState + ans_val;
+          $state_idx = node.next_state_idx_base() + ans_val;
         };
       }
       handle_single_symbol!(0, state_idx_0);
@@ -142,10 +146,12 @@ impl<L: Latent> PageLatentDecompressor<L> {
     reader.stale_byte_idx = stale_byte_idx;
     reader.bits_past_byte = bits_past_byte;
     self.ans_state_idxs = [state_idx_0, state_idx_1, state_idx_2, state_idx_3];
+    offset_bit_idx
   }
 
   // This implementation handles arbitrary batch size and looks simpler, but is
   // slower, so we only use it at the end of the page.
+  // Returns the total number of offset bits in the batch.
   #[inline(never)]
   unsafe fn read_ans_symbols(
     &mut self,
@@ -153,7 +159,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     batch_n: usize,
     cld: &ChunkLatentDecompressor<L>,
     scratch: &mut LatentDecompressorScratch,
-  ) {
+  ) -> Bitlen {
     let src = reader.src;
     let scratch_offset_bits_csum = &mut scratch.offset_bits_csum;
     let scratch_offset_bits = &mut scratch.offset_bits;
@@ -168,22 +174,23 @@ impl<L: Latent> PageLatentDecompressor<L> {
       stale_byte_idx += bits_past_byte as usize / 8;
       bits_past_byte %= 8;
       let packed = bit_reader::u64_at(src, stale_byte_idx);
-      let node = cld.decoder.nodes.get_unchecked(state_idx);
-      let bits_to_read = node.bits_to_read as Bitlen;
+      let bits_to_read = *cld.decoder.bits_to_read.get_unchecked(state_idx) as Bitlen;
+      let node = *cld.decoder.nodes.get_unchecked(state_idx);
       let ans_val = (packed >> bits_past_byte) as AnsState & ((1 << bits_to_read) - 1);
       let lower = *cld.state_lowers.get_unchecked(state_idx);
-      let offset_bits = node.offset_bits as Bitlen;
+      let offset_bits = node.offset_bits();
       *scratch_offset_bits_csum.get_unchecked_mut(i) = offset_bit_idx;
       *scratch_offset_bits.get_unchecked_mut(i) = offset_bits;
       scratch_latents.get_unchecked_mut(i).write(lower);
       bits_past_byte += bits_to_read;
       offset_bit_idx += offset_bits;
-      state_idxs[j] = node.next_state_idx_base as AnsState + ans_val;
+      state_idxs[j] = node.next_state_idx_base() + ans_val;
     }
 
     reader.stale_byte_idx = stale_byte_idx;
     reader.bits_past_byte = bits_past_byte;
     self.ans_state_idxs = state_idxs;
+    offset_bit_idx
   }
 
   // If hits a corruption, it returns an error and leaves reader and self unchanged.
@@ -205,11 +212,16 @@ impl<L: Latent> PageLatentDecompressor<L> {
       // exit early because there are no offsets and read_offsets can't deal
       return;
     } else if cld.n_bins > 1 {
-      if batch_n == FULL_BATCH_N {
-        self.read_full_ans_symbols(reader, cld, scratch);
+      let total_offset_bits = if batch_n == FULL_BATCH_N {
+        self.read_full_ans_symbols(reader, cld, scratch)
       } else {
-        self.read_ans_symbols(reader, batch_n, cld, scratch);
+        let total_offset_bits = self.read_ans_symbols(reader, batch_n, cld, scratch);
         scratch.latents.downcast_mut::<L>()[batch_n..].fill(MaybeUninit::new(cld.state_lowers[0]));
+        total_offset_bits
+      };
+      // Bins without offset bits often dominate, so many batches have none.
+      if total_offset_bits == 0 {
+        return;
       }
     } else {
       // We have already set offset bits to the only possible value in scratch
@@ -245,7 +257,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       (1..=4, 16) => specialized_read_offsets!(4),
       (1..=4, 32) => specialized_read_offsets!(4),
       (5..=8, 32) => specialized_read_offsets!(8),
-      (1..=8, 64) => specialized_read_offsets!(8),
+      (1..=4, 64) => specialized_read_offsets!(4),
+      (5..=8, 64) => specialized_read_offsets!(8),
       (9..=15, 64) => specialized_read_offsets!(15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
@@ -257,7 +270,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
 
   // contractually fills scratch.latents with FULL_BATCH_N of the appropriate type
   pub unsafe fn read_batch<'a>(
-    &mut self,
+    &'a mut self,
     reader: &mut BitReader,
     delta_latents: &UniversalScratchArray,
     n_remaining_in_page: usize,
@@ -271,7 +284,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
     let dst_len = n_remaining_in_page.min(FULL_BATCH_N);
     let dst = &mut scratch.latents.downcast_init_mut::<L>()[..dst_len];
 
-    delta::decode_in_place(
+    let latents = delta::decode(
       &cld.delta_encoding,
       delta_latents,
       &mut self.delta_state_pos,
@@ -279,9 +292,7 @@ impl<L: Latent> PageLatentDecompressor<L> {
       dst,
     )?;
 
-    Ok(DynLatentSlice::new(
-      &scratch.latents.downcast_init::<L>()[..dst_len],
-    ))
+    Ok(DynLatentSlice::new(latents))
   }
 }
 
@@ -414,6 +425,11 @@ mod micro {
   #[divan::bench]
   fn read_offsets_u32_8(bencher: Bencher) {
     bench_read_offsets::<u32, 8>(bencher, 32);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u64_4(bencher: Bencher) {
+    bench_read_offsets::<u64, 4>(bencher, 20);
   }
 
   #[divan::bench]

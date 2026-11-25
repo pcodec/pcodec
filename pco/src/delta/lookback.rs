@@ -1,5 +1,5 @@
 use std::mem::MaybeUninit;
-use std::{array, cmp};
+use std::{array, cmp, slice};
 
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
@@ -204,58 +204,139 @@ pub fn new_window_buffer_and_pos<L: Latent>(
   (res, window_n)
 }
 
-// returns whether it was corrupt
-pub fn decode_in_place<L: Latent>(
+// Decodes `W` adjacent lanes of the batch starting at `lane`, where lane l
+// consists of the elements at indices l, l + lookback, l + 2 * lookback, ...
+// Each lane only depends on itself, so we can carry the lanes' running values
+// in registers.
+#[inline(always)]
+unsafe fn decode_lanes<L: Latent, const W: usize>(
+  lookback: usize,
+  n_rows: usize,
+  lane: usize,
+  latents: &[L],
+  dst: *mut L,
+) {
+  let mut acc: [L; W] = array::from_fn(|w| *dst.add(lane + w).sub(lookback));
+  let mut i = lane;
+  for _ in 0..n_rows {
+    for (w, acc) in acc.iter_mut().enumerate() {
+      *acc = acc.wrapping_add(latents.get_unchecked(i + w).toggle_center());
+      *dst.add(i + w) = *acc;
+    }
+    i += lookback;
+  }
+}
+
+// Decodes the batch when every lookback is the same. This is common, e.g. for
+// interleaved data.
+//
+// In the general loop, every element must wait on the store of the element
+// `lookback` before it, which is slow when the lookback is short. Instead, we
+// decode a few lanes at a time without going through memory.
+//
+// SAFETY: dst must be valid for reads from `lookback` elements before it and
+// for writes of latents.len() elements.
+#[inline(never)]
+unsafe fn decode_with_constant_lookback<L: Latent>(lookback: usize, latents: &[L], dst: *mut L) {
+  let n = latents.len();
+  if lookback >= n {
+    // The batch doesn't depend on itself, so this vectorizes.
+    let prev = slice::from_raw_parts(dst.sub(lookback), n);
+    let dst = slice::from_raw_parts_mut(dst, n);
+    for ((dst, &prev), &latent) in dst.iter_mut().zip(prev).zip(latents) {
+      *dst = latent.toggle_center().wrapping_add(prev);
+    }
+    return;
+  }
+
+  let n_rows = n / lookback;
+  let mut lane = 0;
+  while lane + 4 <= lookback {
+    decode_lanes::<L, 4>(lookback, n_rows, lane, latents, dst);
+    lane += 4;
+  }
+  if lane + 2 <= lookback {
+    decode_lanes::<L, 2>(lookback, n_rows, lane, latents, dst);
+    lane += 2;
+  }
+  if lane < lookback {
+    decode_lanes::<L, 1>(lookback, n_rows, lane, latents, dst);
+  }
+  for i in n_rows * lookback..n {
+    *dst.add(i) = latents
+      .get_unchecked(i)
+      .toggle_center()
+      .wrapping_add(*dst.add(i - lookback));
+  }
+}
+
+// Returns the decoded latents, which live in the window buffer, or None if
+// the lookbacks were corrupt, in which case the window buffer and its position
+// are left unchanged.
+pub fn decode<'a, L: Latent>(
   config: DeltaLookbackConfig,
   lookbacks: &[DeltaLookback],
   window_buffer_pos: &mut usize,
-  window_buffer: &mut [L],
-  latents: &mut [L],
-) -> bool {
-  super::toggle_center_in_place(latents);
-
+  window_buffer: &'a mut [L],
+  latents: &[L],
+) -> Option<&'a [L]> {
   let (window_n, state_n) = (config.window_n(), config.state_n());
-  let mut start_pos = *window_buffer_pos;
   // Lookbacks can be shorter than latents in the final batch,
   // but we always decompress latents.len() numbers
   let batch_n = latents.len();
+  let lookbacks = &lookbacks[..cmp::min(batch_n, lookbacks.len())];
+
+  // We report corrupt lookbacks rather than clamping them, which would silence
+  // the problem. Validating all lookbacks in a single vectorized pass is
+  // cheaper than checking each one in the serial loop below.
+  let (min_lookback, max_lookback) = lookbacks.iter().fold(
+    (DeltaLookback::MAX, 0),
+    |(min_lookback, max_lookback), &lookback| {
+      (
+        min_lookback.min(lookback),
+        max_lookback.max(lookback),
+      )
+    },
+  );
+  if max_lookback as usize > window_n {
+    return None;
+  }
+
+  let mut start_pos = *window_buffer_pos;
   if start_pos + batch_n > window_buffer.len() {
     // we need to cycle the buffer
     window_buffer.copy_within(start_pos - window_n..start_pos, 0);
     start_pos = window_n;
   }
-  let mut has_oob_lookbacks = false;
 
-  for (i, (&latent, &lookback)) in latents.iter().zip(lookbacks).enumerate() {
-    let pos = start_pos + i;
-    // Here we return whether the data is corrupt because it's
-    // better than the alternatives:
-    // * Taking min(lookback, window_n) or modulo is just as slow but silences
-    //   the problem.
-    // * Doing a checked set is slower, panics, and get doesn't catch all
-    //   cases.
-    let lookback = if lookback <= window_n as DeltaLookback {
-      lookback as usize
+  // SAFETY: the buffer was cycled so that start_pos + batch_n is in bounds,
+  // and start_pos >= window_n >= lookback, so the lookback can't underflow.
+  unsafe {
+    let dst = window_buffer.as_mut_ptr().add(start_pos);
+    if min_lookback == max_lookback && min_lookback > 0 {
+      decode_with_constant_lookback(
+        min_lookback as usize,
+        &latents[..lookbacks.len()],
+        dst,
+      );
     } else {
-      has_oob_lookbacks = true;
-      1
-    };
-    unsafe {
-      *window_buffer.get_unchecked_mut(pos) =
-        latent.wrapping_add(*window_buffer.get_unchecked(pos - lookback));
+      for (i, &lookback) in lookbacks.iter().enumerate() {
+        let latent = latents.get_unchecked(i).toggle_center();
+        let dst = dst.add(i);
+        *dst = latent.wrapping_add(*dst.sub(lookback as usize));
+      }
     }
   }
 
   let end_pos = start_pos + batch_n;
-  latents.copy_from_slice(&window_buffer[start_pos - state_n..end_pos - state_n]);
   *window_buffer_pos = end_pos;
-
-  has_oob_lookbacks
+  Some(&window_buffer[start_pos - state_n..end_pos - state_n])
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::data_types::latent_priv::LatentPriv;
   use crate::metadata::DeltaLookbackConfig;
 
   #[test]
@@ -299,16 +380,81 @@ mod tests {
 
     let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &state);
     assert_eq!(pos, window_n);
-    let has_oob_lookbacks = decode_in_place(
+    let decoded = decode(
       config,
       &lookbacks,
       &mut pos,
       &mut window_buffer,
-      &mut deltas_to_decode,
+      &deltas_to_decode,
     );
-    assert!(!has_oob_lookbacks);
-    assert_eq!(deltas_to_decode, original_latents);
+    assert_eq!(decoded, Some(original_latents.as_slice()));
     assert_eq!(pos, window_n + original_latents.len());
+  }
+
+  #[test]
+  fn test_decode_matches_naive() {
+    let mut rng_state = 1_u64;
+    let mut rng = || {
+      rng_state = rng_state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+      rng_state >> 33
+    };
+
+    for (window_n_log, state_n_log) in [(4, 0), (4, 1), (10, 2)] {
+      let config = DeltaLookbackConfig {
+        window_n_log,
+        state_n_log,
+      };
+      let (window_n, state_n) = (config.window_n(), config.state_n());
+      let state = (0..state_n as u32).map(|i| 1000 + i).collect::<Vec<_>>();
+      let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &state);
+
+      // the naive decoded sequence, including the initial window
+      let mut expected = vec![0_u32; window_n - state_n];
+      expected.extend(&state);
+
+      // Enough batches to cycle the window buffer several times, with every
+      // short constant lookback, some long ones, and some varied lookbacks.
+      let mut lookback_options: Vec<Option<usize>> = (1..=window_n.min(20)).map(Some).collect();
+      lookback_options.extend([Some(window_n), None]);
+      for batch_idx in 0..40 {
+        let batch_n = if batch_idx % 7 == 6 {
+          FULL_BATCH_N - 3
+        } else {
+          FULL_BATCH_N
+        };
+        let lookbacks = match lookback_options[batch_idx % lookback_options.len()] {
+          Some(lookback) => vec![lookback as DeltaLookback; batch_n],
+          None => (0..batch_n)
+            .map(|_| 1 + rng() as DeltaLookback % window_n as DeltaLookback)
+            .collect(),
+        };
+        let latents = (0..batch_n).map(|_| rng() as u32).collect::<Vec<_>>();
+
+        let start = expected.len();
+        for (&latent, &lookback) in latents.iter().zip(&lookbacks) {
+          let prev = expected[expected.len() - lookback as usize];
+          expected.push(latent.toggle_center().wrapping_add(prev));
+        }
+
+        let decoded = decode(
+          config,
+          &lookbacks,
+          &mut pos,
+          &mut window_buffer,
+          &latents,
+        );
+        assert_eq!(
+          decoded,
+          Some(&expected[start - state_n..start + batch_n - state_n]),
+          "window_n_log={} state_n_log={} batch_idx={}",
+          window_n_log,
+          state_n_log,
+          batch_idx,
+        );
+      }
+    }
   }
 
   #[test]
@@ -319,16 +465,16 @@ mod tests {
     };
     let delta_state = vec![0_u32];
     let lookbacks = vec![5, 1, 1, 1];
-    let mut latents = vec![1_u32, 2, 3, 4];
+    let latents = vec![1_u32, 2, 3, 4];
     let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &delta_state);
-    let has_oob_lookbacks = decode_in_place(
+    let decoded = decode(
       config,
       &lookbacks,
       &mut pos,
       &mut window_buffer,
-      &mut latents,
+      &latents,
     );
-    assert!(has_oob_lookbacks);
+    assert!(decoded.is_none());
   }
 }
 
@@ -345,21 +491,35 @@ mod micro {
   const N_SUBSEQS: DeltaLookback = 16;
 
   #[divan::bench(types = [u8, u16, u32, u64])]
-  fn decode_in_place<L: Latent>(bencher: Bencher) {
+  fn decode<L: Latent>(bencher: Bencher) {
+    bench_decode::<L>(bencher, vec![N_SUBSEQS; BENCH_N]);
+  }
+
+  /// Lookbacks that vary within each batch, so decoding can't treat them as a
+  /// single lookback.
+  #[divan::bench(types = [u8, u16, u32, u64])]
+  fn decode_varied<L: Latent>(bencher: Bencher) {
+    let lookbacks = uniform_latents::<u32>(4)
+      .into_iter()
+      .map(|x| 1 + x as DeltaLookback)
+      .collect();
+    bench_decode::<L>(bencher, lookbacks);
+  }
+
+  fn bench_decode<L: Latent>(bencher: Bencher, lookbacks: Vec<DeltaLookback>) {
     let config = DeltaLookbackConfig {
       window_n_log: 8,
       state_n_log: 0,
     };
-    let lookbacks = vec![N_SUBSEQS; BENCH_N];
-    let mut latents = uniform_latents::<L>(L::BITS);
+    let latents = uniform_latents::<L>(L::BITS);
     let (mut window_buffer, mut pos) = new_window_buffer_and_pos::<L>(config, &[]);
 
     bencher
       .counter(divan::counter::ItemsCount::new(BENCH_N))
       .bench_local(|| {
-        for (batch_idx, batch) in latents.chunks_mut(FULL_BATCH_N).enumerate() {
+        for (batch_idx, batch) in latents.chunks(FULL_BATCH_N).enumerate() {
           let start = batch_idx * FULL_BATCH_N;
-          super::decode_in_place(
+          super::decode(
             config,
             &lookbacks[start..start + batch.len()],
             &mut pos,

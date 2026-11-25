@@ -122,39 +122,33 @@ pub fn encode_in_place<L: Latent>(
   }
 }
 
+// Returns the decoded latents, which are either the input latents decoded in
+// place or a part of the state.
 // unsafe because it may require delta_latents to be fully initialized
-pub unsafe fn decode_in_place<L: Latent>(
+pub unsafe fn decode<'a, L: Latent>(
   delta_encoding: &LatentVarDeltaEncoding,
   delta_latents: &UniversalScratchArray,
   state_pos: &mut usize,
-  state: &mut [L],
-  latents: &mut [L],
-) -> PcoResult<()> {
+  state: &'a mut [L],
+  latents: &'a mut [L],
+) -> PcoResult<&'a [L]> {
   match delta_encoding {
-    LatentVarDeltaEncoding::NoOp => Ok(()),
+    LatentVarDeltaEncoding::NoOp => Ok(latents),
     LatentVarDeltaEncoding::Consecutive(_) => {
       consecutive::decode_in_place(state, latents);
-      Ok(())
+      Ok(latents)
     }
-    LatentVarDeltaEncoding::Lookback(config) => {
-      let has_oob_lookbacks = lookback::decode_in_place(
-        *config,
-        unsafe { delta_latents.downcast_init() },
-        state_pos,
-        state,
-        latents,
-      );
-      if has_oob_lookbacks {
-        Err(PcoError::corruption(
-          "delta lookback exceeded window n",
-        ))
-      } else {
-        Ok(())
-      }
-    }
+    LatentVarDeltaEncoding::Lookback(config) => lookback::decode(
+      *config,
+      unsafe { delta_latents.downcast_init() },
+      state_pos,
+      state,
+      latents,
+    )
+    .ok_or_else(|| PcoError::corruption("delta lookback exceeded window n")),
     LatentVarDeltaEncoding::Conv1(config) => {
       conv1::decode_in_place(config, state, latents);
-      Ok(())
+      Ok(latents)
     }
   }
 }
