@@ -54,10 +54,11 @@ mod tests {
     let mut decoded = Vec::new();
     let mut state_idx = final_state - table_size;
     for &symbol in symbols.iter() {
-      let node = &decoder.nodes[state_idx as usize];
+      let bits_to_read = decoder.bits_to_read[state_idx as usize] as Bitlen;
+      let node = decoder.nodes[state_idx as usize];
       decoded.push(symbol as Symbol);
-      state_idx = node.next_state_idx_base as AnsState
-        + unsafe { reader.read_uint::<AnsState>(node.bits_to_read as Bitlen) };
+      state_idx =
+        node.next_state_idx_base() + unsafe { reader.read_uint::<AnsState>(bits_to_read) };
     }
 
     assert_eq!(decoded, symbols);

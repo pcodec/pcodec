@@ -22,10 +22,10 @@ fn test_stack_sizes() {
   );
   assert_eq!(
     size_of::<ChunkLatentDecompressor<u64>>(),
-    112
+    136
   );
-  assert_eq!(size_of::<DynChunkLatentDecompressor>(), 120);
-  assert_eq!(size_of::<ChunkDecompressor<u64>>(), 560);
+  assert_eq!(size_of::<DynChunkLatentDecompressor>(), 144);
+  assert_eq!(size_of::<ChunkDecompressor<u64>>(), 632);
   assert_eq!(size_of::<LatentDecompressorScratch>(), 4160);
   assert_eq!(size_of::<DecompressorScratch>(), 8);
 }
