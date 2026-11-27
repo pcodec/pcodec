@@ -134,10 +134,7 @@ pub unsafe fn decode<'a, L: Latent>(
 ) -> PcoResult<&'a [L]> {
   match delta_encoding {
     LatentVarDeltaEncoding::NoOp => Ok(latents),
-    LatentVarDeltaEncoding::Consecutive(_) => {
-      consecutive::decode_in_place(state, latents);
-      Ok(latents)
-    }
+    LatentVarDeltaEncoding::Consecutive(_) => Ok(consecutive::decode_in_place(state, latents)),
     LatentVarDeltaEncoding::Lookback(config) => lookback::decode(
       *config,
       unsafe { delta_latents.downcast_init() },
@@ -145,9 +142,8 @@ pub unsafe fn decode<'a, L: Latent>(
       state,
       latents,
     ),
-    LatentVarDeltaEncoding::Conv1(config) => {
-      conv1::decode_in_place(config, state, latents);
-      Ok(latents)
-    }
+    LatentVarDeltaEncoding::Conv1(config) => Ok(conv1::decode_in_place(
+      config, state, latents,
+    )),
   }
 }
