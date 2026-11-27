@@ -38,7 +38,7 @@ mod micro {
   use crate::data_types::Latent;
   use std::mem::MaybeUninit;
 
-  #[divan::bench(types = [u8, u16, u32, u64])]
+  #[divan::bench(types = [u8, u16, u32, u64], name = crate::bench_utils::arch_bench_name!("join_latents"))]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
     let primary = uniform_latents::<T>(T::BITS);
     let mut dst = vec![MaybeUninit::<T>::uninit(); primary.len()];

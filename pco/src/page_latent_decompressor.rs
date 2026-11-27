@@ -344,7 +344,7 @@ mod micro {
     .unwrap()
   }
 
-  #[divan::bench(types = [u8, u16, u32, u64])]
+  #[divan::bench(types = [u8, u16, u32, u64], name = crate::bench_utils::arch_bench_name!("read_full_ans_symbols"))]
   fn read_full_ans_symbols<L: Latent + 'static>(bencher: Bencher) {
     // Worst case is one symbol per table entry's widest read.
     let src = random_page_body(BENCH_N * ANS_SIZE_LOG as usize);
@@ -396,32 +396,32 @@ mod micro {
       });
   }
 
-  #[divan::bench]
+  #[divan::bench(name = crate::bench_utils::arch_bench_name!("read_offsets_u8_4"))]
   fn read_offsets_u8_4(bencher: Bencher) {
     bench_read_offsets::<u8, 4>(bencher, 8);
   }
 
-  #[divan::bench]
+  #[divan::bench(name = crate::bench_utils::arch_bench_name!("read_offsets_u16_4"))]
   fn read_offsets_u16_4(bencher: Bencher) {
     bench_read_offsets::<u16, 4>(bencher, 16);
   }
 
-  #[divan::bench]
+  #[divan::bench(name = crate::bench_utils::arch_bench_name!("read_offsets_u32_4"))]
   fn read_offsets_u32_4(bencher: Bencher) {
     bench_read_offsets::<u32, 4>(bencher, 20);
   }
 
-  #[divan::bench]
+  #[divan::bench(name = crate::bench_utils::arch_bench_name!("read_offsets_u32_8"))]
   fn read_offsets_u32_8(bencher: Bencher) {
     bench_read_offsets::<u32, 8>(bencher, 32);
   }
 
-  #[divan::bench]
+  #[divan::bench(name = crate::bench_utils::arch_bench_name!("read_offsets_u64_8"))]
   fn read_offsets_u64_8(bencher: Bencher) {
     bench_read_offsets::<u64, 8>(bencher, 40);
   }
 
-  #[divan::bench]
+  #[divan::bench(name = crate::bench_utils::arch_bench_name!("read_offsets_u64_15"))]
   fn read_offsets_u64_15(bencher: Bencher) {
     bench_read_offsets::<u64, 15>(bencher, 64);
   }
