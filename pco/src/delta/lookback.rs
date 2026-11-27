@@ -344,7 +344,7 @@ mod micro {
   // every lookback reaches the same distance into the window.
   const N_SUBSEQS: DeltaLookback = 16;
 
-  #[divan::bench(types = [u8, u16, u32, u64])]
+  #[divan::bench(types = [u8, u16, u32, u64], name = crate::bench_utils::arch_bench_name!("decode_in_place"))]
   fn decode_in_place<L: Latent>(bencher: Bencher) {
     let config = DeltaLookbackConfig {
       window_n_log: 8,

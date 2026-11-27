@@ -743,7 +743,7 @@ mod micro {
   const MAX_MULT: u64 = 1000;
   const ADJ_BITS: Bitlen = 4;
 
-  #[divan::bench(types = [f16, f32, f64])]
+  #[divan::bench(types = [f16, f32, f64], name = crate::bench_utils::arch_bench_name!("join_latents"))]
   fn join_latents<F: Float>(bencher: Bencher) {
     let base = F::from_f64(BASE);
     let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);

@@ -307,7 +307,7 @@ mod micro {
   use crate::constants::FULL_BATCH_N;
   use std::mem::MaybeUninit;
 
-  #[divan::bench(types = [f16, f32, f64])]
+  #[divan::bench(types = [f16, f32, f64], name = crate::bench_utils::arch_bench_name!("join_latents"))]
   fn join_latents<F: Float>(bencher: Bencher) {
     // An `F` holding values from a type with half its precision.
     let k = F::PRECISION_BITS / 2;

@@ -604,7 +604,7 @@ mod micro {
 
   // Order 6 has a specialized unrolled implementation; other orders go through
   // the generic decode_residuals.
-  #[divan::bench(types = [u8, u16, u32], args = [3, 6])]
+  #[divan::bench(types = [u8, u16, u32], args = [3, 6], name = crate::bench_utils::arch_bench_name!("decode_in_place"))]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
     let config = config(order);
     let mut latents = uniform_latents::<L>(L::BITS - 1);

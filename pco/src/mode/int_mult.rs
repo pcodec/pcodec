@@ -345,7 +345,7 @@ mod micro {
   use crate::data_types::Latent;
   use std::mem::MaybeUninit;
 
-  #[divan::bench(types = [u8, u16, u32, u64])]
+  #[divan::bench(types = [u8, u16, u32, u64], name = crate::bench_utils::arch_bench_name!("join_latents"))]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
     // base, mults, adjs chosen to avoid overflow on all dtypes
     let base = T::from_u64(3);

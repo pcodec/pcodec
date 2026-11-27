@@ -127,7 +127,7 @@ mod micro {
 
   const DICT_N: usize = 64;
 
-  #[divan::bench(types = [u8, u16, u32, u64])]
+  #[divan::bench(types = [u8, u16, u32, u64], name = crate::bench_utils::arch_bench_name!("join_latents"))]
   fn join_latents<T: Number<L = T> + Latent>(bencher: Bencher) {
     let mut rng = Xoroshiro128PlusPlus::seed_from_u64(0);
     let dict = DynLatents::new(

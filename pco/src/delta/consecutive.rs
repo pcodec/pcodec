@@ -86,7 +86,7 @@ mod micro {
   use crate::bench_utils::{uniform_latents, BENCH_N};
   use crate::constants::FULL_BATCH_N;
 
-  #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3])]
+  #[divan::bench(types = [u8, u16, u32, u64], args = [1, 3], name = crate::bench_utils::arch_bench_name!("decode_in_place"))]
   fn decode_in_place<L: Latent>(bencher: Bencher, order: usize) {
     let mut latents = uniform_latents::<L>(L::BITS);
     let mut moments = vec![L::ZERO; order];
