@@ -60,6 +60,7 @@ force_export!(_FORCE_EXPORT_U8_4, u8, 4);
 force_export!(_FORCE_EXPORT_U16_4, u16, 4);
 force_export!(_FORCE_EXPORT_U32_4, u32, 4);
 force_export!(_FORCE_EXPORT_U32_8, u32, 8);
+force_export!(_FORCE_EXPORT_U64_4, u64, 4);
 force_export!(_FORCE_EXPORT_U64_8, u64, 8);
 
 // this is entirely state - any precomputed information is in the ChunkLatentDecompressor
@@ -245,7 +246,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
       (1..=4, 16) => specialized_read_offsets!(4),
       (1..=4, 32) => specialized_read_offsets!(4),
       (5..=8, 32) => specialized_read_offsets!(8),
-      (1..=8, 64) => specialized_read_offsets!(8),
+      (1..=4, 64) => specialized_read_offsets!(4),
+      (5..=8, 64) => specialized_read_offsets!(8),
       (9..=15, 64) => specialized_read_offsets!(15),
       _ => panic!(
         "[PageLatentDecompressor] {} byte read not supported for {}-bit Latents",
@@ -414,6 +416,11 @@ mod micro {
   #[divan::bench]
   fn read_offsets_u32_8(bencher: Bencher) {
     bench_read_offsets::<u32, 8>(bencher, 32);
+  }
+
+  #[divan::bench]
+  fn read_offsets_u64_4(bencher: Bencher) {
+    bench_read_offsets::<u64, 4>(bencher, 20);
   }
 
   #[divan::bench]
