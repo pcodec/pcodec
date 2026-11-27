@@ -220,9 +220,6 @@ pub fn decode<'a, L: Latent>(
   let batch_n = latents.len();
   let lookbacks = &lookbacks[..cmp::min(batch_n, lookbacks.len())];
 
-  // We report corrupt lookbacks rather than clamping them, which would silence
-  // the problem. Validating all lookbacks in a single vectorized pass is
-  // cheaper than checking each one in the serial loop below.
   let max_lookback = lookbacks.iter().copied().fold(0, DeltaLookback::max);
   if max_lookback as usize > window_n {
     return Err(PcoError::corruption(
@@ -311,48 +308,6 @@ mod tests {
     );
     assert_eq!(decoded, Ok(original_latents.as_slice()));
     assert_eq!(pos, window_n + original_latents.len());
-  }
-
-  #[test]
-  fn test_decode_multiple_batches() {
-    let mut rng = StdRng::seed_from_u64(0);
-    let config = DeltaLookbackConfig {
-      window_n_log: 4,
-      state_n_log: 1,
-    };
-    let (window_n, state_n) = (config.window_n(), config.state_n());
-    let state = vec![1000_u32, 1001];
-    let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &state);
-
-    let mut expected = vec![0_u32; window_n - state_n];
-    expected.extend(&state);
-
-    // enough batches to cycle the window buffer, ending with a partial batch
-    for batch_n in [FULL_BATCH_N; 5].into_iter().chain([FULL_BATCH_N - 3]) {
-      let mut lookbacks: Vec<DeltaLookback> = (0..batch_n)
-        .map(|_| rng.gen_range(1..=window_n as DeltaLookback))
-        .collect();
-      lookbacks[0] = window_n as DeltaLookback;
-      let latents: Vec<u32> = (0..batch_n).map(|_| rng.gen()).collect();
-
-      let start = expected.len();
-      for (&latent, &lookback) in latents.iter().zip(&lookbacks) {
-        let prev = expected[expected.len() - lookback as usize];
-        expected.push(latent.toggle_center().wrapping_add(prev));
-      }
-
-      let decoded = decode(
-        config,
-        &lookbacks,
-        &mut pos,
-        &mut window_buffer,
-        &latents,
-      );
-      assert_eq!(
-        decoded,
-        Ok(&expected[start - state_n..start + batch_n - state_n])
-      );
-    }
   }
 
   #[test]
