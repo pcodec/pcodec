@@ -461,7 +461,11 @@ pub fn encode_in_place<L: Latent>(config: &DeltaConv1Config, latents: &mut [L]) 
   initial_state
 }
 
-pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], latents: &mut [L]) {
+pub fn decode_in_place<'a, L: Latent>(
+  config: &DeltaConv1Config,
+  state: &mut [L],
+  latents: &'a mut [L],
+) -> &'a [L] {
   let weights = &config.weights::<L::Conv>();
   let quantization = config.quantization;
   let bias = config.bias::<L::Conv>();
@@ -480,6 +484,7 @@ pub fn decode_in_place<L: Latent>(config: &DeltaConv1Config, state: &mut [L], la
     latents.copy_from_slice(&residuals[..latents.len()]);
     state.copy_from_slice(&residuals[latents.len()..]);
   }
+  latents
 }
 
 #[cfg(test)]
