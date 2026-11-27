@@ -255,7 +255,8 @@ impl<L: Latent> PageLatentDecompressor<L> {
     }
   }
 
-  // contractually fills scratch.latents with FULL_BATCH_N of the appropriate type
+  // Returns the decoded latents for this batch, which may live in either
+  // scratch.latents or the delta state.
   pub unsafe fn read_batch<'a>(
     &'a mut self,
     reader: &mut BitReader,

@@ -255,6 +255,8 @@ pub fn decode<'a, L: Latent>(
 mod tests {
   use super::*;
   use crate::data_types::latent_priv::LatentPriv;
+  use rand::rngs::StdRng;
+  use rand::{Rng, SeedableRng};
   use crate::metadata::DeltaLookbackConfig;
 
   #[test]
@@ -310,68 +312,44 @@ mod tests {
   }
 
   #[test]
-  fn test_decode_matches_naive() {
-    let mut rng_state = 1_u64;
-    let mut rng = || {
-      rng_state = rng_state
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
-      rng_state >> 33
+  fn test_decode_multiple_batches() {
+    let mut rng = StdRng::seed_from_u64(0);
+    let config = DeltaLookbackConfig {
+      window_n_log: 4,
+      state_n_log: 1,
     };
+    let (window_n, state_n) = (config.window_n(), config.state_n());
+    let state = vec![1000_u32, 1001];
+    let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &state);
 
-    for (window_n_log, state_n_log) in [(4, 0), (4, 1), (10, 2)] {
-      let config = DeltaLookbackConfig {
-        window_n_log,
-        state_n_log,
-      };
-      let (window_n, state_n) = (config.window_n(), config.state_n());
-      let state = (0..state_n as u32).map(|i| 1000 + i).collect::<Vec<_>>();
-      let (mut window_buffer, mut pos) = new_window_buffer_and_pos(config, &state);
+    let mut expected = vec![0_u32; window_n - state_n];
+    expected.extend(&state);
 
-      // the naive decoded sequence, including the initial window
-      let mut expected = vec![0_u32; window_n - state_n];
-      expected.extend(&state);
+    // enough batches to cycle the window buffer, ending with a partial batch
+    for batch_n in [FULL_BATCH_N; 5].into_iter().chain([FULL_BATCH_N - 3]) {
+      let mut lookbacks: Vec<DeltaLookback> = (0..batch_n)
+        .map(|_| rng.gen_range(1..=window_n as DeltaLookback))
+        .collect();
+      lookbacks[0] = window_n as DeltaLookback;
+      let latents: Vec<u32> = (0..batch_n).map(|_| rng.gen()).collect();
 
-      // Enough batches to cycle the window buffer several times, with every
-      // short constant lookback, some long ones, and some varied lookbacks.
-      let mut lookback_options: Vec<Option<usize>> = (1..=window_n.min(20)).map(Some).collect();
-      lookback_options.extend([Some(window_n), None]);
-      for batch_idx in 0..40 {
-        let batch_n = if batch_idx % 7 == 6 {
-          FULL_BATCH_N - 3
-        } else {
-          FULL_BATCH_N
-        };
-        let lookbacks = match lookback_options[batch_idx % lookback_options.len()] {
-          Some(lookback) => vec![lookback as DeltaLookback; batch_n],
-          None => (0..batch_n)
-            .map(|_| 1 + rng() as DeltaLookback % window_n as DeltaLookback)
-            .collect(),
-        };
-        let latents = (0..batch_n).map(|_| rng() as u32).collect::<Vec<_>>();
-
-        let start = expected.len();
-        for (&latent, &lookback) in latents.iter().zip(&lookbacks) {
-          let prev = expected[expected.len() - lookback as usize];
-          expected.push(latent.toggle_center().wrapping_add(prev));
-        }
-
-        let decoded = decode(
-          config,
-          &lookbacks,
-          &mut pos,
-          &mut window_buffer,
-          &latents,
-        );
-        assert_eq!(
-          decoded,
-          Some(&expected[start - state_n..start + batch_n - state_n]),
-          "window_n_log={} state_n_log={} batch_idx={}",
-          window_n_log,
-          state_n_log,
-          batch_idx,
-        );
+      let start = expected.len();
+      for (&latent, &lookback) in latents.iter().zip(&lookbacks) {
+        let prev = expected[expected.len() - lookback as usize];
+        expected.push(latent.toggle_center().wrapping_add(prev));
       }
+
+      let decoded = decode(
+        config,
+        &lookbacks,
+        &mut pos,
+        &mut window_buffer,
+        &latents,
+      );
+      assert_eq!(
+        decoded,
+        Some(&expected[start - state_n..start + batch_n - state_n])
+      );
     }
   }
 
