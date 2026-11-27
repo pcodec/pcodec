@@ -144,8 +144,7 @@ pub unsafe fn decode<'a, L: Latent>(
       state_pos,
       state,
       latents,
-    )
-    .ok_or_else(|| PcoError::corruption("delta lookback exceeded window n")),
+    ),
     LatentVarDeltaEncoding::Conv1(config) => {
       conv1::decode_in_place(config, state, latents);
       Ok(latents)

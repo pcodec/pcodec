@@ -3,6 +3,7 @@ use std::{array, cmp};
 
 use crate::constants::{Bitlen, DeltaLookback};
 use crate::data_types::Latent;
+use crate::errors::{PcoError, PcoResult};
 use crate::metadata::DeltaLookbackConfig;
 use crate::FULL_BATCH_N;
 
@@ -204,16 +205,15 @@ pub fn new_window_buffer_and_pos<L: Latent>(
   (res, window_n)
 }
 
-// Returns the decoded latents, which live in the window buffer, or None if
-// the lookbacks were corrupt, in which case the window buffer and its position
-// are left unchanged.
+// Returns the decoded latents, which live in the window buffer.
+// If an error is returned, the window buffer and its position are unchanged.
 pub fn decode<'a, L: Latent>(
   config: DeltaLookbackConfig,
   lookbacks: &[DeltaLookback],
   window_buffer_pos: &mut usize,
   window_buffer: &'a mut [L],
   latents: &[L],
-) -> Option<&'a [L]> {
+) -> PcoResult<&'a [L]> {
   let (window_n, state_n) = (config.window_n(), config.state_n());
   // Lookbacks can be shorter than latents in the final batch,
   // but we always decompress latents.len() numbers
@@ -225,7 +225,9 @@ pub fn decode<'a, L: Latent>(
   // cheaper than checking each one in the serial loop below.
   let max_lookback = lookbacks.iter().copied().fold(0, DeltaLookback::max);
   if max_lookback as usize > window_n {
-    return None;
+    return Err(PcoError::corruption(
+      "delta lookback exceeded window n",
+    ));
   }
 
   let mut start_pos = *window_buffer_pos;
@@ -248,16 +250,16 @@ pub fn decode<'a, L: Latent>(
 
   let end_pos = start_pos + batch_n;
   *window_buffer_pos = end_pos;
-  Some(&window_buffer[start_pos - state_n..end_pos - state_n])
+  Ok(&window_buffer[start_pos - state_n..end_pos - state_n])
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
   use crate::data_types::latent_priv::LatentPriv;
+  use crate::metadata::DeltaLookbackConfig;
   use rand::rngs::StdRng;
   use rand::{Rng, SeedableRng};
-  use crate::metadata::DeltaLookbackConfig;
 
   #[test]
   fn test_lookback_encode_decode() {
@@ -307,7 +309,7 @@ mod tests {
       &mut window_buffer,
       &deltas_to_decode,
     );
-    assert_eq!(decoded, Some(original_latents.as_slice()));
+    assert_eq!(decoded, Ok(original_latents.as_slice()));
     assert_eq!(pos, window_n + original_latents.len());
   }
 
@@ -348,7 +350,7 @@ mod tests {
       );
       assert_eq!(
         decoded,
-        Some(&expected[start - state_n..start + batch_n - state_n])
+        Ok(&expected[start - state_n..start + batch_n - state_n])
       );
     }
   }
@@ -370,7 +372,7 @@ mod tests {
       &mut window_buffer,
       &latents,
     );
-    assert!(decoded.is_none());
+    assert!(decoded.is_err());
   }
 }
 
@@ -407,7 +409,8 @@ mod micro {
             &mut pos,
             &mut window_buffer,
             batch,
-          );
+          )
+          .unwrap();
         }
       });
   }
